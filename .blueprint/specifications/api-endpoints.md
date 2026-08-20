@@ -1,12 +1,12 @@
 # Specifications — API Endpoints Reference
 
-Dokumen ini menyajikan spesifikasi kontrak REST API lengkap untuk **Callcraft**, dibagi menjadi 3 kategori utama: **Internal Management API** (`/internal/v1/*`), **Public Customer Data Plane API** (`/v1/call/{user_id}`), dan **Admin Platform API** (`/admin/v1/*`).
+This document presents the complete REST API contract specifications for **Callcraft**, divided into 3 primary categories: **Internal Management API** (`/internal/v1/*`), **Public Customer Data Plane API** (`/v1/call/{user_id}`), and **Admin Platform API** (`/admin/v1/*`).
 
 ---
 
 ## 1. Public Customer Data Plane API
 
-Jalur utama untuk aplikasi eksternal pelanggan dalam mengeksekusi ekstraksi dan pengolahan data dinamis Callcraft.
+The primary channel for external customer applications to execute dynamic multimodal AI processing.
 
 ### `POST /v1/call/{user_id}`
 
@@ -20,7 +20,7 @@ Content-Type: application/json
 ```
 
 #### Path Parameters:
-- `user_id` (string, required): ULID dari akun user pemilik spesifikasi Callcraft.
+- `user_id` (string, required): ULID identifier of the Callcraft specification owner.
 
 #### Request Body Options:
 
@@ -28,7 +28,7 @@ Content-Type: application/json
 ```json
 {
   "image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...",
-  "prompt": "Harap perhatikan NIK jika agak samar",
+  "prompt": "Verify document authenticity and extract key fields",
   "variables": { "environment": "production" }
 }
 ```
@@ -37,7 +37,7 @@ Content-Type: application/json
 ```json
 {
   "image": "https://storage.clientdomain.com/documents/ktp-sample.jpg",
-  "prompt": "Pastikan tanggal lahir sesuai format YYYY-MM-DD"
+  "prompt": "Ensure date of birth strictly uses YYYY-MM-DD format"
 }
 ```
 
@@ -66,7 +66,7 @@ Content-Type: application/json
   "data": {
     "nik": "3271041508950001",
     "full_name": "BUDI SANTOSO",
-    "gender": "LAKI-LAKI",
+    "gender": "MALE",
     "birth": {
       "place": "BOGOR",
       "date": "1995-08-15"
@@ -89,8 +89,8 @@ Content-Type: application/json
   "success": false,
   "request_id": "req_01HZY...",
   "error": {
-    "code": "INVALID_IMAGE_PAYLOAD",
-    "message": "Base64 image size exceeds maximum 10 MB limit"
+    "code": "INVALID_FILE_PAYLOAD",
+    "message": "Base64 payload size exceeds maximum 10 MB limit"
   }
 }
 ```
@@ -124,7 +124,7 @@ Content-Type: application/json
   "request_id": "req_01HZY...",
   "error": {
     "code": "AI_PROVIDER_ERROR",
-    "message": "Upstream Gemini Vision API returned rate limit error (HTTP 429)"
+    "message": "Upstream AI Provider returned rate limit error (HTTP 429)"
   }
 }
 ```
@@ -133,7 +133,7 @@ Content-Type: application/json
 
 ## 2. Internal Management API (`/internal/v1/*`)
 
-Digunakan secara eksklusif oleh server Next.js Control Plane. Membutuhkan Service Auth Headers:
+Used exclusively by the Next.js Control Plane server. Requires Service Auth Headers:
 - `X-Service-Client-Id`: `svc_nextjs_main`
 - `X-Service-Client-Secret`: `sec_live_...`
 
@@ -141,28 +141,28 @@ Digunakan secara eksklusif oleh server Next.js Control Plane. Membutuhkan Servic
 
 | Method | Endpoint Path | Description |
 | :--- | :--- | :--- |
-| `POST` | `/internal/v1/auth/verify-service` | Memverifikasi kredensial service client |
-| `GET` | `/internal/v1/users/{id}` | Mengambil data profile pengguna |
-| `POST` | `/internal/v1/users` | Mendaftarkan pengguna baru dari Next.js |
-| `GET` | `/internal/v1/ocr-specs` | List OCR Specs milik pengguna (dengan pagination) |
-| `POST` | `/internal/v1/ocr-specs` | Membuat OCR Spec baru (Save draft/active) |
-| `GET` | `/internal/v1/ocr-specs/{id}` | Detail OCR Spec beserta versi schema |
-| `PUT` | `/internal/v1/ocr-specs/{id}` | Update OCR Spec (Increment version) |
-| `POST` | `/internal/v1/api-credentials` | Membuat pasangan API Key baru (`pk_...` & `sk_...`)|
-| `GET` | `/internal/v1/templates` | List katalog template resmi platform |
-| `GET` | `/internal/v1/analytics/usage` | Log metadata request & agregasi token user |
+| `POST` | `/internal/v1/auth/verify-service` | Verifies service client credentials |
+| `GET` | `/internal/v1/users/{id}` | Fetches user profile data |
+| `POST` | `/internal/v1/users` | Registers new user from Next.js Control Plane |
+| `GET` | `/internal/v1/call-specs` | Lists user's Callcraft specifications (paginated) |
+| `POST` | `/internal/v1/call-specs` | Creates a new Callcraft specification (Save draft/active) |
+| `GET` | `/internal/v1/call-specs/{id}` | Fetches detailed spec and version history |
+| `PUT` | `/internal/v1/call-specs/{id}` | Updates spec and increments version number |
+| `POST` | `/internal/v1/api-credentials` | Generates a new API Key pair (`pk_...` & `call_sk_...`)|
+| `GET` | `/internal/v1/templates` | Lists official platform templates |
+| `GET` | `/internal/v1/analytics/usage` | Queries request audit logs & aggregated token metrics |
 
 ---
 
 ## 3. Admin Platform API (`/admin/v1/*`)
 
-Digunakan untuk operasi administratif platform. Membutuhkan Bearer JWT Admin Token + Peran RBAC.
+Used for administrative platform operations. Requires Bearer JWT Admin Token + RBAC permission checks.
 
 ### Endpoints Detail:
 
 #### `GET /admin/v1/models`
 - **Permission**: `model.manage`
-- **Description**: Mengambil daftar seluruh AI Vision Model yang terdaftar di platform beserta status aktif.
+- **Description**: Lists all AI Vision & LLM Models registered on the platform along with active status.
 
 #### `POST /admin/v1/models`
 - **Permission**: `model.manage`
@@ -180,8 +180,8 @@ Digunakan untuk operasi administratif platform. Membutuhkan Bearer JWT Admin Tok
 
 #### `PUT /admin/v1/models/{id}`
 - **Permission**: `model.manage`
-- **Description**: Mengaktifkan/menonaktifkan model atau mengubah batas kuota token default.
+- **Description**: Enables/disables an AI model or modifies default token rate limits.
 
 #### `POST /admin/v1/users/{id}/suspend`
 - **Permission**: `user.manage`
-- **Description**: Membekukan akun pengguna dan memblokir seluruh eksekusi API Key pengguna tersebut di Data Plane secara langsung (invalidation di Redis).
+- **Description**: Suspends a user account and immediately blocks all active API Keys for that user across the Data Plane (invalidates Redis caches).

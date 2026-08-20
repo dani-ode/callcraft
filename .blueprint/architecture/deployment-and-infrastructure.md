@@ -1,12 +1,12 @@
 # Architecture — Deployment & Infrastructure
 
-Dokumen ini berisi spesifikasi penataan infrastruktur dan petunjuk pengerjaan *deployment* **Callcraft** pada server VPS Ubuntu yang sudah mengoperasikan Apache Web Server.
+This document provides infrastructure specifications and deployment guidelines for **Callcraft** on an Ubuntu VPS running an Apache Web Server host.
 
 ---
 
 ## 1. Network Topology & Deployment Architecture
 
-Aplikasi dikemas dalam **Docker Container** dan dipublikasikan ke publik melalui **Apache Reverse Proxy** yang terpasang di sistem operasi Host VPS.
+The application is containerized with **Docker Containers** and exposed to the public internet via an **Apache Reverse Proxy** running directly on the Host VPS operating system.
 
 ```text
                                  INTERNET
@@ -55,10 +55,10 @@ Aplikasi dikemas dalam **Docker Container** dan dipublikasikan ke publik melalui
 
 ## 2. Apache Host Reverse Proxy Configuration
 
-Mengabaikan pemasangan Nginx tambahan di dalam Docker mengurangi overhead network proxying ganda (*Apache ➔ Nginx ➔ Docker*). Apache Host menangani TLS/SSL termination, HTTP to HTTPS redirection, dan header forwarding.
+Bypassing secondary Nginx proxies inside Docker eliminates double proxying network overhead (*Apache ➔ Nginx ➔ Docker*). The Host Apache server handles TLS/SSL termination, HTTP to HTTPS redirection, and request header forwarding.
 
 ### A. VirtualHost Configuration: Dashboard UI (`app.yourdomain.com`)
-Simpan di `/etc/apache2/sites-available/ocr-app.conf`:
+Save to `/etc/apache2/sites-available/callcraft-app.conf`:
 
 ```apache
 <VirtualHost *:80>
@@ -82,13 +82,13 @@ Simpan di `/etc/apache2/sites-available/ocr-app.conf`:
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Port "443"
 
-    ErrorLog ${APACHE_LOG_DIR}/ocr-app-error.log
-    CustomLog ${APACHE_LOG_DIR}/ocr-app-access.log combined
+    ErrorLog ${APACHE_LOG_DIR}/callcraft-app-error.log
+    CustomLog ${APACHE_LOG_DIR}/callcraft-app-access.log combined
 </VirtualHost>
 ```
 
 ### B. VirtualHost Configuration: Data Plane API (`api.yourdomain.com`)
-Simpan di `/etc/apache2/sites-available/ocr-api.conf`:
+Save to `/etc/apache2/sites-available/callcraft-api.conf`:
 
 ```apache
 <VirtualHost *:80>
@@ -106,7 +106,7 @@ Simpan di `/etc/apache2/sites-available/ocr-api.conf`:
     ProxyPreserveHost On
     ProxyRequests Off
     
-    # Increase timeout for AI Vision processing up to 90 seconds
+    # Increase timeout for AI Vision/LLM processing up to 90 seconds
     ProxyTimeout 90
 
     # Enforce request payload size limit (10MB = 10485760 bytes)
@@ -118,8 +118,8 @@ Simpan di `/etc/apache2/sites-available/ocr-api.conf`:
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Port "443"
 
-    ErrorLog ${APACHE_LOG_DIR}/ocr-api-error.log
-    CustomLog ${APACHE_LOG_DIR}/ocr-api-access.log combined
+    ErrorLog ${APACHE_LOG_DIR}/callcraft-api-error.log
+    CustomLog ${APACHE_LOG_DIR}/callcraft-api-access.log combined
 </VirtualHost>
 ```
 
@@ -127,97 +127,97 @@ Simpan di `/etc/apache2/sites-available/ocr-api.conf`:
 
 ## 3. Docker Compose Specification (`docker-compose.yml`)
 
-Seluruh service aplikasi didefinisikan dalam berkas `docker-compose.yml` utama di root project:
+All application services are defined in the master `docker-compose.yml` file:
 
 ```yaml
 version: '3.8'
 
 services:
-  ocr-postgres:
+  callcraft-postgres:
     image: postgres:16-alpine
-    container_name: ocr-postgres
+    container_name: callcraft-postgres
     restart: always
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ocr_platform}
-      POSTGRES_USER: ${POSTGRES_USER:-ocr_user}
+      POSTGRES_DB: ${POSTGRES_DB:-callcraft_db}
+      POSTGRES_USER: ${POSTGRES_USER:-callcraft_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - ocr-network
-    # Port 5432 NOT exposed to host / public for security
+      - callcraft-network
+    # Port 5432 NOT exposed externally for security
 
-  ocr-redis:
+  callcraft-redis:
     image: redis:7-alpine
-    container_name: ocr-redis
+    container_name: callcraft-redis
     restart: always
     command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD:-redis_password}
     volumes:
       - redis_data:/data
     networks:
-      - ocr-network
-    # Port 6379 NOT exposed to host / public for security
+      - callcraft-network
+    # Port 6379 NOT exposed externally for security
 
-  ocr-api:
+  callcraft-api:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
-    container_name: ocr-api
+    container_name: callcraft-api
     restart: always
     ports:
-      - "127.0.0.1:8080:8080" # Bound strictly to loopback host
+      - "127.0.0.1:8080:8080" # Bound strictly to loopback interface
     environment:
       - APP_ENV=production
       - PORT=8080
-      - DATABASE_URL=postgres://${POSTGRES_USER:-ocr_user}:${POSTGRES_PASSWORD:-secret_password}@ocr-postgres:5432/${POSTGRES_DB:-ocr_platform}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password}@ocr-redis:6379
+      - DATABASE_URL=postgres://${POSTGRES_USER:-callcraft_user}:${POSTGRES_PASSWORD:-secret_password}@callcraft-postgres:5432/${POSTGRES_DB:-callcraft_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password}@callcraft-redis:6379
       - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY}
       - SERVICE_CLIENT_SECRET=${SERVICE_CLIENT_SECRET}
     depends_on:
-      - ocr-postgres
-      - ocr-redis
+      - callcraft-postgres
+      - callcraft-redis
     networks:
-      - ocr-network
+      - callcraft-network
 
-  ocr-worker:
+  callcraft-worker:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
-    container_name: ocr-worker
+    container_name: callcraft-worker
     restart: always
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgres://${POSTGRES_USER:-ocr_user}:${POSTGRES_PASSWORD:-secret_password}@ocr-postgres:5432/${POSTGRES_DB:-ocr_platform}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password}@ocr-redis:6379
+      - DATABASE_URL=postgres://${POSTGRES_USER:-callcraft_user}:${POSTGRES_PASSWORD:-secret_password}@callcraft-postgres:5432/${POSTGRES_DB:-callcraft_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password}@callcraft-redis:6379
     depends_on:
-      - ocr-postgres
-      - ocr-redis
+      - callcraft-postgres
+      - callcraft-redis
     networks:
-      - ocr-network
+      - callcraft-network
 
-  ocr-web:
+  callcraft-web:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
-    container_name: ocr-web
+    container_name: callcraft-web
     restart: always
     ports:
-      - "127.0.0.1:3000:3000" # Bound strictly to loopback host
+      - "127.0.0.1:3000:3000" # Bound strictly to loopback interface
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - INTERNAL_RUST_API_URL=http://ocr-api:8080/internal/v1
+      - INTERNAL_PYTHON_API_URL=http://callcraft-api:8080/internal/v1
       - SERVICE_CLIENT_ID=svc_nextjs_main
       - SERVICE_CLIENT_SECRET=${SERVICE_CLIENT_SECRET}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=https://app.yourdomain.com
     depends_on:
-      - ocr-api
+      - callcraft-api
     networks:
-      - ocr-network
+      - callcraft-network
 
 networks:
-  ocr-network:
+  callcraft-network:
     driver: bridge
 
 volumes:
@@ -229,62 +229,79 @@ volumes:
 
 ## 4. Multi-Stage Dockerfile Blueprint
 
-### A. Rust API Dockerfile (`docker/api.Dockerfile`)
-Menggunakan `cargo-chef` untuk caching dependensi Rust agar build cepat:
+### A. Python API Dockerfile (`docker/api.Dockerfile`)
 
 ```dockerfile
-# Stage 1: Cargo Chef Planner
-FROM lukemathwalker/cargo-chef:latest-rust-1.78-alpine AS chef
+FROM python:3.12-slim as builder
+
 WORKDIR /app
 
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Stage 2: Build Dependencies & Binary
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-COPY . .
-RUN cargo build --release --bin ocr-api
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Stage 3: Minimal Runtime
-FROM alpine:3.19 AS runtime
-RUN apk add --no-libc-dev ca-certificates tzdata
+FROM python:3.12-slim as runner
+
 WORKDIR /app
-COPY --from=builder /app/target/release/ocr-api /app/ocr-api
+
+COPY --from=builder /install /usr/local
+COPY apps/api /app/apps/api
+
+ENV PYTHONPATH=/app/apps/api/src
+ENV PORT=8080
+
 EXPOSE 8080
-ENTRYPOINT ["/app/ocr-api"]
+
+CMD ["python", "-m", "uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
 ```
 
-### B. Next.js Web Dockerfile (`docker/web.Dockerfile`)
+### B. Python Worker Dockerfile (`docker/worker.Dockerfile`)
 
 ```dockerfile
-FROM node:20-alpine AS base
+FROM python:3.12-slim as builder
 
-FROM base AS deps
 WORKDIR /app
-COPY apps/web/package.json apps/web/package-lock.json ./
-RUN npm ci
 
-FROM base AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+FROM python:3.12-slim as runner
+
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY apps/web/ .
-ENV NEXT_TELEMETRY_DISABLED 1
-RUN npm run build
 
-FROM base AS runner
+COPY --from=builder /install /usr/local
+COPY apps/worker /app/apps/worker
+
+ENV PYTHONPATH=/app/apps/worker
+
+CMD ["python", "apps/worker/main.py"]
+```
+
+### C. Bun Next.js Web Dockerfile (`docker/web.Dockerfile`)
+
+```dockerfile
+FROM oven/bun:1-alpine as base
+
 WORKDIR /app
-ENV NODE_ENV production
-ENV PORT 3000
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-USER nextjs
+COPY apps/web/package.json ./
+RUN bun install
+
+COPY apps/web/ ./
+ENV NODE_ENV=production
+RUN bun run build
+
 EXPOSE 3000
-CMD ["node", "server.js"]
+
+ENV PORT=3000
+CMD ["bun", "run", "start"]
 ```

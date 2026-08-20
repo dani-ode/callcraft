@@ -1,348 +1,144 @@
-# ---------------------------------------------
+# Q&A Discussion 3: Stateless In-Memory Processing & Zero Data Retention
 
-# QUESTION:
+## QUESTION:
+I do not want to store any image or document files at all. Is this possible?
 
-# ---------------------------------------------
+---
 
-saya tidak ingin menyimpan file sama sekali
+## ANSWER:
 
-# ---------------------------------------------
+Yes, and I strongly agree. For Callcraft, **no MinIO, S3, or persistent file storage is needed at all** if the core requirement is that files are strictly processed transiently during request execution.
 
-# ANSWER:
-
-# ---------------------------------------------
-
-Bisa, dan malah saya setuju. Untuk sistem kamu, **tidak perlu MinIO/S3/file storage sama sekali** kalau requirement-nya adalah file hanya diproses saat request berlangsung.
-
-Arsitekturnya menjadi **stateless document processing**:
+The architecture enforces **Stateless Document Processing**:
 
 ```text
-Client
-  │
-  │ image base64 / image URL
-  ▼
-Rust API
-  │
-  ├── Validate request
-  ├── Download URL (memory only)
-  ├── Validate MIME / size
-  │
-  ▼
-Memory Buffer
-  │
-  ├── AI Provider
-  │     ├── Gemini
-  │     └── OpenAI
-  │
-  ▼
-Structured Output
-  │
-  ├── Schema Validation
-  ├── Response Mapping
-  │
-  ▼
-JSON Response
-  │
-  ▼
-Memory Buffer dropped
+Client Application Request
+   │
+   │ Image / File Base64 OR Remote URL
+   ▼
+Python FastAPI Gateway
+   │
+   ├── Validate payload size limit (Max 10 MB)
+   ├── Stream download URL directly to RAM bytes (No disk I/O)
+   ├── Validate MIME type & SSRF security checks
+   │
+   ▼
+RAM Bytes Memory Buffer
+   │
+   ├── AI Vision Provider
+   │     ├── Google Gemini
+   │     ├── OpenAI GPT-4o
+   │     ├── Anthropic Claude
+   │     └── DeepSeek
+   │
+   ▼
+Structured Tool Response
+   │
+   ├── Schema Validation & Type Coercion
+   ├── Response Mapping
+   │
+   ▼
+JSON Response returned to Client App
+   │
+   ▼
+RAM Bytes Buffer released & garbage collected
 ```
 
-Tidak ada:
-
+There are:
 ```text
-❌ MinIO
-❌ S3
-❌ local uploads/
-❌ temporary file
-❌ permanent document storage
+❌ NO MinIO containers
+❌ NO AWS S3 buckets
+❌ NO local uploads/ directories
+❌ NO temporary files on disk (/tmp)
+❌ NO permanent image/document storage
 ```
 
-### Untuk URL
+---
 
-Misalnya request:
+## URL Downloads Stream Directly to RAM
+
+When a client sends a remote URL request:
 
 ```json
 {
-  "image": "https://example.com/ktp.jpg"
+  "image": "https://example.com/document.pdf"
 }
 ```
 
-Backend:
+The backend executes:
 
 ```text
-HTTP GET
+HTTP GET Stream via httpx
    ↓
-response bytes
+Response Bytes
    ↓
-memory buffer
+RAM Memory Buffer
    ↓
-MIME validation
+MIME validation & SSRF checks
    ↓
-size validation
+AI Provider API call
    ↓
-AI
-   ↓
-buffer di-drop
+RAM Buffer garbage collected
 ```
 
-Jadi bukan:
-
+Instead of disk-buffered operations:
 ```text
-URL
- ↓
-download
- ↓
-/tmp/ktp.jpg
- ↓
-AI
- ↓
-delete
+URL ➔ Download ➔ /tmp/document.pdf ➔ AI ➔ Delete file
 ```
 
-tetapi:
-
+Callcraft streams directly in-memory:
 ```text
-URL
- ↓
-download ke RAM
- ↓
-AI
- ↓
-drop memory
+URL ➔ Stream download directly into Python bytes RAM buffer ➔ AI ➔ Release buffer
 ```
 
-Untuk Rust, ini sangat cocok karena bisa menggunakan `Bytes`/memory buffer dan tidak perlu filesystem.
+In Python FastAPI, streaming via `httpx.AsyncClient` directly into memory `bytes` avoids filesystem access completely.
 
-### Base64 juga jangan disimpan
+---
 
-Request:
+## Base64 Strings Are Decoded Directly in Memory
+
+When a request contains Base64 content:
 
 ```json
 {
-  "image": "data:image/jpeg;base64,..."
+  "image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABA..."
 }
 ```
 
-Flow:
+The flow is:
 
 ```text
-Base64
- ↓
-decode
- ↓
-Bytes
- ↓
-AI
- ↓
-drop Bytes
+Base64 String ➔ Decode to RAM bytes ➔ AI Provider API ➔ Release bytes buffer
 ```
-
-Jangan masuk:
-
-```text
-api_requests
-```
-
-Jangan simpan:
-
-```text
-image_base64
-image_url
-raw_document
-ocr_image
-```
-
-kecuali kamu memang nanti menambahkan fitur audit/debug yang secara eksplisit memilih storage.
 
 ---
 
-## Database tetap hanya menyimpan metadata
+## Database Audit Logs Store Metadata Only
 
-Contoh `api_requests`:
+The PostgreSQL database **only records request metadata**.
 
+Columns in `api_requests`:
 ```text
-api_requests
--------------
-id
-request_id
-user_id
-api_spec_id
-api_spec_version_id
-credential_id
-
-provider_id
-model_id
-
-status
-http_status
-
-input_type
-input_size
-
-processing_time_ms
-
-prompt_tokens
-completion_tokens
-total_tokens
-estimated_cost
-
-error_code
-
-ip_address
-user_agent
-
-created_at
-completed_at
+- id
+- request_id
+- user_id
+- call_spec_id
+- call_spec_version_id
+- status & http_status
+- input_type & input_size_bytes
+- processing_time_ms
+- prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+- error_code & error_message
+- client_ip & user_agent
+- created_at
 ```
 
-Yang **tidak** disimpan:
-
+Items **NEVER** stored in the database:
 ```text
-❌ base64
-❌ image binary
-❌ document URL
-❌ OCR raw image
-❌ hasil OCR mentah jika mengandung data sensitif
+❌ Base64 strings
+❌ Image / Document binary bytes
+❌ Raw extracted text dumps
+❌ Sensitive user document contents
 ```
 
-Untuk response, kamu bisa pilih:
-
-### Mode 1 — privacy-first
-
-Tidak menyimpan hasil OCR sama sekali.
-
-```text
-request
- → process
- → response
- → selesai
-```
-
-### Mode 2 — metadata-only
-
-Simpan hanya:
-
-```text
-status
-latency
-token usage
-cost
-model
-provider
-error
-```
-
-Saya sangat menyarankan mode 2 sebagai default.
-
----
-
-## Ini juga mengubah arsitektur sebelumnya
-
-Jadi saya akan **hapus object storage dari arsitektur**:
-
-```text
-                    ┌───────────────┐
-                    │    Next.js    │
-                    │    Frontend   │
-                    └───────┬───────┘
-                            │
-                            ▼
-                    ┌───────────────┐
-                    │   Rust Axum   │
-                    │   API Server  │
-                    └───────┬───────┘
-                            │
-           ┌────────────────┼────────────────┐
-           │                │                │
-           ▼                ▼                ▼
-      PostgreSQL         Redis          AI Providers
-                                           │
-                                    ┌──────┴──────┐
-                                    ▼             ▼
-                                  Gemini        OpenAI
-
-                            ┌───────────────┐
-                            │    Worker     │
-                            │ Rust + Kafka  │
-                            └───────────────┘
-```
-
-Tidak ada storage file.
-
----
-
-## Ada satu hal penting: ukuran request
-
-Karena tidak menyimpan file, API harus punya batas ketat:
-
-```text
-max request body
-max base64 size
-max downloaded URL size
-max image dimensions
-timeout
-```
-
-Misalnya:
-
-```text
-Base64 image: max 10 MB
-URL download: max 10 MB
-Download timeout: 10s
-OCR timeout: 60s
-```
-
-Angkanya nanti bisa dibuat configurable.
-
-Untuk URL downloader juga tetap wajib:
-
-```text
-SSRF protection
-DNS rebinding protection
-private IP blocking
-redirect validation
-content-type validation
-content-length validation
-download timeout
-```
-
-Karena walaupun tidak menyimpan file, endpoint URL tetap bisa menjadi SSRF vector.
-
----
-
-## Saya justru menyarankan nama engine-nya berubah
-
-Daripada:
-
-```text
-OCR File Storage
-```
-
-lebih cocok:
-
-```text
-OCR Processing Engine
-```
-
-atau:
-
-```text
-Stateless OCR Execution Engine
-```
-
-Karena prinsipnya:
-
-> **Input document exists only in memory for the duration of OCR execution and is never persisted by the platform.**
-
-Ini bisa menjadi salah satu selling point produk kamu:
-
-**Privacy-first OCR API**
-
-```text
-No document storage
-No image persistence
-No permanent uploads
-No raw document logging
-```
-
-Dengan requirement baru ini, `MinIO/S3` dari rancangan sebelumnya **bisa dihapus total**.
+This guarantees 100% compliance with **Zero Data Retention (ZDR)** privacy standards.

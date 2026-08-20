@@ -1,33 +1,33 @@
 # Specifications — Dynamic API Specification Engine
 
-Dokumen ini menjelaskan rancangan teknis **API Specification Engine** pada **Callcraft**, mencakup skema JSON deklaratif, taksonomi tipe data platform, algoritma translasi ke *AI Function/Tool Calling*, serta mekanisme validasi Pydantic dan *Type Coercion* otomatis.
+This document details the technical design of the **API Specification Engine** in **Callcraft**, covering declarative JSON schemas, data type taxonomy, AI Function/Tool Calling translation algorithms, and automated Pydantic validation & *Type Coercion* post-processing pipelines.
 
 ---
 
 ## 1. Supported Data Types Taxonomy
 
-Platform menyediakan taksonomi tipe data kaya (*rich data types*) yang memungkinkan pengguna mendefinisikan bidang ekstraksi secara presisi.
+Callcraft provides a rich taxonomy of data types allowing users to define precise field constraints for extraction and structure validation.
 
 ```text
 Platform Data Types
 ├── Basic Types
-│   ├── string       (String pendek, default max 255 char)
-│   ├── text         (String panjang/paragraf)
-│   ├── integer      (Bilangan bulat)
-│   ├── number       (Bilangan desimal / floating-point)
-│   └── boolean      (true / false)
+│   ├── string       (Short text string, default max 255 chars)
+│   ├── text         (Long text string / full paragraphs)
+│   ├── integer      (Whole integer numbers)
+│   ├── number       (Floating-point / decimal numbers)
+│   └── boolean      (Boolean true / false)
 │
-├── Special Types (Auto-formatted & Validate)
-│   ├── email        (Format email valid)
-│   ├── phone        (Nomor telepon / WhatsApp format E.164)
-│   ├── date         (Format tanggal YYYY-MM-DD)
-│   ├── datetime     (Format ISO-8601 YYYY-MM-DDTHH:mm:ssZ)
-│   ├── currency     (Nilai uang / moneter desimal)
-│   └── enum         (Pilihan terbatas string dari opsi yang ditentukan)
+├── Special Types (Auto-formatted & Validated)
+│   ├── email        (Valid RFC 5322 email string)
+│   ├── phone        (International E.164 telephone format)
+│   ├── date         (Standard ISO date YYYY-MM-DD)
+│   ├── datetime     (Standard ISO 8601 YYYY-MM-DDTHH:mm:ssZ)
+│   ├── currency     (Monetary decimal representation)
+│   └── enum         (Strict string choices from predefined list)
 │
 └── Container Types (Recursive Nested Structures)
-    ├── object       (Objek JSON bertingkat memiliki properti turunan)
-    └── array        (Daftar berulang dari elemen tipe tertentu atau objek)
+    ├── object       (Nested JSON object containing child properties)
+    └── array        (List of recurring items or objects)
 ```
 
 ---
@@ -35,7 +35,7 @@ Platform Data Types
 ## 2. Request & Response Schema Specifications
 
 ### A. Request Schema Standard
-Mendefinisikan input payload HTTP `POST /v1/call/{user_id}` yang diterima dari aplikasi customer:
+Defines incoming HTTP `POST /v1/call/{user_id}` request payloads received from customer applications:
 
 ```json
 {
@@ -45,17 +45,17 @@ Mendefinisikan input payload HTTP `POST /v1/call/{user_id}` yang diterima dari a
       "type": "image",
       "sources": ["base64", "url"],
       "required": false,
-      "description": "File gambar atau dokumen (Base64 string atau HTTP URL)"
+      "description": "Image or document file (Base64 string or remote HTTP URL)"
     },
     "prompt": {
       "type": "string",
       "required": false,
-      "description": "Instruksi khusus tambahan dari pengguna"
+      "description": "Custom prompt instructions overriding default template prompts"
     },
     "variables": {
       "type": "object",
       "required": false,
-      "description": "Variabel konteks JSON dinamis"
+      "description": "Dynamic JSON context variables for runtime interpolation"
     }
   }
 }
@@ -64,7 +64,7 @@ Mendefinisikan input payload HTTP `POST /v1/call/{user_id}` yang diterima dari a
 ---
 
 ### B. Response Schema Standard (Nested Recursive Example)
-Contoh spesifikasi kustom pengguna untuk ekstraksi **KTP Indonesia**:
+Example custom user specification for structured document extraction:
 
 ```json
 {
@@ -73,17 +73,17 @@ Contoh spesifikasi kustom pengguna untuk ekstraksi **KTP Indonesia**:
     "nik": {
       "type": "string",
       "required": true,
-      "description": "16 digit Nomor Induk Kependudukan"
+      "description": "16-digit national identification number"
     },
     "full_name": {
       "type": "string",
       "required": true,
-      "description": "Nama lengkap sesuai KTP"
+      "description": "Full name as printed on document"
     },
     "gender": {
       "type": "enum",
       "required": true,
-      "enum_values": ["LAKI-LAKI", "PEREMPUAN"]
+      "enum_values": ["MALE", "FEMALE"]
     },
     "birth": {
       "type": "object",
@@ -92,12 +92,12 @@ Contoh spesifikasi kustom pengguna untuk ekstraksi **KTP Indonesia**:
         "place": {
           "type": "string",
           "required": true,
-          "description": "Kota/Kabupaten tempat lahir"
+          "description": "City or municipality of birth"
         },
         "date": {
           "type": "date",
           "required": true,
-          "description": "Tanggal lahir format YYYY-MM-DD"
+          "description": "Date of birth in YYYY-MM-DD format"
         }
       }
     },
@@ -130,14 +130,14 @@ Contoh spesifikasi kustom pengguna untuk ekstraksi **KTP Indonesia**:
 
 ## 3. Algorithm: Schema to AI Tool / Function Calling Translation
 
-Sebelum dikirimkan ke provider AI (OpenAI GPT-4o atau Google Gemini 1.5), Engine secara dinamis mengonversi `response_schema` milik pengguna menjadi deklarasi fungsi resmi (*Tool Calling Spec*).
+Before dispatching requests to AI Vision/LLM providers (Google Gemini, OpenAI GPT-4o, Anthropic Claude), the Engine dynamically translates the user's `response_schema` into native **Tool Calling Specs**.
 
 ```text
            User Response Schema JSON
                       │
                       ▼
 ┌───────────────────────────────────────────┐
-│     Rust Tool Schema Converter Engine     │
+│   Python Tool Schema Converter Engine     │
 │                                           │
 │  Map 'date', 'email', 'enum' -> Standard   │
 │  JSON Schema primitive types (string)     │
@@ -158,18 +158,18 @@ Sebelum dikirimkan ke provider AI (OpenAI GPT-4o atau Google Gemini 1.5), Engine
       "type": "function",
       "function": {
         "name": "extract_document_data",
-        "description": "Ekstrak informasi terstruktur dari dokumen gambar yang diberikan sesuai spesifikasi schema.",
+        "description": "Extract structured information from input documents according to schema specification.",
         "parameters": {
           "type": "object",
           "properties": {
-            "nik": { "type": "string", "description": "16 digit Nomor Induk Kependudukan" },
-            "full_name": { "type": "string", "description": "Nama lengkap sesuai KTP" },
-            "gender": { "type": "string", "enum": ["LAKI-LAKI", "PEREMPUAN"] },
+            "nik": { "type": "string", "description": "16-digit national identification number" },
+            "full_name": { "type": "string", "description": "Full name as printed on document" },
+            "gender": { "type": "string", "enum": ["MALE", "FEMALE"] },
             "birth": {
               "type": "object",
               "properties": {
                 "place": { "type": "string" },
-                "date": { "type": "string", "description": "Format YYYY-MM-DD" }
+                "date": { "type": "string", "description": "YYYY-MM-DD format" }
               },
               "required": ["place", "date"]
             }
@@ -187,7 +187,7 @@ Sebelum dikirimkan ke provider AI (OpenAI GPT-4o atau Google Gemini 1.5), Engine
 
 ## 4. Post-Processing Pipeline: Type Coercion & Schema Validation
 
-AI output yang dikembalikan via tool call tidak boleh dipercaya 100% tanpa validasi tipe. Engine menjalankan pipeline sanitasi 4-tahap:
+AI model tool outputs cannot be trusted implicitly without strict validation. The Engine executes a 4-stage post-processing pipeline:
 
 ```text
 Raw Tool Arguments JSON (Returned by AI)
@@ -195,12 +195,12 @@ Raw Tool Arguments JSON (Returned by AI)
                    ▼
 ┌─────────────────────────────────────────────────────┐
 │ 1. Recursive JSON Structure Validation              │
-│    Check mandatory properties present               │
+│    Verify mandatory properties present in object    │
 └──────────────────┬──────────────────────────────────┘
                    │
                    ▼
 ┌─────────────────────────────────────────────────────┐
-│ 2. Type Coercion (Toleransi Kesalahan Tipe AI)      │
+│ 2. Type Coercion (AI Type Fault Tolerance)          │
 │    - Number string ("123") ➔ Integer (123)         │
 │    - Int number (100)      ➔ String ("100")         │
 │    - Date string ("15-08-1995") ➔ Standard Date    │
@@ -209,14 +209,14 @@ Raw Tool Arguments JSON (Returned by AI)
                    ▼
 ┌─────────────────────────────────────────────────────┐
 │ 3. Pattern & Enum Validation                        │
-│    - Match against enum values (Case-insensitive)   │
-│    - Validate Regex / Email / Phone rules           │
+│    - Case-insensitive enum matching                 │
+│    - Validate Regex / Email / Phone formats         │
 └──────────────────┬──────────────────────────────────┘
                    │
                    ▼
 ┌─────────────────────────────────────────────────────┐
 │ 4. Null & Default Fallback Sanitization             │
-│    Set default values for missing optional fields   │
+│    Assign default fallback values for missing items │
 └──────────────────┬──────────────────────────────────┘
                    │
                    ▼
@@ -227,12 +227,13 @@ Raw Tool Arguments JSON (Returned by AI)
 
 ## 5. Python Core Data Types & Pydantic Specifications
 
-Struktur data internal di Python (`apps/api/src/callcraft_engine`):
+Internal engine data structures in Python (`apps/api/src/callcraft_engine`):
 
 ```python
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
 from enum import Enum
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class PlatformDataType(str, Enum):
     STRING = "string"
@@ -249,24 +250,28 @@ class PlatformDataType(str, Enum):
     OBJECT = "object"
     ARRAY = "array"
 
+
 class FieldDefinition(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     type: PlatformDataType
     required: bool = True
     description: Optional[str] = None
     default: Optional[Any] = None
-    enum_values: Optional[List[str]] = None
+    enum_values: Optional[List[str]] = Field(default=None, alias="values")
     properties: Optional[Dict[str, "FieldDefinition"]] = None
     items: Optional["FieldDefinition"] = None
+
 
 class ResponseSchema(BaseModel):
     title: Optional[str] = None
     properties: Dict[str, FieldDefinition]
 
     def to_ai_tool_schema(self, function_name: str = "extract_data", description: str = "") -> Dict[str, Any]:
-        """Mengonversi ResponseSchema menjadi JSON Schema standar untuk Tool Calling AI"""
+        """Translates ResponseSchema to standard AI tool calling function parameters."""
         pass
     
     def validate_and_coerce(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Memvalidasi dan melakukan coercion pada raw JSON output milik AI"""
+        """Validates and coerces raw AI output JSON against field definition constraints."""
         pass
 ```

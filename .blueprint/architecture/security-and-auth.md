@@ -1,12 +1,12 @@
 # Architecture — Security & Authentication
 
-Dokumen ini mendeskripsikan secara mendalam model keamanan, skema autentikasi 3-jalur, penanganan enkripsi kredensial pengguna, Role-Based Access Control (RBAC), serta langkah-langkah proteksi Server-Side Request Forgery (SSRF) pada **Callcraft**.
+This document provides a comprehensive description of the security model, 3-tier authentication schema, credential encryption standards, Role-Based Access Control (RBAC), and Server-Side Request Forgery (SSRF) prevention guidelines for **Callcraft**.
 
 ---
 
 ## 1. Multi-Tier Authentication Channels
 
-Untuk menjamin prinsip *least privilege*, sistem memisahkan akses ke backend Python FastAPI menjadi **3 jalur autentikasi independen**:
+To enforce the principle of *least privilege*, Callcraft isolates backend access into **3 independent authentication channels**:
 
 ```text
                                ┌──────────────────────────┐
@@ -28,47 +28,47 @@ Untuk menjamin prinsip *least privilege*, sistem memisahkan akses ke backend Pyt
 ---
 
 ### Channel 1: Service Auth (Next.js Server-Side ➔ Python API)
-- **Target Endpoint**: `/internal/v1/*`
-- **Tujuan**: Memungkinkan server Next.js (App Router Server Actions / Route Handlers) mengelola data platform (seperti membuat user, menyimpan spec, membuat template, mengambil log).
-- **Mekanisme**:
-  1. Next.js menyimpan `SERVICE_CLIENT_ID` dan `SERVICE_CLIENT_SECRET` di lingkungan server (`.env.local`). **Credential ini tidak boleh pernah ter-expose ke browser client**.
-  2. Pada setiap request server Next.js ke Python FastAPI, Next.js mengirimkan header:
+- **Target Endpoints**: `/internal/v1/*`
+- **Purpose**: Enables the Next.js server (App Router Server Actions / Route Handlers) to manage platform data (such as creating users, saving specifications, managing templates, and retrieving analytics logs).
+- **Mechanism**:
+  1. Next.js stores `SERVICE_CLIENT_ID` and `SERVICE_CLIENT_SECRET` securely in server environment variables (`.env.local`). **These credentials must never be exposed to the browser client**.
+  2. On every request from Next.js to the Python FastAPI backend, Next.js sends headers:
      ```http
      X-Service-Client-Id: svc_nextjs_main
      X-Service-Client-Secret: sec_live_xxxxxxxxxxxxxxxxxxxxxxxx
      ```
-  3. Backend Python mencocokkan `secret_hash` di database `service_clients` menggunakan Argon2id (`argon2-cffi`).
-  4. (Pengembangan Opsional): Pertukaran short-lived JWT Service Token (Masa berlaku 15 menit).
+  3. The Python backend matches `secret_hash` stored in the `service_clients` database table using Argon2id (`argon2-cffi`).
+  4. (Optional extension): Short-lived JWT Service Token exchange (15-minute expiration).
 
 ---
 
 ### Channel 2: Customer API Key Auth (External App ➔ Python Data Plane)
-- **Target Endpoint**: `/v1/call/{user_id}`
-- **Tujuan**: Autentikasi aplikasi eksternal milik customer yang ingin melakukan eksekusi Callcraft API dinamis.
-- **Mekanisme Header**:
+- **Target Endpoints**: `/v1/call/{user_id}`
+- **Purpose**: Authenticates customer applications invoking dynamic Callcraft execution APIs.
+- **Header Specification**:
   ```http
   Authorization: Bearer call_sk_sample_key_1234567890
   X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
   ```
 - **Scope & Constraints**:
-  - API Key ini **HANYA** memiliki izin tunggal: `call.execute`.
-  - API Key **TIDAK BISA** digunakan untuk mengakses endpoint manajemen (`/internal/v1/*` atau `/admin/v1/*`).
-  - Python API melakukan matching `public_key` dan memverifikasi `secret_key_hash` dengan Redis Cache (fallback PostgreSQL).
+  - API Keys possess a single permission scope: `call.execute`.
+  - API Keys **CANNOT** access management endpoints (`/internal/v1/*` or `/admin/v1/*`).
+  - Python API performs lookup on `public_key` and verifies `secret_key_hash` using Redis Cache with PostgreSQL fallback.
 
 ---
 
 ### Channel 3: Admin Auth & Session (Admin Dashboard ➔ Python API)
-- **Target Endpoint**: `/admin/v1/*`
-- **Tujuan**: Operasi administratif tingkat tinggi seperti manajemen AI Models, manipulasi System Prompts, suspensi User, dan inspeksi audit global.
-- **Mekanisme**:
-  - Menggunakan Bearer JWT Access Token yang dihasilkan dari login admin.
-  - Setiap request diverifikasi terhadap peran (*role*) dan hak akses (*permissions*) RBAC penggunanya.
+- **Target Endpoints**: `/admin/v1/*`
+- **Purpose**: Administrative operations including AI Model management, System Prompt editing, user account suspension, and global audit inspection.
+- **Mechanism**:
+  - Uses Bearer JWT Access Tokens generated upon administrative login.
+  - Every request is validated against the administrative user's RBAC role and permission matrix.
 
 ---
 
 ## 2. Role-Based Access Control (RBAC) Matrix
 
-Akses administratif diatur secara presisi menggunakan matriks peran berikut:
+Administrative access is governed by the following permission matrix:
 
 | Scope / Feature | SUPER_ADMIN | ADMIN | SUPPORT | ANALYST | CUSTOMER_USER |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -77,16 +77,16 @@ Akses administratif diatur secara presisi menggunakan matriks peran berikut:
 | **Manage Global Templates** | ✅ | ✅ | ❌ | ❌ | ❌ |
 | **Manage Platform Users** | ✅ | ✅ | 👁️ Read | ❌ | ❌ |
 | **View Global API Requests Log**| ✅ | ✅ | ✅ | ✅ | ❌ |
-| **Manage Own OCR Specs** | ✅ | ❌ | ❌ | ❌ | ✅ (Own Only) |
+| **Manage Own Call Specs** | ✅ | ❌ | ❌ | ❌ | ✅ (Own Only) |
 | **Manage Own Provider Keys** | ✅ | ❌ | ❌ | ❌ | ✅ (Own Only) |
-| **Execute Public OCR API** | ❌ | ❌ | ❌ | ❌ | ✅ (via API Key) |
+| **Execute Public Callcraft API** | ❌ | ❌ | ❌ | ❌ | ✅ (via API Key) |
 
 ---
 
 ## 3. Storage & Encryption Security Standard
 
 ### A. Customer AI Provider API Keys Encryption (AES-256-GCM)
-User wajib memasukkan API Key Gemini atau OpenAI milik mereka di menu Profile. **API Key ini tidak pernah disimpan sebagai plaintext**.
+Users enter their own Gemini, OpenAI, Anthropic, or DeepSeek API keys in their profile settings. **API Keys are never stored as plaintext**.
 
 ```text
 User AI API Key (Plaintext Input)
@@ -102,20 +102,20 @@ User AI API Key (Plaintext Input)
  Columns: `encrypted_api_key`, `key_nonce`
 ```
 
-#### Lifecycle Decryption di RAM:
-1. Saat request `/v1/ocr/{user_id}` diterima, Rust mengambil `encrypted_api_key` dan `key_nonce` milik user dari Redis/Postgres.
-2. Key didekripsi di dalam RAM menggunakan Platform Master Encryption Key.
-3. String API Key digunakan secara langsung pada HTTP Client header ke Google/OpenAI.
-4. Variabel API Key di-zeroize / di-drop dari RAM setelah request selesai.
-5. API Key **TIDAK BOLEH** pernah dicatat dalam `tracing`, `println!`, atau log error.
+#### Lifecycle Decryption in RAM:
+1. When a `/v1/call/{user_id}` request is received, the Python Data Plane retrieves the user's `encrypted_api_key` and `key_nonce` from Redis/PostgreSQL.
+2. The key is decrypted in RAM using the Platform Master Encryption Key via Python `cryptography.hazmat.primitives.ciphers.aead.AESGCM`.
+3. The plaintext API key string is passed directly in HTTP headers to Google / OpenAI / Anthropic API endpoints.
+4. The key variable is dereferenced and garbage collected immediately after the HTTP call finishes.
+5. API Keys **MUST NEVER** be logged in application logs, exception tracebacks, or debugging output.
 
-### B. Customer API Secret Keys Hashing (Argon2id)
-Saat user membuat API Key baru untuk aplikasi mereka:
-1. System membangkitkan pasangan key:
-   - `public_key`: `pk_live_...` (ULID/Random string)
-   - `secret_key`: `sk_live_...` (Cryptographically secure random string)
-2. **Secret key hanya ditampilkan SEKALI** kepada user pada layar UI dashboard.
-3. Database **HANYA menyimpan hash** dari secret key menggunakan algoritma **Argon2id**:
+### B. Customer Secret Keys Hashing (Argon2id)
+When a customer generates a new API Key:
+1. The system generates a key pair:
+   - `public_key`: `pk_live_...` (ULID or random string)
+   - `secret_key`: `call_sk_live_...` (Cryptographically secure random string)
+2. **The secret key is displayed ONCE** to the user on the dashboard UI.
+3. The database **ONLY stores the Argon2id hash** of the secret key:
    - Memory Cost: `64 MB`
    - Time Cost: `3 iterations`
    - Parallelism: `4 threads`
@@ -124,10 +124,10 @@ Saat user membuat API Key baru untuk aplikasi mereka:
 
 ## 4. SSRF Protection Guidelines (Server-Side Request Forgery)
 
-Jika masukan request pengguna berupa URL gambar (`"image": "https://example.com/ktp.jpg"`), Rust Data Plane wajib mendownload gambar tersebut secara aman.
+When request payloads specify remote image or document URLs (`"image": "https://example.com/document.pdf"`), the Data Plane validates the URL against strict SSRF rules before issuing HTTP requests.
 
 ```text
-User Input Image URL: "https://example.com/ktp.jpg"
+User Input File URL: "https://example.com/document.pdf"
                           │
                           ▼
 ┌──────────────────────────────────────────────────────┐
@@ -141,25 +141,38 @@ User Input Image URL: "https://example.com/ktp.jpg"
 │    - 169.254.0.0/16 (Link-local / Cloud Metadata)   │
 │    - ::1/128, fc00::/7 (IPv6 local)                  │
 │ 4. Disable HTTP Redirect Follow (Prevent DNS Rebind) │
-│ 5. Validate MIME Header (Must be image/jpeg, png, etc│
-│ 6. Enforce Stream Limit (Max 10 MB) & Timeout (10s)  │
+│ 5. Enforce Stream Limit (Max 10 MB) & Timeout (10s)  │
 └───────────────────────┬──────────────────────────────┘
                         │
                         ▼
-           Fetch Image Stream to RAM
+           Fetch File Stream to RAM
 ```
 
-### Implementasi Rust Safeguard Pseudocode:
-```rust
-// Modul validasi IP sebelum HTTP reqwest
-pub fn validate_url_ip(url: &Url) -> Result<IpAddr, SecurityError> {
-    let host = url.host_str().ok_or(SecurityError::InvalidHost)?;
-    let ips = resolve_dns(host)?;
-    for ip in ips {
-        if ip.is_loopback() || ip.is_private() || ip.is_multicast() || is_cloud_metadata(ip) {
-            return Err(SecurityError::SSRFForbiddenIP(ip));
-        }
-    }
-    Ok(ips[0])
-}
+### Python Implementation Reference:
+```python
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
+class SsrfError(Exception):
+    pass
+
+def validate_url_ip(url_str: str) -> str:
+    parsed = urlparse(url_str)
+    if parsed.scheme not in ("http", "https"):
+        raise SsrfError("Invalid URL scheme: only HTTP and HTTPS are permitted")
+
+    host = parsed.hostname
+    if not host:
+        raise SsrfError("Invalid host string")
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    addr_info = socket.getaddrinfo(host, port)
+
+    for family, socktype, proto, canonname, sockaddr in addr_info:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_unspecified:
+            raise SsrfError(f"SSRF Protection: Access to IP address {ip} is forbidden")
+
+    return url_str
 ```

@@ -1,6 +1,6 @@
 # Specifications — Professional Testing Strategy & Quality Assurance
 
-Dokumen ini mendeskripsikan strategi pengujian (*testing strategy*) profesional menyeluruh untuk **Callcraft**. Pengujian dirancang mengikuti piramida pengujian perangkat lunak modern (*Software Testing Pyramid*), mencakup Unit Testing, Integration Testing, End-to-End (E2E) Testing, Load & Performance Testing, serta Audit Keamanan & Retention Memory Audit.
+This document details the comprehensive, professional testing strategy for **Callcraft**. The testing framework is designed following the modern **Software Testing Pyramid**, encompassing Unit Testing, Integration Testing, End-to-End (E2E) Testing, Load & Performance Testing, as well as Security Fuzzing & Memory Retention Audits.
 
 ---
 
@@ -26,23 +26,25 @@ Dokumen ini mendeskripsikan strategi pengujian (*testing strategy*) profesional 
 
 ## 🧪 2. Unit Testing Specification
 
-Unit test menjamin bahwa fungsi-fungsi atomik di dalam kode berjalan sesuai spesifikasi tanpa dependensi eksternal (*isolated*).
+Unit tests verify that atomic units of logic execute correctly in isolation without external infrastructure dependencies.
 
 ### A. Core Python Unit Tests (`apps/api/src/callcraft_engine`)
 
 | Module | Test Coverage Goal | Tooling |
 | :--- | :--- | :--- |
-| **Schema Converter Engine** | Menguji translasi dari `ResponseSchema` ke Tool Calling Spec OpenAI & Gemini | `pytest` |
-| **Type Coercion Engine** | Menguji toleransi kesalahan tipe AI (misal: `"123"` ➔ `123`, `"15-08-1995"` ➔ Date) | `pytest` |
-| **SSRF URL Validator** | Menguji pemblokiran IP private (`127.0.0.1`, `10.0.0.0/8`, `169.254.169.254`, IPv6) | `pytest` |
-| **Crypto Modules** | Menguji dekripsi/enkripsi AES-256-GCM dan hashing Argon2id | `pytest` |
-| **Base64 Stream Decoder** | Menguji dekripsi Base64 gambar/file langsung ke `bytes` buffer RAM | `pytest` |
-| **AI Adapter Mocks** | Menguji serialisasi request & deserialisasi respon AI Vision | `pytest-mock` / `respx` |
+| **Schema Converter Engine** | Verifies translation of `ResponseSchema` to OpenAI / Gemini Tool Calling Specs | `pytest` |
+| **Type Coercion Engine** | Tests AI output fault tolerance (e.g., `"123"` ➔ `123`, `"1995-08-15"` ➔ Date) | `pytest` |
+| **SSRF URL Validator** | Verifies private IP blocking (`127.0.0.1`, `10.0.0.0/8`, `169.254.169.254`, IPv6) | `pytest` |
+| **Crypto Modules** | Tests AES-256-GCM encryption/decryption and Argon2id password hashing | `pytest` |
+| **Base64 Stream Decoder** | Tests Base64 stream decoding directly to RAM `bytes` buffers | `pytest` |
+| **AI Adapter Mocks** | Mocks request serialization and AI model response deserialization | `pytest-mock` / `respx` |
 
-#### Contoh Unit Test Python Pseudocode:
+#### Python Unit Test Reference:
 ```python
 import pytest
 from callcraft_engine.ssrf import validate_url_ip, SsrfError
+from callcraft_engine.schema import FieldDefinition, PlatformDataType, ResponseSchema
+from callcraft_engine.coercion import validate_and_coerce
 
 def test_ssrf_validator_blocks_private_ips():
     private_url = "http://169.254.169.254/latest/meta-data/"
@@ -50,51 +52,52 @@ def test_ssrf_validator_blocks_private_ips():
         validate_url_ip(private_url)
 
 def test_type_coercion_string_to_date():
-    # Coercion test logic
-    pass
-```
-        assert_eq!(coerced, json!("1995-08-15"));
-    }
-}
+    schema = ResponseSchema(properties={
+        "birth_date": FieldDefinition(type=PlatformDataType.DATE, required=True)
+    })
+    coerced = validate_and_coerce(schema, {"birth_date": "1995-08-15"})
+    assert coerced["birth_date"] == "1995-08-15"
 ```
 
 ### B. Next.js Frontend Unit Tests (`apps/web`)
-- **Framework**: `Vitest` + `@testing-library/react` + `Zod`.
-- **Cakupan**: Validasi form Sign Up/Login, state management React Flow Schema Builder, kustom hook TanStack Query.
+- **Framework**: `Bun Test` / `Vitest` + `@testing-library/react` + `Zod`.
+- **Coverage**: Sign Up/Login form validation, React Flow Schema Builder state management, TanStack Query custom hooks.
 
 ---
 
 ## 🔗 3. Integration Testing Specification
 
-Integration test memverifikasi interaksi antar komponen (*Rust API + PostgreSQL + Redis*) menggunakan instance aktual.
+Integration tests verify interactions between platform components (*Python FastAPI + PostgreSQL + Redis*) using live container instances.
 
-### A. Rust Integration Testing Strategy (`apps/api/tests`)
-- **Database Testing**: Menggunakan `sqlx::test` atau `testcontainers-rs` untuk menjalankan container ephemeral PostgreSQL & Redis selama eksekusi test.
-- **Axum API Route Testing**: Menguji handler HTTP menggunakan `tower::ServiceExt` tanpa menyalakan port socket asli.
+### A. Python Integration Testing Strategy (`apps/api/tests`)
+- **Database & Cache Testing**: Uses `testcontainers-python` to launch ephemeral PostgreSQL & Redis containers during test execution.
+- **FastAPI Route Testing**: Tests HTTP handlers using `httpx.AsyncClient` against the FastAPI application without opening external listening sockets.
 
-#### Contoh Integration Test Axum Route Pseudocode:
-```rust
-#[sqlx::test]
-async fn test_public_ocr_execution_rate_limit(pool: PgPool) {
-    let app = create_app(pool).await;
+#### FastAPI Route Integration Test Example:
+```python
+import pytest
+from httpx import AsyncClient, ASGITransport
+from apps.api.main import app
 
-    // Send 61 consecutive requests to trigger rate limit (Max 60 req/min)
-    for i in 1..=60 {
-        let response = app.clone().oneshot(build_ocr_request()).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
+@pytest.mark.asyncio
+async def test_public_call_execution_rate_limit():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {
+            "Authorization": "Bearer call_sk_sample_key_1234567890",
+            "X-CALL-SPEC-ID": "01HZX89ABCDEF1234567890XYZ"
+        }
 
-    // 61st request must return 429 Too Many Requests
-    let response = app.oneshot(build_ocr_request()).await.unwrap();
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-}
+        # Send consecutive requests to verify rate limiter thresholds
+        response = await ac.post("/v1/call/sample_user_id", json={"prompt": "Test prompt"}, headers=headers)
+        assert response.status_code == 200
+        assert response.json()["success"] is True
 ```
 
 ---
 
 ## 🎭 4. End-to-End (E2E) UI & API Testing
 
-E2E Test memverifikasi *user flow* nyata dari ujung ke ujung menggunakan **Playwright**.
+E2E tests verify real user flows end-to-end using **Playwright**.
 
 ```text
                        Playwright Test Suite
@@ -104,8 +107,8 @@ E2E Test memverifikasi *user flow* nyata dari ujung ke ujung menggunakan **Playw
    ▼                                                         ▼
 [ E2E Scenario 1: Dashboard Flow ]         [ E2E Scenario 2: Public API Execution ]
 1. Admin Sign Up & Login                   1. Generate API Key via Dashboard
-2. Create KTP OCR Spec via Visual Editor   2. Send POST /v1/ocr/{user_id} via HTTP
-3. Configure Gemini AI Provider Key        3. Mock AI Provider Response via Wiremock
+2. Create Document Spec via Visual Editor  2. Send POST /v1/call/{user_id} via HTTP
+3. Configure Gemini AI Provider Key        3. Mock AI Provider Response via respx
 4. Test Playground & verify execution      4. Assert JSON Output matches Spec 100%
 ```
 
@@ -113,15 +116,15 @@ E2E Test memverifikasi *user flow* nyata dari ujung ke ujung menggunakan **Playw
 
 ## ⚡ 5. Performance, Load & Memory Leak Auditing
 
-Untuk menjamin klaim **High Performance** dan **Stateless Privacy-First (0 Bytes Data Retention)**, platform harus lolos uji beban dan audit memori.
+To validate **High Performance** and **Stateless Privacy-First (0 Bytes Data Retention)** guarantees, the platform undergoes automated load testing and memory auditing.
 
-### A. Load Testing dengan `k6`
-Target Performa minimal di lingkungan VPS 4 CPU / 8 GB RAM:
-- **Throughput**: minimal `200 RPS` (Requests Per Second) untuk spec cache hit.
-- **P95 Latency**: `< 50ms` untuk gateway validation & spec resolution (diluar latency AI Provider).
-- **Error Rate**: `0.00%` pada beban normal.
+### A. Load Testing with `k6`
+Target performance metrics on a 4 CPU / 8 GB RAM VPS:
+- **Throughput**: Minimum `200 RPS` (Requests Per Second) for cached spec hits.
+- **P95 Latency**: `< 50ms` for gateway validation & spec resolution (excluding upstream AI Provider latency).
+- **Error Rate**: `0.00%` under standard load.
 
-#### Contoh Skrip Load Test `k6`:
+#### Sample `k6` Load Test Script:
 ```javascript
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -134,21 +137,22 @@ export const options = {
   ],
   thresholds: {
     http_req_duration: ['p(95)<2000'], // 95% of requests must complete within 2s
-    http_req_failed: ['rate<0.01'],    // Error rate must be less than 1%
+    http_req_failed: ['rate<0.01'],    // Error rate must be under 1%
   },
 };
 
 export default function () {
-  const url = 'http://127.0.0.1:8080/v1/ocr/01HZX89ABCDEF1234567890XYZ';
+  const url = 'http://127.0.0.1:8080/v1/call/01HZX89ABCDEF1234567890XYZ';
   const payload = JSON.stringify({
     image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    prompt: 'Extract document metadata'
   });
 
   const params = {
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer sk_live_test_key_123',
-      'X-OCR-SPEC-ID': '01HZX89ABCDEF1234567890XYZ',
+      'Authorization': 'Bearer call_sk_live_test_key_123',
+      'X-CALL-SPEC-ID': '01HZX89ABCDEF1234567890XYZ',
     },
   };
 
@@ -162,29 +166,29 @@ export default function () {
 ```
 
 ### B. Memory Retention Audit (Zero Data Retention Guarantee)
-- **Metode**: Menjalankan perkakas audit memori Rust (`valgrind`, `heaptrack`, atau `dtrace`) selama eksekusi 10.000+ request OCR.
-- **Kriteria Kelulusan**:
-  1. Tidak ada memori teralokasi (*heap memory leak*) yang terus meningkat seiring bertambahnya request.
-  2. Buffer `Bytes` gambar yang digunakan dalam eksekusi ter-zeroize / ter-drop sempurna dari RAM.
-  3. Disk inspector (`ls /tmp`, `du -sh /var/tmp`) mengonfirmasi `0 bytes` file temporer yang tercipta di OS host.
+- **Methodology**: Running Python memory profiling tools (`tracemalloc`, `memory_profiler`) during continuous execution of 10,000+ API requests.
+- **Pass Criteria**:
+  1. No heap memory leaks or uncollected objects accumulating over prolonged execution.
+  2. Memory buffers (`bytes`) explicitly garbage collected after payload dispatch.
+  3. Host disk inspection (`ls /tmp`, `du -sh /var/tmp`) confirms `0 bytes` of temporary files created on the host OS.
 
 ---
 
 ## 🔒 6. Security Fuzzing & Vulnerability Scanning
 
-Sebelum rilis ke production, jalankan rangkaian pengujian keamanan otomatis:
+Automated security checks executed prior to production release:
 
-1. **SSRF Fuzzing**: Mengirimkan masukan URL dengan skema berbahaya (`file:///etc/passwd`, `gopher://`, `dict://`, `http://10.0.0.1/admin`).
-2. **Payload Size Exhaustion**: Mengirimkan request body 50 MB, 100 MB untuk memastikan HTTP Server (Apache & Axum) menolak request sebelum memuat ke memori.
-3. **Automated Dependency Audit**:
-   - Rust: `cargo audit` dan `cargo clippy -- -D warnings`
-   - Node.js: `npm audit --audit-level=high`
+1. **SSRF Fuzzing**: Dispatching payload URLs containing dangerous schemes (`file:///etc/passwd`, `gopher://`, `dict://`, `http://10.0.0.1/admin`).
+2. **Payload Size Exhaustion**: Sending 50 MB, 100 MB request bodies to ensure web servers (Apache & Uvicorn) reject oversized payloads before buffering into RAM.
+3. **Automated Dependency Auditing**:
+   - Python: `pip-audit` or `safety check`
+   - Bun / Node: `bun audit` or `npm audit --audit-level=high`
 
 ---
 
 ## 🔄 7. Continuous Integration (CI/CD) Pipeline Workflow
 
-Setiap *Pull Request* atau *Commit* ke branch `main` akan memicu pipeline GitHub Actions / GitLab CI berikut secara otomatis:
+Every Pull Request or commit to `main` automatically triggers the GitHub Actions CI pipeline:
 
 ```text
                                Commit / Pull Request
@@ -195,9 +199,8 @@ Setiap *Pull Request* atau *Commit* ke branch `main` akan memicu pipeline GitHub
 │                                                                                 │
 │ ┌────────────────────┐   ┌────────────────────┐   ┌──────────────────────────┐  │
 │ │   Code Linting     │   │    Unit Testing    │   │ Security Audit Scanning  │  │
-│ │ cargo fmt --check  │   │ cargo test         │   │ cargo audit              │  │
-│ │ cargo clippy       │   │ npm run test       │   │ npm audit                │  │
-│ │ npm run lint       │   │                    │   │                          │  │
+│ │ ruff / flake8      │   │ pytest             │   │ pip-audit                │  │
+│ │ bun run lint       │   │ bun test           │   │ bun audit                │  │
 │ └─────────┬──────────┘   └─────────┬──────────┘   └────────────┬─────────────┘  │
 │           │                        │                           │                │
 │           └────────────────────────┼───────────────────────────┘                │
@@ -205,7 +208,7 @@ Setiap *Pull Request* atau *Commit* ke branch `main` akan memicu pipeline GitHub
 │                                    ▼                                            │
 │                     ┌──────────────────────────────┐                            │
 │                     │  Integration Tests & Build   │                            │
-│                     │  sqlx migrate run            │                            │
+│                     │  python -m pytest tests/     │                            │
 │                     │  docker build check          │                            │
 │                     └──────────────┬───────────────┘                            │
 │                                    │                                            │

@@ -37,9 +37,9 @@ where = ["apps/api/src", "apps/worker"]
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-extraPaths = ["apps/api/src", "apps/worker"]
+extraPaths = ["apps/api", "apps/api/src", "apps/worker"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["apps/api/tests", "apps/worker/tests"]
-pythonpath = ["apps/api/src", "apps/worker"]
+pythonpath = ["apps/api", "apps/api/src", "apps/worker"]

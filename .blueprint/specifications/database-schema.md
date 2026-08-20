@@ -1,6 +1,6 @@
 # Database Specification — Complete PostgreSQL Schema DDL & ERD
 
-Dokumen ini berisi spesifikasi database relasional PostgreSQL 16+ terlengkap untuk **Callcraft**. Database ini dirancang untuk mencakup seluruh kebutuhan bisnis dan arsitektur yang didiskusikan pada `qna-1.md` hingga `qna-4.md`, terdiri dari **16 Tabel Relasional Utama**.
+This document specifies the production PostgreSQL 16+ relational database schema for **Callcraft**. The database is designed to support all business requirements and architectural decisions outlined in Q&A files 1 through 5, comprising **16 Core Relational Tables**.
 
 ---
 
@@ -8,22 +8,22 @@ Dokumen ini berisi spesifikasi database relasional PostgreSQL 16+ terlengkap unt
 
 | # | Table Name | Category | Description |
 | :-: | :--- | :--- | :--- |
-| **1** | `users` | Core User | Akun pengguna platform, email, password hash, status verifikasi |
-| **2** | `roles` | Security & RBAC | Peran sistem (SUPER_ADMIN, ADMIN, SUPPORT, ANALYST, USER) |
-| **3** | `permissions` | Security & RBAC | Hak akses spesifik (misal: `model.manage`, `call.execute`, `user.read`) |
-| **4** | `role_permissions` | Security & RBAC | Relasi *Many-to-Many* antara Roles dan Permissions |
-| **5** | `user_roles` | Security & RBAC | Relasi *Many-to-Many* antara Users dan Roles |
-| **6** | `service_clients` | Internal Auth | Credential autentikasi internal Next.js Server ➔ Python API (`/internal/v1/*`) |
-| **7** | `api_credentials` | Customer Auth | Pasangan Public Key & Secret Key Hash pelanggan (`sk_live_...`) |
-| **8** | `ai_providers` | AI Registry | Registri provider AI (Google Gemini, OpenAI, Anthropic, DeepSeek) |
-| **9** | `ai_models` | AI Registry | Registri model AI Vision/LLM, fitur tool calling, dan pricing per token |
-| **10**| `user_ai_providers` | User AI Credentials| API Key AI Provider pengguna yang dienkripsi **AES-256-GCM** |
-| **11**| `templates` | Callcraft Blueprint| Master template resmi (Invoice, Receipt, Document Parser, Custom API) |
-| **12**| `call_specs` | Call Specs | Entitas spesifikasi API Callcraft buatan pengguna |
-| **13**| `call_spec_versions` | Call Specs | Histori versi schema (Request/Response JSON Schema, Prompts) |
-| **14**| `system_prompts` | Platform Config | Master system prompt & prompt tool calling yang dikelola Admin |
-| **15**| `api_requests` | Audit Logs | Log metadata eksekusi Callcraft (Tanpa menyimpan payload gambar/dokumen) |
-| **16**| `user_usage_daily` | Analytics | Agregasi harian penggunaan API, token, dan estimasi biaya per user |
+| **1** | `users` | Core User | Platform user accounts, email, password hashes, and verification status |
+| **2** | `roles` | Security & RBAC | System roles (SUPER_ADMIN, ADMIN, SUPPORT, ANALYST, USER) |
+| **3** | `permissions` | Security & RBAC | Granular permission codes (e.g., `model.manage`, `call.execute`, `user.read`) |
+| **4** | `role_permissions` | Security & RBAC | Many-to-Many junction table between Roles and Permissions |
+| **5** | `user_roles` | Security & RBAC | Many-to-Many junction table between Users and Roles |
+| **6** | `service_clients` | Internal Auth | Credentials for internal Next.js Server ➔ Python API authentication (`/internal/v1/*`) |
+| **7** | `api_credentials` | Customer Auth | Public Key & Secret Key Hash pairs for customer applications (`call_sk_live_...`) |
+| **8** | `ai_providers` | AI Registry | Provider registry (Google Gemini, OpenAI, Anthropic, DeepSeek) |
+| **9** | `ai_models` | AI Registry | AI Vision & LLM model registry, tool calling features, and token pricing rates |
+| **10**| `user_ai_providers` | User Credentials | User-supplied AI Provider API Keys encrypted with **AES-256-GCM** |
+| **11**| `templates` | Blueprint Master | Official master templates (Invoice, Receipt, Document Parser, Custom API) |
+| **12**| `call_specs` | Call Specs | Custom user-created Callcraft API specification entities |
+| **13**| `call_spec_versions` | Call Specs | Schema version history (Request/Response JSON Schemas, Prompts) |
+| **14**| `system_prompts` | Platform Config | Master system prompts & tool calling prompts managed by Admins |
+| **15**| `api_requests` | Audit Logs | Execution request metadata logs (Zero document/image retention) |
+| **16**| `user_usage_daily` | Analytics | Daily aggregated usage metrics (request counts, token counts, cost tracking) |
 
 ---
 
@@ -78,10 +78,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =============================================================================
--- TABEL 1: USERS
+-- TABLE 1: USERS
 -- =============================================================================
 CREATE TABLE users (
-    id VARCHAR(26) PRIMARY KEY, -- Format ULID (26 karakter)
+    id VARCHAR(26) PRIMARY KEY, -- ULID format (26 chars)
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
@@ -96,7 +96,7 @@ CREATE INDEX idx_users_status ON users(status);
 
 
 -- =============================================================================
--- TABEL 2: ROLES
+-- TABLE 2: ROLES
 -- =============================================================================
 CREATE TABLE roles (
     id VARCHAR(26) PRIMARY KEY,
@@ -107,18 +107,18 @@ CREATE TABLE roles (
 
 
 -- =============================================================================
--- TABEL 3: PERMISSIONS
+-- TABLE 3: PERMISSIONS
 -- =============================================================================
 CREATE TABLE permissions (
     id VARCHAR(26) PRIMARY KEY,
-    code VARCHAR(100) NOT NULL UNIQUE, -- e.g., 'user.read', 'model.manage', 'ocr.execute'
+    code VARCHAR(100) NOT NULL UNIQUE, -- e.g., 'user.read', 'model.manage', 'call.execute'
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 
 -- =============================================================================
--- TABEL 4: ROLE_PERMISSIONS
+-- TABLE 4: ROLE_PERMISSIONS
 -- =============================================================================
 CREATE TABLE role_permissions (
     role_id VARCHAR(26) NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
@@ -128,7 +128,7 @@ CREATE TABLE role_permissions (
 
 
 -- =============================================================================
--- TABEL 5: USER_ROLES
+-- TABLE 5: USER_ROLES
 -- =============================================================================
 CREATE TABLE user_roles (
     user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -138,7 +138,7 @@ CREATE TABLE user_roles (
 
 
 -- =============================================================================
--- TABEL 6: SERVICE_CLIENTS (Next.js Server -> Rust Auth)
+-- TABLE 6: SERVICE_CLIENTS (Next.js Server -> Python API Auth)
 -- =============================================================================
 CREATE TABLE service_clients (
     id VARCHAR(26) PRIMARY KEY,
@@ -154,14 +154,14 @@ CREATE TABLE service_clients (
 
 
 -- =============================================================================
--- TABEL 7: API_CREDENTIALS (Customer Public & Secret Keys)
+-- TABLE 7: API_CREDENTIALS (Customer Public & Secret Keys)
 -- =============================================================================
 CREATE TABLE api_credentials (
     id VARCHAR(26) PRIMARY KEY,
     user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(100) NOT NULL, -- e.g., 'Production Mobile App Key'
+    name VARCHAR(100) NOT NULL, -- e.g., 'Production App Key'
     public_key VARCHAR(100) NOT NULL UNIQUE, -- 'pk_live_...'
-    secret_key_hash VARCHAR(255) NOT NULL, -- Argon2id hash dari 'sk_live_...'
+    secret_key_hash VARCHAR(255) NOT NULL, -- Argon2id hash of 'call_sk_live_...'
     environment VARCHAR(20) NOT NULL DEFAULT 'production', -- 'production', 'sandbox'
     last_used_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,
@@ -174,11 +174,11 @@ CREATE INDEX idx_api_credentials_public_key ON api_credentials(public_key);
 
 
 -- =============================================================================
--- TABEL 8: AI_PROVIDERS
+-- TABLE 8: AI_PROVIDERS
 -- =============================================================================
 CREATE TABLE ai_providers (
     id VARCHAR(26) PRIMARY KEY,
-    code VARCHAR(50) NOT NULL UNIQUE, -- 'gemini', 'openai'
+    code VARCHAR(50) NOT NULL UNIQUE, -- 'gemini', 'openai', 'anthropic', 'deepseek'
     name VARCHAR(100) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -186,7 +186,7 @@ CREATE TABLE ai_providers (
 
 
 -- =============================================================================
--- TABEL 9: AI_MODELS
+-- TABLE 9: AI_MODELS
 -- =============================================================================
 CREATE TABLE ai_models (
     id VARCHAR(26) PRIMARY KEY,
@@ -207,7 +207,7 @@ CREATE INDEX idx_ai_models_provider ON ai_models(provider_id);
 
 
 -- =============================================================================
--- TABEL 10: USER_AI_PROVIDERS (User Encrypted Keys)
+-- TABLE 10: USER_AI_PROVIDERS (User Encrypted Keys)
 -- =============================================================================
 CREATE TABLE user_ai_providers (
     id VARCHAR(26) PRIMARY KEY,
@@ -223,14 +223,14 @@ CREATE TABLE user_ai_providers (
 
 
 -- =============================================================================
--- TABEL 11: TEMPLATES
+-- TABLE 11: TEMPLATES
 -- =============================================================================
 CREATE TABLE templates (
     id VARCHAR(26) PRIMARY KEY,
-    code VARCHAR(50) NOT NULL UNIQUE, -- 'ktp-id', 'sim-id', 'invoice', 'passport'
+    code VARCHAR(50) NOT NULL UNIQUE, -- 'invoice', 'document-parser', 'receipt'
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    category VARCHAR(50) NOT NULL, -- 'identity', 'financial', 'medical'
+    category VARCHAR(50) NOT NULL, -- 'financial', 'document', 'form'
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
     system_prompt TEXT NOT NULL,
@@ -242,9 +242,9 @@ CREATE TABLE templates (
 
 
 -- =============================================================================
--- TABEL 12: OCR_SPECS
+-- TABLE 12: CALL_SPECS
 -- =============================================================================
-CREATE TABLE ocr_specs (
+CREATE TABLE call_specs (
     id VARCHAR(26) PRIMARY KEY,
     user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     template_id VARCHAR(26) REFERENCES templates(id) ON DELETE SET NULL,
@@ -258,15 +258,15 @@ CREATE TABLE ocr_specs (
     CONSTRAINT uq_user_spec_slug UNIQUE (user_id, slug)
 );
 
-CREATE INDEX idx_ocr_specs_user_id ON ocr_specs(user_id);
+CREATE INDEX idx_call_specs_user_id ON call_specs(user_id);
 
 
 -- =============================================================================
--- TABEL 13: OCR_SPEC_VERSIONS
+-- TABLE 13: CALL_SPEC_VERSIONS
 -- =============================================================================
-CREATE TABLE ocr_spec_versions (
+CREATE TABLE call_spec_versions (
     id VARCHAR(26) PRIMARY KEY,
-    ocr_spec_id VARCHAR(26) NOT NULL REFERENCES ocr_specs(id) ON DELETE CASCADE,
+    call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
     version_number INT NOT NULL,
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
@@ -274,12 +274,12 @@ CREATE TABLE ocr_spec_versions (
     extraction_prompt TEXT,
     preferred_model_id VARCHAR(26) REFERENCES ai_models(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_spec_version UNIQUE (ocr_spec_id, version_number)
+    CONSTRAINT uq_spec_version UNIQUE (call_spec_id, version_number)
 );
 
 
 -- =============================================================================
--- TABEL 14: SYSTEM_PROMPTS (Managed by Admin)
+-- TABLE 14: SYSTEM_PROMPTS (Managed by Admin)
 -- =============================================================================
 CREATE TABLE system_prompts (
     id VARCHAR(26) PRIMARY KEY,
@@ -293,14 +293,14 @@ CREATE TABLE system_prompts (
 
 
 -- =============================================================================
--- TABEL 15: API_REQUESTS (Audit Metadata - Zero Image Retention)
+-- TABLE 15: API_REQUESTS (Audit Metadata - Zero Document Retention)
 -- =============================================================================
 CREATE TABLE api_requests (
     id VARCHAR(26) PRIMARY KEY,
     request_id VARCHAR(100) NOT NULL UNIQUE,
     user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    ocr_spec_id VARCHAR(26) NOT NULL REFERENCES ocr_specs(id) ON DELETE CASCADE,
-    ocr_spec_version_id VARCHAR(26) NOT NULL REFERENCES ocr_spec_versions(id) ON DELETE CASCADE,
+    call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
+    call_spec_version_id VARCHAR(26) NOT NULL REFERENCES call_spec_versions(id) ON DELETE CASCADE,
     credential_id VARCHAR(26) REFERENCES api_credentials(id) ON DELETE SET NULL,
     provider_id VARCHAR(26) REFERENCES ai_providers(id) ON DELETE SET NULL,
     model_id VARCHAR(26) REFERENCES ai_models(id) ON DELETE SET NULL,
@@ -327,12 +327,12 @@ CREATE TABLE api_requests (
 );
 
 CREATE INDEX idx_api_requests_user_created ON api_requests(user_id, created_at DESC);
-CREATE INDEX idx_api_requests_spec_id ON api_requests(ocr_spec_id);
+CREATE INDEX idx_api_requests_spec_id ON api_requests(call_spec_id);
 CREATE INDEX idx_api_requests_status ON api_requests(status);
 
 
 -- =============================================================================
--- TABEL 16: USER_USAGE_DAILY (Agregasi Reporting Harian)
+-- TABLE 16: USER_USAGE_DAILY (Daily Aggregated Analytics)
 -- =============================================================================
 CREATE TABLE user_usage_daily (
     id VARCHAR(26) PRIMARY KEY,

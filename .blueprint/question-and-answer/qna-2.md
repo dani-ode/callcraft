@@ -1,218 +1,91 @@
-# ---------------------------------------------
+# Q&A Discussion 2: Architecture & Component Separation
 
-# QUESTION:
+## QUESTION:
+Should backend and frontend be separated in this project?
 
-# ---------------------------------------------
+---
 
-harus pisahkan backend dan frontend ya?
+## ANSWER:
 
-# ---------------------------------------------
+Yes, for Callcraft I **strongly recommend separating backend and frontend application layers**.
 
-# ANSWER:
-
-# ---------------------------------------------
-
-Ya, untuk project yang kamu jelaskan saya **sangat menyarankan backend dan frontend dipisahkan**.
-
-Bukan berarti harus dibuat dua repository atau microservices. Yang saya maksud adalah **separate application layer**:
+This does not mean you need multiple separate Git repositories or complex microservices. Rather, it means maintaining a **separated application layer within a monorepo**:
 
 ```text
-ocr-platform/
-├── backend/        ← Rust
-│   ├── API
-│   ├── Auth
-│   ├── OCR Engine
-│   ├── AI Provider
-│   ├── Schema Engine
-│   ├── Admin API
-│   └── Worker
+callcraft/
+├── apps/
+│   ├── api/            ← Python FastAPI Data Plane Gateway & Engine
+│   ├── worker/         ← Python Async Outbox Logger & Worker
+│   └── web/            ← Next.js 14 Dashboard & Visual Schema Builder (Bun)
 │
-├── frontend/       ← Next.js
-│   ├── Dashboard
-│   ├── OCR Builder
-│   ├── Playground
-│   ├── Profile
-│   └── Admin Panel
-│
-└── infrastructure/
-    ├── docker/
-    └── nginx/
+├── migrations/         ← PostgreSQL 16+ Migration DDL SQL
+├── docker/             ← Multi-stage Dockerfiles
+├── docker-compose.yml  ← Multi-container setup
+└── pyproject.toml      ← Python workspace manifest
 ```
 
-### Kenapa dipisahkan?
+### Why Separate Them?
 
-Karena project kamu sebenarnya mempunyai **dua produk berbeda**:
+Because Callcraft comprises **two distinct product domains**:
 
-**Frontend = Control Plane**
+#### 1. Control Plane (Frontend: Next.js + Bun)
+Users and administrators manage:
+- User Profile & Auth
+- AI Provider API Keys (Gemini, OpenAI, Anthropic, DeepSeek)
+- Dynamic Callcraft API Specifications
+- Request Schemas & Response Schemas
+- Prompts & Templates
+- Customer API Credentials (`pk_live_...` & `call_sk_live_...`)
+- Interactive Playground & Analytics Dashboard
 
-User mengatur:
+#### 2. Data Plane + Execution Engine (Backend: Python FastAPI)
+Handles runtime customer traffic:
+- Service Authentication & Customer API Key Verification
+- High-Performance Gateway & Token-Bucket Rate Limiting
+- Dynamic Execution Engine & Tool Calling Generation
+- In-Memory Stream Processing (RAM `bytes` without disk retention)
+- Multi-AI Provider Adapters (Gemini, OpenAI, Anthropic, DeepSeek)
+- Schema Validation & Automated Type Coercion
+- Async Request Audit Logging
 
-```text
-Profile
-AI Key
-OCR Template
-OCR API
-Request Schema
-Response Schema
-Prompt
-API Credential
-Playground
-Analytics
-```
-
-Sedangkan **Backend = Data Plane + Execution Engine**
-
-```text
-Authentication
-API Gateway
-OCR execution
-Image processing
-AI provider
-Tool calling
-Schema validation
-Rate limiting
-Usage tracking
-Database
-Queue
-```
-
-External customer nantinya bahkan **tidak perlu mengakses frontend**.
-
-Contohnya:
+External customer applications **never need to access the frontend dashboard directly**. They interact exclusively with the Python Data Plane API:
 
 ```text
                     ┌─────────────────┐
-                    │    Next.js      │
-                    │    Dashboard    │
+                    │ Next.js + Bun   │
+                    │ Dashboard UI    │
                     └────────┬────────┘
                              │
-                             │ Admin/API
+                             │ Internal Auth (/internal/v1/*)
                              ▼
                     ┌─────────────────┐
-                    │   Rust Backend  │
-                    │      Axum       │
+                    │ Python FastAPI  │
+                    │ Data Plane API  │
                     └───────┬─────────┘
                             │
           ┌─────────────────┼──────────────────┐
           │                 │                  │
           ▼                 ▼                  ▼
-     PostgreSQL           Redis           AI Provider
+     PostgreSQL           Redis           AI Providers
                                               │
                                        ┌──────┴──────┐
                                        │             │
                                     Gemini        OpenAI
 
 
-External Customer
+External Customer App
        │
-       │ POST /v1/ocr/...
+       │ POST /v1/call/{user_id}
        ▼
 ┌─────────────────┐
-│ Rust OCR API    │
+│ Python FastAPI  │
 └─────────────────┘
 ```
 
-Jadi frontend hanya dipakai untuk **management**, sedangkan API Rust menjadi produk utama yang dipanggil customer.
-
-### Apakah harus beda repository?
-
-**Tidak harus.**
-
-Untuk tahap awal saya justru menyarankan **monorepo**:
-
+### Architecture Scalability Advantage
+Separating Control Plane and Data Plane allows independent horizontal scaling under high traffic:
 ```text
-ocr-platform/
-├── apps/
-│   ├── api/              # Rust Axum
-│   ├── worker/           # Rust worker
-│   └── web/              # Next.js
-│
-├── packages/
-│   └── api-client/       # optional generated TS client
-│
-├── crates/
-│   ├── domain/
-│   ├── application/
-│   ├── infrastructure/
-│   └── ai/
-│
-├── migrations/
-├── docker-compose.yml
-├── .env.example
-└── README.md
+web: 2 container instances
+api: 10 container instances (high execution throughput)
+worker: 4 container instances (outbox logging & analytics processing)
 ```
-
-Ini menurut saya **lebih cocok untuk project kamu** daripada:
-
-```text
-repo-backend
-repo-frontend
-repo-worker
-repo-admin
-repo-sdk
-```
-
-terlalu cepat menjadi rumit.
-
-### Bahkan saya akan buat 3 aplikasi
-
-Bukan cuma backend/frontend:
-
-```text
-apps/
-├── web/       → Next.js dashboard
-├── api/       → Rust Axum API
-└── worker/    → Rust async worker
-```
-
-Flow-nya:
-
-```text
-             ┌─────────────┐
-             │   Next.js   │
-             │   Web App   │
-             └──────┬──────┘
-                    │
-                    ▼
-             ┌─────────────┐
-             │ Rust API    │◄──────── External Customers
-             │ Axum        │
-             └──────┬──────┘
-                    │
-           ┌────────┼─────────┐
-           ▼        ▼         ▼
-      PostgreSQL   Redis    AI APIs
-           │
-           ▼
-       Outbox Events
-           │
-           ▼
-        Redpanda
-           │
-           ▼
-        Rust Worker
-```
-
-Dan ada satu keuntungan besar: nanti ketika traffic OCR tinggi, kamu bisa scale:
-
-```text
-web: 2 instances
-api: 10 instances
-worker: 20 instances
-```
-
-tanpa harus memperbanyak frontend.
-
-Jadi rekomendasi final saya:
-
-**Frontend:** Next.js + TypeScript
-**Backend API:** Rust + Axum
-**Worker:** Rust + Tokio
-**DB:** PostgreSQL
-**Cache:** Redis
-**Queue:** Redpanda/Kafka
-**Storage:** S3/MinIO
-**Deployment:** Docker + Nginx/Traefik
-**Repository:** Monorepo
-
-Untuk project seperti ini, **separate frontend/backend tetapi tetap satu monorepo** adalah pilihan yang paling balance.

@@ -1,12 +1,12 @@
 # Architecture — System Overview
 
-Dokumen ini menjelaskan arsitektur tingkat tinggi dari **Callcraft**, termasuk pembagian komponen *Control Plane* dan *Data Plane*, alur pemrosesan data dinamis *stateless* di RAM, serta siklus hidup request dari masukan client hingga respon JSON terstruktur.
+This document describes the high-level architecture of **Callcraft**, including the separation of **Control Plane** and **Data Plane** components, the stateless in-memory data processing pipeline, and the end-to-end request lifecycle from client invocation to structured JSON responses.
 
 ---
 
 ## 1. High-Level Architecture
 
-Sistem dirancang mengadopsi arsitektur **FastAPI (Python 3.12)** untuk *Data Plane* dan **Next.js (App Router) yang dijalankan di atas Bun** untuk *Control Plane*, dipisahkan secara logis namun dapat didedikasikan pada container terpisah.
+Callcraft adopts a decoupled micro-service monorepo design separating the **Python 3.12 (FastAPI)** *Data Plane Execution Engine* from the **Next.js 14 (App Router running on Bun)** *Control Plane Dashboard*.
 
 ```text
                                    ┌──────────────────────┐
@@ -44,7 +44,7 @@ Sistem dirancang mengadopsi arsitektur **FastAPI (Python 3.12)** untuk *Data Pla
       ┌────────────────────┐       ┌────────────────────┐       ┌────────────────────┐
       │   PostgreSQL 16    │       │     Redis 7        │       │    AI Providers    │
       │ Spec, Key, User,   │       │ Cache Call Specs,  │       │ Google Gemini API  │
-      │ Metada Request Log │       │ Rate Limits        │       │ OpenAI GPT-4o API  │
+      │ Metadata Request   │       │ Rate Limits        │       │ OpenAI / Anthropic │
       └────────────────────┘       └────────────────────┘       └────────────────────┘
                  ▲                                                         │
                  │                                                         │
@@ -62,43 +62,43 @@ Sistem dirancang mengadopsi arsitektur **FastAPI (Python 3.12)** untuk *Data Pla
 ## 2. Separation of Concerns: Control Plane vs Data Plane
 
 ### A. Control Plane (Next.js + Bun - `app.yourdomain.com`)
-- **Fungsi**: Interface berbasis GUI bagi pengguna dan admin.
-- **Fitur Utama**:
-  1. Register, Login, Profile Management, & API Key Generation (Public & Secret Key `sk_live_...`).
-  2. Manajemen AI Provider Keys (Gemini, OpenAI, Anthropic, DeepSeek API Key yang diinput pengguna).
-  3. Visual API Specification Builder (React Flow & Monaco Editor) untuk mendesain request schema dan response schema kustom dinamis.
-  4. Template Marketplace (Invoice, Document, Receipt, Form Parser, Custom API Builder).
-  5. Monitoring Dashboard & Analytics (API Hit counts, Token consumption, latency distribution, error rate).
-  6. Admin Management UI (System models, user role management, prompt system editing).
-- **Catatan**: Next.js **TIDAK PERNAH** memproses traffic *Public Execution API* pengguna eksternal.
+- **Function**: GUI management interface for platform users and system administrators.
+- **Key Features**:
+  1. Registration, Login, Profile Management, & API Key Generation (Public & Secret Keys `call_sk_...`).
+  2. AI Provider Key Management (User-provided API Keys for Gemini, OpenAI, Anthropic, DeepSeek).
+  3. Visual API Specification Builder (React Flow & Monaco Editor) to design dynamic request and response schemas.
+  4. Template Marketplace (Invoice, Receipt, Document Parser, Form Extractor, Custom API Builder).
+  5. Monitoring Dashboard & Analytics (API hit counts, token consumption, latency distribution, error rates).
+  6. Admin Management UI (System models, user role RBAC management, prompt system editing).
+- **Note**: Next.js **NEVER** proxies public API traffic from external customer applications.
 
 ### B. Data Plane (Python FastAPI - `api.yourdomain.com`)
-- **Fungsi**: High-performance execution engine stateless.
-- **Fitur Utama**:
+- **Function**: High-performance, stateless execution engine.
+- **Key Features**:
   1. Receiving & Validating Customer Requests (`POST /v1/call/{user_id}`).
-  2. Authentication & Rate Limiting (Pengecekan API Key `sk_live_...` & Token Bucket di Redis).
-  3. Spec Resolution: Mengambil definisi Call Spec dari Redis (fallback PostgreSQL).
-  4. In-Memory Image & Document Handling: Menerima Base64 atau mendownload URL file/gambar secara langsung ke buffer RAM (`bytes`).
-  5. AI Engine Execution: Mengubah response schema menjadi JSON Tool Schema untuk Gemini/OpenAI/LLM Vision API.
-  6. Response Mapping & Type Coercion: Memvalidasi keluaran AI terhadap response schema pengguna dan mengembalikan JSON presisi.
-  7. Async Request Audit Logging: Mengirimkan metadata hit (token, latency, cost, http status) ke outbox queue tanpa menyimpan gambar/konten dokumen.
+  2. Authentication & Rate Limiting (API Key `call_sk_...` verification & Token Bucket rate limiter in Redis).
+  3. Spec Resolution: Fetching Call Spec definitions from Redis cache (with PostgreSQL fallback).
+  4. In-Memory Image & Document Handling: Stream decoding Base64 payloads or fetching HTTP URLs directly into RAM buffers (`bytes`).
+  5. AI Engine Execution: Translating response schemas into dynamic JSON Tool Calling declarations for Gemini, OpenAI, Anthropic, or DeepSeek APIs.
+  6. Response Mapping & Type Coercion: Validating raw AI model output against user response schemas and coercing data types.
+  7. Async Request Audit Logging: Dispatching execution metadata (token counts, processing latency, estimated cost, HTTP status) to outbox queue without storing documents or sensitive raw text.
 
 ---
 
-## 3. Stateless RAM-Only Image Processing Pipeline
+## 3. Stateless RAM-Only Data Processing Pipeline
 
-Platform ini menerapkan standar **Zero Data Retention (ZDR)** untuk dokumen yang diproses. File gambar tidak pernah disimpan ke dalam media disk lokal, temporary directory, MinIO, S3, atau database.
+Callcraft enforces strict **Zero Data Retention (ZDR)** for all documents and context payloads. Files are never written to host disk storage, temporary directories, MinIO, S3, or databases.
 
 ```text
-  Client App Request (Base64 / Image URL)
+  Client App Request (Base64 / File URL)
                     │
                     ▼
 ┌──────────────────────────────────────────────────────┐
-│                  Rust Axum Handler                   │
+│                FastAPI Request Handler               │
 │                                                      │
 │ 1. Stream Request Body (Max 10 MB limit)             │
-│ 2. Decode Base64 OR Download URL via reqwest (in RAM)│
-│ 3. Buffer stored in Tokio Bytes (RAM)                │
+│ 2. Decode Base64 OR Download URL via httpx (in RAM)  │
+│ 3. Buffer stored in RAM bytes object                 │
 │                                                      │
 │                     │                                │
 │                     ▼                                │
@@ -106,35 +106,35 @@ Platform ini menerapkan standar **Zero Data Retention (ZDR)** untuk dokumen yang
 │                                                      │
 │                     │                                │
 │                     ▼                                │
-│ 5. Receive Structured Output from AI                 │
-│ 6. Drop Tokio Bytes memory allocation immediately    │
+│ 5. Receive Structured Tool Output from AI            │
+│ 6. Garbage Collect bytes buffer memory immediately   │
 └──────────────────────────────────────────────────────┘
                     │
                     ▼
    JSON Response returned to Client App
 ```
 
-### Aturan Penanganan Memori:
-- **Base64 Payload**: Axum memvalidasi header Base64, mendecode string langsung menjadi `bytes::Bytes` di RAM.
-- **URL Payload**: Terjadi eksekusi HTTP GET stream via `reqwest` langsung ke `Bytes` buffer dengan batas timeout 10 detik dan batas ukuran file 10 MB. Terproteksi penuh dari serangan SSRF.
-- **Memory Drop**: Variabel `Bytes` secara eksplisit dihapus (*dropped*) dari scope memori Rust sesegera mungkin setelah dipassing ke provider AI.
+### Memory Safety & Retention Rules:
+- **Base64 Payload**: FastAPI validates the Base64 header and decodes the string directly into an in-memory `bytes` object.
+- **URL Payload**: Asynchronous HTTP GET streaming via `httpx` downloads content directly into `bytes` in RAM with a 10-second timeout and 10 MB file size restriction. Protected against SSRF vulnerabilities.
+- **Memory Cleanup**: The `bytes` buffer is explicitly released and garbage collected as soon as payload dispatch to the AI provider completes.
 
 ---
 
-## 4. OCR AI Execution Flow (Tool / Function Calling Engine)
+## 4. Dynamic AI Execution Engine (Tool / Function Calling)
 
-Untuk menjamin struktur JSON keluaran sesuai 100% dengan `response_schema` yang dikonfigurasi oleh user, engine tidak menggunakan prompt biasa (*string completion*), melainkan **Structured Tool / Function Calling**.
+To guarantee that AI output strictly conforms 100% to the user-defined `response_schema`, Callcraft employs **Structured Tool / Function Calling** instead of plain text prompts.
 
 ```text
-    User OCR Spec (Response Schema Definition)
+  User Callcraft Spec (Response Schema Definition)
                         │
                         ▼
 ┌──────────────────────────────────────────────────────┐
 │              Tool Generator Engine                   │
 │                                                      │
-│ Transforms Response Schema -> Dynamic AI Function:   │
+│ Transforms Response Schema -> Dynamic AI Tool:       │
 │ Name: "extract_document_data"                        │
-│ Parameters: JSON Schema derived from Spec            │
+│ Parameters: JSON Schema derived from Response Schema │
 └───────────────────────┬──────────────────────────────┘
                         │
                         ▼
@@ -143,7 +143,7 @@ Untuk menjamin struktur JSON keluaran sesuai 100% dengan `response_schema` yang 
 │ (Gemini 1.5 Flash/Pro Vision OR OpenAI GPT-4o)       │
 │                                                      │
 │ System Prompt: Platform Base Prompt + Spec Prompt    │
-│ Input: Image Bytes Buffer + Extra User Prompt        │
+│ Input: File Bytes Buffer + User Prompt + Variables   │
 │ Tools: [ extract_document_data Tool Schema ]         │
 └───────────────────────┬──────────────────────────────┘
                         │
@@ -158,9 +158,9 @@ Untuk menjamin struktur JSON keluaran sesuai 100% dengan `response_schema` yang 
 ┌──────────────────────────────────────────────────────┐
 │          Schema Validation & Type Coercion           │
 │                                                      │
-│ 1. Validate fields against spec rules                │
+│ 1. Validate fields against Pydantic schema           │
 │ 2. Coerce types (e.g., String -> Date, Int -> String)│
-│ 3. Apply Enum matching & Defaults                    │
+│ 3. Apply Enum matching & Default fallbacks           │
 └───────────────────────┬──────────────────────────────┘
                         │
                         ▼
@@ -171,30 +171,30 @@ Untuk menjamin struktur JSON keluaran sesuai 100% dengan `response_schema` yang 
 
 ## 5. Sequence Diagrams
 
-### Sequence A: Eksekusi Public OCR API (`Customer -> Rust Axum`)
+### Sequence A: Public Callcraft API Execution (`Customer -> Python FastAPI`)
 
 ```text
-Client Application             Apache Proxy               Rust API Gateway               Redis Cache               AI Provider (Gemini/OpenAI)     PostgreSQL
+Client Application             Apache Proxy               Python API Gateway             Redis Cache               AI Provider (Gemini/OpenAI)     PostgreSQL
        │                            │                             │                           │                                 │                    │
-       │─── POST /v1/ocr/{user_id}─►│                             │                           │                                 │                    │
-       │    Header: X-OCR-SPEC-ID   │                             │                           │                                 │                    │
+       │─── POST /v1/call/{user_id}►│                             │                           │                                 │                    │
+       │    Header: X-CALL-SPEC-ID  │                             │                           │                                 │                    │
        │    Header: Authorization   │─── Proxy Pass :8080 ───────►│                           │                                 │                    │
        │                            │                             │─── Check Rate Limit ─────►│                                 │                    │
        │                            │                             │◄── Rate Limit OK ─────────│                                 │                    │
        │                            │                             │                           │                                 │                    │
-       │                            │                             │─── Get OCR Spec Cached ──►│                                 │                    │
+       │                            │                             │─── Get Call Spec Cached ─►│                                 │                    │
        │                            │                             │◄── Spec Found (JSON) ─────│                                 │                    │
        │                            │                             │                           │                                 │                    │
        │                            │                             │ (If Cache Miss) ────────────────────────────────────────────────────────────────────►│ Query Spec
        │                            │                             │◄(Cache Miss Fallback) ───────────────────────────────────────────────────────────│ Return Spec
        │                            │                             │                           │                                 │                    │
-       │                            │                             │─── Download/Decode Image (RAM memory only)                   │                    │
+       │                            │                             │─── Download/Decode File (RAM memory only)                     │                    │
        │                            │                             │─── Decrypt User AI Provider API Key                             │                    │
        │                            │                             │                                                             │                    │
-       │                            │                             │─── POST Vision Request (Image + Tool Schema) ──────────────►│                    │
+       │                            │                             │─── POST Vision/LLM Request (Bytes + Tool Schema) ──────────►│                    │
        │                            │                             │◄── Return Tool Call Argument JSON ──────────────────────────│                    │
        │                            │                             │                                                             │                    │
-       │                            │                             │─── Drop Image RAM Buffer                                    │                    │
+       │                            │                             │─── Release File RAM Buffer                                  │                    │
        │                            │                             │─── Validate & Coerce JSON Output                            │                    │
        │                            │                             │                                                             │                    │
        │                            │                             │─── Async Outbox Audit Log (Metadata only, no payload) ────────────────────────────►│ Insert api_requests
@@ -207,9 +207,9 @@ Client Application             Apache Proxy               Rust API Gateway      
 
 | Metric / Constraint | Value | Description |
 | :--- | :--- | :--- |
-| **Max Request Body Size** | `10 MB` | Batas maksimum payload HTTP request (termasuk Base64) |
-| **Max Image Download Size**| `10 MB` | Batas maksimum file gambar yang didownload dari URL |
-| **URL Download Timeout** | `10 seconds` | Max waktu tunggu untuk mendownload gambar via URL |
-| **OCR Execution Timeout** | `60 seconds` | Max waktu tunggu respon dari AI Provider |
-| **Redis Cache Spec TTL** | `3600 seconds` | Durasi spesifikasi OCR disimpan di Redis cache |
-| **Rate Limit Default** | `60 req/minute` | Batas default per API Key customer (configurable) |
+| **Max Request Body Size** | `10 MB` | Maximum HTTP request payload limit (including Base64) |
+| **Max File Download Size** | `10 MB` | Maximum file download size allowed from remote URL |
+| **URL Download Timeout** | `10 seconds` | Max HTTP request timeout when downloading remote files |
+| **API Execution Timeout** | `60 seconds` | Max response timeout when invoking AI Providers |
+| **Redis Cache Spec TTL** | `3600 seconds` | Expiration time for cached Callcraft specifications |
+| **Rate Limit Default** | `60 req/minute` | Default token-bucket rate limit per Customer API Key |

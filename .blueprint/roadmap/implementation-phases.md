@@ -1,6 +1,6 @@
 # Implementation Roadmap — Actionable Execution Phases
 
-Dokumen ini berisi peta jalan (*roadmap*) urutan eksekusi pembuatan sistem **Callcraft** dari awal hingga siap dipublikasikan ke production VPS. Roadmap dibagi menjadi **6 Fase Eksekusi Taktis**.
+This document provides a tactical execution roadmap for building **Callcraft** from initial monorepo setup to production deployment on VPS infrastructure. The roadmap is structured into **6 Tactical Execution Phases**.
 
 ---
 
@@ -19,7 +19,7 @@ Phase 3: Python Dynamic Multimodal Execution Engine & AI Adapters
 Phase 4: Next.js + Bun Dashboard & Visual Schema Builder
   │
   ▼
-Phase 5: Security Hardening, Rate Limiter & Worker Logging
+Phase 5: Security Hardening, Rate Limiter & Async Outbox Worker
   │
   ▼
 Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
@@ -29,80 +29,81 @@ Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
 
 ## 🛠️ Phase 1: Project Scaffolding & Workspace Setup
 
-- [ ] **1.1. Inisialisasi Workspace Structure**:
-  - Membuat folder monorepo: `apps/web` (Next.js dengan Bun), `apps/api` (Python FastAPI), `apps/worker` (Python Worker).
-  - Menyiapkan `pyproject.toml` / `requirements.txt` untuk Python 3.12 workspace.
-  - Menyiapkan Bun (`bun.lockb`, `package.json`) di `apps/web`.
-- [ ] **1.2. Konfigurasi Environment & Tooling**:
-  - Menyiapkan `.env.example` dan `.env` untuk variable database `callcraft_db`, Redis, encryption keys.
-  - Setup Tailwind CSS, shadcn/ui di Next.js dengan Bun runtime.
-  - Setup FastAPI, Pydantic v2, Uvicorn, Asyncpg, Cryptography di Python.
+- [ ] **1.1. Monorepo Structure Initialization**:
+  - Create monorepo directory layout: `apps/web` (Next.js with Bun), `apps/api` (Python 3.12 FastAPI), `apps/worker` (Python Worker).
+  - Configure root `pyproject.toml` and `requirements.txt` for Python dependencies.
+  - Set up Bun (`package.json`, `bun.lockb`, `pyrightconfig.json`) in `apps/web` and workspace root.
+- [ ] **1.2. Environment & Tooling Configuration**:
+  - Configure `.env.example` and `.env` for database (`callcraft_db`), Redis connection strings, and encryption keys.
+  - Configure Tailwind CSS, shadcn/ui, and TypeScript in Next.js with Bun runtime.
+  - Set up FastAPI, Pydantic v2, Uvicorn, Asyncpg, and Cryptography in Python.
 
 ---
 
 ## 🗄️ Phase 2: Database Migrations & Data Access Layer
 
-- [ ] **2.1. Eksekusi Migration SQL**:
-  - Menjalankan DDL migrasi PostgreSQL (Tabel `users`, `roles`, `permissions`, `call_specs`, `api_credentials`, `api_requests`, dll).
-  - Seeding data awal `ai_providers` (Gemini, OpenAI, Anthropic, DeepSeek), `ai_models`, dan `templates` dasar.
-- [ ] **2.2. Implementasi Python Asyncpg/SQLAlchemy Models & Redis Cache Layer**:
-  - Membuat Data Access Layer untuk CRUD `call_specs`, `api_credentials`, dan user provider keys.
-  - Membuat modul Redis client untuk caching Call Specs (`setex` dengan TTL 3600s).
+- [ ] **2.1. Execute Migration SQL**:
+  - Run PostgreSQL DDL migration scripts (Tables `users`, `roles`, `permissions`, `call_specs`, `api_credentials`, `api_requests`, etc.).
+  - Seed initial provider data (`ai_providers` for Gemini, OpenAI, Anthropic, DeepSeek), `ai_models`, and official platform `templates`.
+- [ ] **2.2. Implement Python Asyncpg/SQLAlchemy Models & Redis Cache Layer**:
+  - Build Data Access Layer for `call_specs`, `api_credentials`, and user AI provider key persistence.
+  - Implement Redis client module for spec caching (`setex` with 3600-second TTL).
 
 ---
 
 ## ⚙️ Phase 3: Python Dynamic Multimodal Execution Engine & AI Adapters
 
-- [ ] **3.1. Implementasi In-Memory Buffer Handler**:
-  - Membangun FastAPI extractor untuk Base64 decoding ke buffer RAM (`bytes`).
-  - Membangun module `httpx` download URL langsung ke `bytes` RAM dengan timeout 10 detik.
-- [ ] **3.2. Implementasi AI Provider Adapters**:
-  - **Gemini Adapter**: Menggunakan REST Google AI Studio API / SDK dengan Tool Calling / Structured JSON output.
-  - **OpenAI Adapter**: Menggunakan GPT-4o Chat Completions API dengan `tools` parameter function calling.
-- [ ] **3.3. Implementasi Tool Generator & Post-Processing Validator**:
-  - Membuat converter dari `response_schema` deklaratif ke JSON Tool Spec.
-  - Membangun validator dan *Type Coercion Engine* (String to Date, Number string to Int, Enum validation).
+- [ ] **3.1. Implement In-Memory Buffer Handler**:
+  - Build FastAPI extractor for Base64 stream decoding directly into RAM `bytes` objects.
+  - Implement `httpx` async HTTP client to stream-download URLs into RAM `bytes` with a 10-second timeout.
+- [ ] **3.2. Implement AI Provider Adapters**:
+  - **Gemini Adapter**: Google AI Studio REST API / SDK integration supporting Structured Output Tool Calling.
+  - **OpenAI Adapter**: GPT-4o Chat Completions API integration with `tools` function calling specs.
+  - **Anthropic / DeepSeek Adapters**: Multi-provider support for structured JSON generation.
+- [ ] **3.3. Implement Tool Generator & Post-Processing Validator**:
+  - Build converter transforming user `response_schema` into standard JSON Tool Calling Specs.
+  - Implement Pydantic validation & *Type Coercion Engine* (String to Date, Number string to Int, Enum validation).
 
 ---
 
-## 💻 Phase 4: Next.js Dashboard & Visual Schema Builder
+## 💻 Phase 4: Next.js + Bun Dashboard & Visual Schema Builder
 
-- [ ] **4.1. Authentication & Profile Dashboard**:
-  - Membuat halaman Sign Up, Login, dan Profile User.
-  - Halaman input API Key AI Provider (Gemini & OpenAI) dengan feedback validasi key.
-  - Generator API Key Customer (`pk_live_...` dan `sk_live_...`).
+- [ ] **4.1. Authentication & User Profile Dashboard**:
+  - Create Sign Up, Login, and Profile management pages.
+  - AI Provider Key management UI (Gemini, OpenAI, Anthropic) with live key validation.
+  - Customer API Key pair generator (`pk_live_...` and `call_sk_live_...`).
 - [ ] **4.2. Visual API Schema Builder**:
-  - Integrasi **React Flow** untuk membuat editor visual drag-and-drop bidang request & response.
-  - Integrasi **Monaco Editor** untuk preview JSON Schema secara langsung.
-  - Katalogue Template Dokumen (KTP, SIM, Invoice) sekali klik pasang.
-- [ ] **4.3. Playground & Hit Monitoring UI**:
-  - Halaman Playground interaktif untuk menguji hit API OCR langsung dari dashboard.
-  - Dashboard analytics (tabel `api_requests` metadata: latency, status, token usage, cost).
+  - Integrate **React Flow** for visual drag-and-drop request & response schema creation.
+  - Integrate **Monaco Editor** for real-time JSON Schema code preview and editing.
+  - One-click template marketplace installer (Invoice, Document Parser, Receipt).
+- [ ] **4.3. Interactive Playground & Monitoring UI**:
+  - Interactive Playground UI for live API execution testing within the dashboard.
+  - Analytics dashboard rendering `api_requests` metadata (latency distribution, status codes, token usage, cost tracking).
 
 ---
 
 ## 🛡️ Phase 5: Security Hardening, Rate Limiter & Async Outbox Worker
 
 - [ ] **5.1. Security Modules Integration**:
-  - Implementasi enkripsi AES-256-GCM untuk API Key user di database Rust.
-  - Implementasi hashing Argon2id untuk `secret_key_hash` pelanggan.
-  - SSRF Security Validator untuk memblokir IP private/loopback/cloud metadata saat mendownload gambar via URL.
-- [ ] **5.2. Token-Bucket Rate Limiter di Redis**:
-  - Middleware Axum untuk memverifikasi kuota request per API Key (default 60 req/min).
-- [ ] **5.3. Async Worker Outbox Logging**:
-  - Rust API menuliskan log hit secara non-blocking ke outbox queue.
-  - `ocr-worker` memproses outbox queue dan melakukan batch insert metadata ke PostgreSQL `api_requests`.
+  - Integrate AES-256-GCM encryption for stored user API keys.
+  - Integrate Argon2id hashing for customer secret keys (`call_sk_live_...`).
+  - Implement SSRF Security Validator blocking private/loopback/cloud metadata IPs on remote URL downloads.
+- [ ] **5.2. Token-Bucket Rate Limiter in Redis**:
+  - FastAPI middleware checking customer API Key request quotas (default 60 req/min).
+- [ ] **5.3. Async Outbox Worker**:
+  - Python Data Plane writes execution metadata non-blocking to Redis outbox queues.
+  - `callcraft-worker` consumes outbox queues and batch-inserts request logs into PostgreSQL `api_requests`.
 
 ---
 
 ## 🚀 Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
 
 - [ ] **6.1. Container Build & Testing**:
-  - Membuat `docker/api.Dockerfile` (Cargo Chef) dan `docker/web.Dockerfile`.
-  - Menguji `docker-compose up --build` di lingkungan lokal.
+  - Build multi-stage `docker/api.Dockerfile` (Python 3.12-slim), `docker/worker.Dockerfile`, and `docker/web.Dockerfile` (Bun).
+  - Verify container cluster using `docker-compose up --build` in local environment.
 - [ ] **6.2. VPS Host Setup & Apache Configuration**:
-  - Menyiapkan `VirtualHost` Apache di VPS Host (`ocr-app.conf` dan `ocr-api.conf`).
-  - Generasi sertifikat SSL/TLS HTTPS via Certbot / Let's Encrypt.
-- [ ] **6.3. E2E Verification & Smoke Testing**:
-  - Uji coba eksekusi eksternal API via `curl` / Postman ke `https://api.yourdomain.com/v1/ocr/{user_id}`.
-  - Memastikan 0 bytes file tersisa di filesystem VPS setelah 100+ eksekusi OCR.
+  - Configure Apache `VirtualHost` configurations on Host VPS (`callcraft-app.conf` & `callcraft-api.conf`).
+  - Issue SSL/TLS HTTPS certificates using Certbot / Let's Encrypt.
+- [ ] **6.3. E2E Verification & Memory Audit**:
+  - Execute external end-to-end API smoke tests via `curl` / Postman against `https://api.yourdomain.com/v1/call/{user_id}`.
+  - Confirm 0 bytes of temporary files created on VPS host filesystem after 100+ continuous API executions.

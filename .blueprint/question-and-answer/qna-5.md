@@ -1,533 +1,89 @@
-# ---------------------------------------------
+# Q&A Discussion 5: Service Auth, Customer Auth & Admin RBAC
 
-# QUESTION:
+## QUESTION:
+Is there a specific credential mechanism between Next.js and Python so that unauthorized users cannot edit settings or perform administrative actions?
 
-# ---------------------------------------------
+---
 
-jadi ada, creadential khusu antara next js dan rust selain user menghit api nya sendiri ke rust, agar tidak semarang mengedit apalagi untuk bagian admin?
+## ANSWER:
 
-# ---------------------------------------------
+Yes. I strongly recommend **3 distinct authentication channels**:
 
-# ANSWER:
+1. **Next.js ➔ Python API** (`/internal/v1/*`) for internal Control Plane management.
+2. **Customer App ➔ Python API** (`/v1/call/{user_id}`) for public Callcraft execution.
+3. **Admin User ➔ Python API** (`/admin/v1/*`) for platform-level RBAC operations.
 
-# ---------------------------------------------
+Customer API keys must never be capable of accessing management or administrative endpoints.
 
-Ya. Saya sangat menyarankan ada **dua jalur autentikasi yang benar-benar berbeda**:
+---
 
-1. **Next.js → Rust** untuk internal/control-plane.
-2. **Customer → Rust** untuk public OCR API.
+## 1. Channel 1: Service Auth (Next.js ➔ Python API)
 
-Jangan menggunakan credential customer untuk mengakses management/admin API.
-
-### 1. Next.js → Rust
-
-Next.js menjadi client resmi untuk management API Rust.
+Next.js operates as an authenticated service client for management operations:
 
 ```text
-Browser
+Browser User
    │
    ▼
-Next.js
+Next.js (Server Action / Route Handler)
    │
-   │ internal credential
+   │ Service Auth Headers
    ▼
-Rust Management API
+Python Management API (/internal/v1/*)
 ```
 
-Contoh:
+Request Header Format:
+```http
+X-Service-Client-Id: svc_nextjs_main
+X-Service-Client-Secret: sec_live_xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Python verifies `secret_hash` using Argon2id against the `service_clients` database table. If an unauthenticated client tries to hit `/internal/v1/*` endpoints directly without valid service credentials, access is rejected immediately (HTTP 401/403).
+
+---
+
+## 2. Channel 2: Customer API Key Auth (Customer ➔ Python API)
+
+Customer applications use API Keys generated from the dashboard:
 
 ```http
-POST /internal/v1/ocr-specs
-X-Internal-Service-Key: ...
-```
-
-Credential ini **bukan credential user**.
-
-Saya menyarankan model yang lebih kuat daripada satu static secret:
-
-```text
-Next.js
-   │
-   ├── SERVICE_CLIENT_ID
-   └── SERVICE_CLIENT_SECRET
-              │
-              ▼
-       Rust Authentication
-```
-
-Atau menggunakan **JWT service token** yang short-lived.
-
-Flow:
-
-```text
-Next.js
-   │
-   │ client credentials
-   ▼
-Rust
-   │
-   ├── authenticate service
-   ├── verify permission
-   └── process request
-```
-
-Jadi kalau seseorang mengetahui endpoint:
-
-```text
-/api/v1/admin/users
-```
-
-tetap tidak bisa memanggilnya tanpa credential/service identity yang valid.
-
----
-
-## 2. User → Rust
-
-Berbeda dengan internal credential.
-
-Customer menggunakan:
-
-```http
-Authorization: Bearer sk_live_xxxxx
-X-OCR-SPEC-ID: 01K...
+Authorization: Bearer call_sk_live_sample_key_1234567890
+X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
 ```
 
 Flow:
-
 ```text
-External Application
-        │
-        ▼
-      Rust
-        │
-        ├── validate secret key
-        ├── resolve user
-        ├── resolve OCR spec
-        └── execute OCR
+External Customer App ➔ Python API Gateway ➔ Validate API Key & Execute Callcraft API
 ```
 
-Credential ini hanya boleh punya permission seperti:
-
-```text
-ocr.execute
-```
-
-Tidak boleh:
-
-```text
-user.read
-user.update
-admin.read
-admin.update
-model.manage
-template.manage
-```
+This credential possesses a single permission scope: `call.execute`. It **CANNOT** perform management tasks like `user.read`, `model.manage`, `template.manage`, or `system_prompt.update`.
 
 ---
 
-# 3. Jangan hanya mengandalkan "secret key"
+## 3. Channel 3: Admin Auth & Role-Based Access Control (RBAC)
 
-Saya sarankan Rust punya **authorization layer**.
+Admin users authenticate using Bearer JWT tokens with RBAC permission checks:
 
-Misalnya:
-
-```text
-Principal
-│
-├── type: USER
-├── type: SERVICE
-└── type: ADMIN
-```
-
-Kemudian:
-
-```text
-Permission
-│
-├── ocr.execute
-├── ocr.spec.read
-├── ocr.spec.write
-├── profile.read
-├── profile.write
-├── user.read
-├── user.write
-├── model.read
-├── model.write
-├── template.read
-├── template.write
-└── admin.*
-```
+| Endpoint Path | Browser User | Next.js Service | Customer API Key | Admin User |
+| :--- | :---: | :---: | :---: | :---: |
+| `/internal/v1/users` | ❌ | ✅ | ❌ | ✅ |
+| `/internal/v1/call-specs` | ❌ | ✅ | ❌ | ✅ |
+| `/v1/call/{user_id}` | ❌ | ❌ | ✅ | ✅ |
+| `/admin/v1/models` | ❌ | ❌ | ❌ | ✅ (`model.manage`) |
+| `/admin/v1/system-prompts` | ❌ | ❌ | ❌ | ✅ (`prompt.manage`) |
+| `/admin/v1/users/{id}/suspend` | ❌ | ❌ | ❌ | ✅ (`user.manage`) |
 
 ---
 
-# 4. Contoh permission matrix
-
-| Endpoint             | Browser/User | Next.js Service | OCR API Key | Admin |
-| -------------------- | -----------: | --------------: | ----------: | ----: |
-| Login                |           ✅ |              ❌ |          ❌ |    ✅ |
-| Profile              |           ✅ |              ✅ |          ❌ |    ✅ |
-| Create OCR Spec      |  ✅ via Next |              ✅ |          ❌ |    ✅ |
-| Edit OCR Spec        |  ✅ via Next |              ✅ |          ❌ |    ✅ |
-| Execute OCR          |           ❌ |              ❌ |          ✅ |    ✅ |
-| Manage User          |           ❌ |              ❌ |          ❌ |    ✅ |
-| Manage AI Models     |           ❌ |              ❌ |          ❌ |    ✅ |
-| Manage Templates     |           ❌ |            ✅\* |          ❌ |    ✅ |
-| Manage Prompt System |           ❌ |            ✅\* |          ❌ |    ✅ |
-| View All API Hits    |           ❌ |            ✅\* |          ❌ |    ✅ |
-
-`*` tergantung desain apakah endpoint management tersebut memang boleh dipanggil oleh Next.js.
-
----
-
-# 5. Ada tiga identity yang sebaiknya kamu bedakan
-
-Saya akan desain seperti ini:
+## Summary of Identity Isolation
 
 ```text
-                    RUST
-                     │
-       ┌─────────────┼─────────────┐
-       │             │             │
-       ▼             ▼             ▼
-    SERVICE         USER          ADMIN
-       │             │             │
-       ▼             ▼             ▼
-  Next.js API    Customer API    Admin session
+               Python FastAPI Gateway
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+        ▼                ▼                ▼
+     SERVICE           USER             ADMIN
+  Next.js Server   Customer Key     Admin JWT
+  (/internal/v1)  (/v1/call/{id})  (/admin/v1/*)
 ```
-
-### SERVICE
-
-Identitas aplikasi:
-
-```text
-nextjs-service
-```
-
-Dipakai Next.js → Rust.
-
-### USER API KEY
-
-Identitas aplikasi customer:
-
-```text
-sk_live_xxxxx
-```
-
-Dipakai:
-
-```text
-Customer → Rust OCR API
-```
-
-### ADMIN
-
-Identitas manusia/admin:
-
-```text
-Admin login
-→ session/JWT
-→ Rust
-```
-
-Jangan menjadikan `Next.js service credential` sebagai pengganti admin authentication.
-
----
-
-# 6. Khusus admin, ada desain yang lebih aman
-
-Karena kamu mengatakan:
-
-> "apalagi untuk bagian admin"
-
-Saya justru menyarankan **admin API tidak memakai endpoint public yang sama**.
-
-Contoh:
-
-```text
-Public:
-
-api.example.com/v1/ocr/*
-
-Management:
-
-api.example.com/internal/v1/*
-
-Admin:
-
-api.example.com/admin/v1/*
-```
-
-Lalu Rust memproteksi masing-masing route.
-
-```text
-/v1/ocr/*
-    → USER API KEY
-
-/internal/v1/*
-    → SERVICE AUTH
-
-/admin/v1/*
-    → ADMIN AUTH
-```
-
-Dengan demikian pemisahannya sangat jelas.
-
----
-
-# 7. Tetapi ada satu catatan penting tentang Next.js
-
-Jangan:
-
-```text
-Browser
-   │
-   ▼
-Next.js
-   │
-   │ shared admin secret
-   ▼
-Rust
-```
-
-lalu setiap user browser dianggap admin karena Next.js punya credential.
-
-Karena browser tidak boleh pernah menerima:
-
-```text
-SERVICE_CLIENT_SECRET
-```
-
-Credential internal hanya boleh berada di **server-side Next.js**.
-
-Flow:
-
-```text
-Browser
-   │
-   │ user session
-   ▼
-Next.js Server
-   │
-   │ SERVICE credential
-   ▼
-Rust
-```
-
-Kalau menggunakan Next.js App Router, server-side route/action bisa menjadi client ke Rust.
-
----
-
-# 8. Bahkan saya lebih menyukai service credential yang short-lived
-
-Daripada:
-
-```text
-NEXT_RUST_SECRET=super-long-static-secret
-```
-
-bisa dibuat:
-
-```text
-Next.js
-   │
-   │ client_id + client_secret
-   ▼
-Rust /internal/auth/token
-   │
-   ▼
-short-lived access token
-   │
-   ▼
-Next.js
-   │
-   ▼
-Rust Management API
-```
-
-Misalnya token berlaku 5–15 menit.
-
-```text
-Authorization: Bearer eyJ...
-```
-
-Jadi secret jangka panjang hanya digunakan untuk memperoleh token, bukan dikirim di setiap request.
-
-Untuk MVP, static service credential yang **disimpan hanya di server-side environment** masih cukup. Untuk production yang lebih serius, saya akan naikkan ke short-lived service token.
-
----
-
-# 9. Tambahkan database `service_clients`
-
-Misalnya:
-
-```text
-service_clients
-----------------
-id
-name
-client_id
-secret_hash
-status
-permissions
-last_used_at
-created_at
-updated_at
-```
-
-Data:
-
-```text
-id:
-01K...
-
-name:
-nextjs-web
-
-client_id:
-svc_nextjs
-
-secret_hash:
-...
-
-status:
-active
-```
-
-Permission:
-
-```json
-[
-  "profile.read",
-  "ocr-spec.read",
-  "ocr-spec.write",
-  "api-credential.read",
-  "template.read"
-]
-```
-
-**Jangan beri Next.js permission admin penuh hanya karena Next.js adalah frontend resmi.**
-
-Ini penting.
-
----
-
-# 10. Admin sebaiknya punya RBAC
-
-Buat:
-
-```text
-roles
-permissions
-role_permissions
-user_roles
-```
-
-Misalnya:
-
-```text
-SUPER_ADMIN
-ADMIN
-SUPPORT
-ANALYST
-```
-
-Contoh:
-
-```text
-SUPER_ADMIN
-├── user.*
-├── model.*
-├── template.*
-├── prompt.*
-├── system.*
-└── audit.*
-
-SUPPORT
-├── user.read
-└── request.read
-
-ANALYST
-├── request.read
-└── usage.read
-```
-
-Jadi nanti kamu bisa punya admin dashboard tanpa semua orang punya kemampuan mengubah konfigurasi AI/system prompt.
-
----
-
-# 11. Arsitektur final
-
-Menurut saya arsitektur paling tepat untuk project kamu adalah:
-
-```text
-                           INTERNET
-                               │
-                         ┌─────▼─────┐
-                         │  Apache   │
-                         │ TLS/Proxy │
-                         └─────┬─────┘
-                               │
-              ┌────────────────┴────────────────┐
-              │                                 │
-              ▼                                 ▼
-       app.example.com                    api.example.com
-              │                                 │
-              ▼                                 ▼
-       ┌──────────────┐                  ┌──────────────┐
-       │   Next.js    │                  │ Rust / Axum  │
-       │ Control Plane│                  │ Data Plane   │
-       └──────┬───────┘                  └──────┬───────┘
-              │                                 │
-              │ SERVICE AUTH                    │
-              └────────────────────────────────►│
-                                                │
-                    ┌───────────────────────────┼───────────────┐
-                    │                           │               │
-                    ▼                           ▼               ▼
-               PostgreSQL                    Redis        Gemini/OpenAI
-```
-
-Dan credential-nya:
-
-```text
-Browser
-   │
-   └── User Session
-          │
-          ▼
-       Next.js
-          │
-          └── Service Credential
-                  │
-                  ▼
-                Rust
-```
-
-sementara:
-
-```text
-Customer Application
-   │
-   └── OCR API Key
-          │
-          ▼
-        Rust
-          │
-          ▼
-      OCR Engine
-```
-
-dan:
-
-```text
-Admin
-   │
-   └── Admin Session + RBAC
-          │
-          ▼
-        Rust
-```
-
-Jadi **tidak ada satu credential yang bisa melakukan semuanya**.
-
-Ini jauh lebih aman daripada membuat Next.js punya "master API key" yang dapat melakukan semua operasi.

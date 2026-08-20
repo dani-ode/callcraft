@@ -8,22 +8,22 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-red.svg?style=flat&logo=redis)](https://redis.io/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Callcraft** adalah platform berbasis AI (*Dynamic Multimodal API Execution Engine*) berkecepatan tinggi yang memungkinkan pengguna untuk mendesain kontrak API secara visual, menentukan *request schema* dan *response schema* kustom dinamis, serta mengeksekusi ekstraksi dan pemrosesan data dokumen terstruktur presisi 100% dengan memanfaatkan AI Vision & LLM Models (Google Gemini 1.5, OpenAI GPT-4o, Anthropic Claude, dan DeepSeek).
+**Callcraft** is a high-speed, AI-powered **Dynamic Multimodal API Execution Engine**. It empowers users to visually design custom API contracts, define dynamic request and response schemas, and execute 100% precision structured document & data processing by leveraging state-of-the-art AI Vision & LLM Models (Google Gemini 1.5, OpenAI GPT-4o, Anthropic Claude, and DeepSeek).
 
 ---
 
 ## ⚡ Core Features & Architectural Highlights
 
-- 🔒 **Stateless Privacy-First Data Processing**: File gambar/dokumen (Base64 atau URL download) dan konteks data hanya diolah di dalam buffer RAM (`bytes`) selama eksekusi Callcraft dan langsung di-drop dari memori. **Tidak ada file yang disimpan ke disk host, S3, MinIO, atau database.**
+- 🔒 **Stateless Privacy-First Data Processing**: Image/document files (Base64 or URL downloads) and context payloads are strictly processed in RAM buffers (`bytes`) during execution and immediately dropped from memory. **No files are ever saved to host disk, S3, MinIO, or databases.**
 - 🚀 **Separated Control Plane & Data Plane**:
-  - **Control Plane (`Next.js` dengan Bun)**: Dashboard visual bagi pengguna dan admin untuk mengelola API specs, template dokumen, AI provider keys, dan analitik.
-  - **Data Plane (`Python / FastAPI`)**: High-performance API Gateway dan Execution Engine yang memproses traffic eksekusi customer secara langsung tanpa bottleneck.
-- 🤖 **Dynamic Tool & Function Calling Engine**: Mengonversi JSON Schema buatan pengguna secara otomatis menjadi deklarasi *Tool Calling Spec* resmi AI Vision untuk menggaransi respon JSON valid 100%.
+  - **Control Plane (`Next.js` with Bun)**: Visual dashboard for users and admins to manage API specs, input templates, AI provider credentials, and analytics.
+  - **Data Plane (`Python / FastAPI`)**: High-performance API Gateway and Execution Engine that directly handles customer execution traffic without bottlenecks.
+- 🤖 **Dynamic Tool & Function Calling Engine**: Automatically translates user-defined JSON Schemas into official AI Vision *Tool Calling Specs* to guarantee 100% valid JSON responses.
 - 🛡️ **Multi-Tier Security & Authentication**:
-  - **Service Auth**: Komunikasi internal Next.js Server ➔ Python (`/internal/v1/*`).
-  - **Customer Auth**: Eksekusi Public Callcraft (`/v1/call/{user_id}`) dengan Bearer API Key (`call_sk_...`).
-  - **Admin Auth**: Hak akses berjenjang berbasis Role-Based Access Control (**RBAC**).
-  - **Security Safeguards**: Enkripsi AES-256-GCM untuk API key provider, Argon2id hashing untuk secret key, dan validator SSRF URL.
+  - **Service Auth**: Internal communication between Next.js Server ➔ Python (`/internal/v1/*`).
+  - **Customer Auth**: Public execution API (`/v1/call/{user_id}`) via Bearer API Key (`call_sk_...`).
+  - **Admin Auth**: Granular access control based on Role-Based Access Control (**RBAC**).
+  - **Security Safeguards**: AES-256-GCM encryption for provider API keys, Argon2id hashing for secret keys, and strict SSRF URL validation.
 
 ---
 
@@ -31,11 +31,11 @@
 
 ```text
 callcraft/
-├── .blueprint/                 # Blueprint Arsitektur Lengkap & Dokumentasi Q&A
-│   ├── README.md               # Master index spesifikasi cetak biru
+├── .blueprint/                 # Complete Architecture Blueprint & Q&A Specifications
+│   ├── README.md               # Master index of architectural blueprints
 │   ├── architecture/           # System overview, Security/Auth, Deployment specs
-│   ├── specifications/         # Database DDL (16 tabel), API Spec engine, Endpoints, Testing Strategy
-│   └── roadmap/                # Implementation phases roadmap (Phase 1-6)
+│   ├── specifications/         # Database DDL (16 tables), API Spec engine, Endpoints, Testing Strategy
+│   └── roadmap/                # Tactical implementation roadmap (Phase 1-6)
 │
 ├── apps/
 │   ├── web/                    # FRONTEND: Next.js 14 Dashboard & Visual Schema Builder (Bun Runtime)
@@ -45,24 +45,24 @@ callcraft/
 │   │   └── tests/              # Pytest Unit & Engine Test Suite
 │   └── worker/                 # WORKER: Python Async Outbox Logger
 │
-├── migrations/                 # PostgreSQL 16+ DDL Migration SQL Scripts (16 Tabel Relasional)
+├── migrations/                 # PostgreSQL 16+ DDL Migration SQL Scripts (16 Relational Tables)
 ├── docker/                     # Dockerfiles (Python FastAPI Multi-Stage & Bun Next.js)
 ├── docker-compose.yml          # Multi-Container Setup (Web, API, Worker, Postgres, Redis)
 ├── pyproject.toml              # Root Python 3.12 Workspace Manifest
 ├── requirements.txt            # Python Dependencies List
-└── .env.example                # Template Variabel Lingkungan
+└── .env.example                # Environment Variable Template
 ```
 
 ---
 
 ## 🛠️ Prerequisites
 
-Pastikan perangkat Anda memenuhi syarat berikut sebelum menjalankan aplikasi:
+Ensure your environment meets the following requirements before running the application:
 - **Python**: `3.12+`
 - **Bun**: `v1.1+`
 - **Docker & Docker Compose**: `v24.0+`
-- **PostgreSQL**: `v16+` (Jika dijalankan tanpa Docker)
-- **Redis**: `v7+` (Jika dijalankan tanpa Docker)
+- **PostgreSQL**: `v16+` (If running without Docker)
+- **Redis**: `v7+` (If running without Docker)
 
 ---
 
@@ -73,43 +73,43 @@ Pastikan perangkat Anda memenuhi syarat berikut sebelum menjalankan aplikasi:
 cp .env.example .env
 ```
 
-### 2. Jalankan Infrastructure Services (PostgreSQL & Redis)
+### 2. Start Infrastructure Services (PostgreSQL & Redis)
 ```bash
 docker-compose up -d callcraft-postgres callcraft-redis
 ```
 
-### 3. Jalankan Database Migration
+### 3. Run Database Migrations
 ```bash
 psql -h 127.0.0.1 -U callcraft_user -d callcraft_db -f migrations/0001_initial_schema.sql
 ```
 
-### 4. Jalankan Python Backend Data Plane API (`apps/api`)
+### 4. Start Python Backend Data Plane API (`apps/api`)
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python3 -m uvicorn apps.api.main:app --port 8080 --reload
 ```
-*API Data Plane akan berjalan pada address `http://127.0.0.1:8080`.*
+*The Data Plane API will be available at `http://127.0.0.1:8080`.*
 
-### 5. Jalankan Python Pytest Suite
+### 5. Run Python Pytest Suite
 ```bash
 pytest apps/api/tests
 ```
 
-### 6. Jalankan Next.js Web Dashboard dengan Bun (`apps/web`)
+### 6. Start Next.js Web Dashboard with Bun (`apps/web`)
 ```bash
 cd apps/web
 bun install
 bun run dev
 ```
-*Dashboard Control Plane akan berjalan pada address `http://localhost:3000`.*
+*The Control Plane Dashboard will be available at `http://localhost:3000`.*
 
 ---
 
 ## 📡 Usage Example (Public Callcraft API Execution)
 
-Setelah membuat spesifikasi Callcraft dan menggenerasi API Key di Dashboard, aplikasi eksternal dapat melakukan eksekusi dengan mengirimkan request HTTP `POST`:
+After creating a Callcraft API specification and generating an API Key in the Dashboard, external applications can execute API calls via HTTP `POST`:
 
 ```bash
 curl -X POST "http://127.0.0.1:8080/v1/call/01HZX89ABCDEF1234567890XYZ" \
@@ -118,7 +118,7 @@ curl -X POST "http://127.0.0.1:8080/v1/call/01HZX89ABCDEF1234567890XYZ" \
   -H "Content-Type: application/json" \
   -d '{
     "image": "https://storage.example.com/ktp-sample.jpg",
-    "prompt": "Pastikan NIK terverifikasi 16 digit",
+    "prompt": "Verify national identity number structure",
     "variables": { "environment": "production" }
   }'
 ```
@@ -142,7 +142,7 @@ curl -X POST "http://127.0.0.1:8080/v1/call/01HZX89ABCDEF1234567890XYZ" \
   "data": {
     "nik": "3271041508950001",
     "full_name": "BUDI SANTOSO",
-    "gender": "LAKI-LAKI"
+    "gender": "MALE"
   }
 }
 ```
@@ -151,7 +151,7 @@ curl -X POST "http://127.0.0.1:8080/v1/call/01HZX89ABCDEF1234567890XYZ" \
 
 ## 📘 Documentation & Blueprints
 
-Spesifikasi teknis dan acuan arsitektur mendalam dapat diakses pada folder `.blueprint/`:
+Detailed technical specifications and architecture design docs are available in the `.blueprint/` directory:
 - 📄 [System Architecture Overview](file:///home/dani/Projects/callcraft/.blueprint/architecture/system-overview.md)
 - 🔐 [Security & Auth Specifications](file:///home/dani/Projects/callcraft/.blueprint/architecture/security-and-auth.md)
 - 🐳 [Deployment & Infrastructure Blueprint](file:///home/dani/Projects/callcraft/.blueprint/architecture/deployment-and-infrastructure.md)
@@ -164,4 +164,4 @@ Spesifikasi teknis dan acuan arsitektur mendalam dapat diakses pada folder `.blu
 
 ## 📜 License
 
-Project ini dilindungi di bawah lisensi MIT.
+This project is licensed under the MIT License.
