@@ -1,8 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Sparkles, Upload, Zap, CheckCircle2 } from "lucide-react";
+import { Play, Sparkles, Copy, Check, FileText, CheckCircle2, Zap } from "lucide-react";
 import { executeCallcraftApi } from "@/lib/api-client";
+
+const SAMPLE_PRESETS = [
+  {
+    name: "Indonesian KTP Sample",
+    specId: "ktp-parser",
+    imageUrl: "https://raw.githubusercontent.com/tesseract-ocr/test/main/testing/eurotext.png",
+    prompt: "Extract NIK, full name, and gender accurately from the identity card.",
+  },
+  {
+    name: "Invoice Sample",
+    specId: "invoice-extractor",
+    imageUrl: "https://raw.githubusercontent.com/tesseract-ocr/test/main/testing/eurotext.png",
+    prompt: "Extract invoice number, vendor name, and total amount.",
+  },
+  {
+    name: "Receipt Sample",
+    specId: "receipt-parser",
+    imageUrl: "https://raw.githubusercontent.com/tesseract-ocr/test/main/testing/eurotext.png",
+    prompt: "Extract merchant name, transaction date, and total paid.",
+  },
+];
 
 export default function PlaygroundPage() {
   const [specId, setSpecId] = useState("ktp-parser");
@@ -14,6 +35,13 @@ export default function PlaygroundPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const applyPreset = (preset: typeof SAMPLE_PRESETS[0]) => {
+    setSpecId(preset.specId);
+    setImageUrl(preset.imageUrl);
+    setPrompt(preset.prompt);
+  };
 
   const handleRunTest = async () => {
     setLoading(true);
@@ -37,11 +65,36 @@ export default function PlaygroundPage() {
     }
   };
 
+  const handleCopyJson = () => {
+    if (result) {
+      navigator.clipboard.writeText(JSON.stringify(result, null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-100">Interactive API Playground</h1>
         <p className="text-xs text-slate-400">Test live document parsing and structured coercion in real-time</p>
+      </div>
+
+      {/* Preset Badges */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-slate-400 flex items-center gap-1 mr-1">
+          <FileText className="w-3.5 h-3.5 text-indigo-400" />
+          Quick Presets:
+        </span>
+        {SAMPLE_PRESETS.map((preset, idx) => (
+          <button
+            key={idx}
+            onClick={() => applyPreset(preset)}
+            className="px-3 py-1 rounded-lg glass-panel hover:bg-indigo-600/20 text-slate-300 text-xs font-medium border border-slate-800 hover:border-indigo-500/40 transition-all"
+          >
+            {preset.name}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -130,10 +183,19 @@ export default function PlaygroundPage() {
               <span>Execution Output</span>
             </h3>
             {result && (
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
-                <span>{result.execution?.processing_time_ms} ms</span>
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyJson}
+                  className="px-2.5 py-1 rounded-lg glass-panel hover:bg-slate-800 text-xs text-slate-300 flex items-center gap-1.5"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copied ? "Copied" : "Copy JSON"}</span>
+                </button>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>{result.execution?.processing_time_ms} ms</span>
+                </span>
+              </div>
             )}
           </div>
 
@@ -143,7 +205,7 @@ export default function PlaygroundPage() {
             {!loading && !result && !error && (
               <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 py-12">
                 <Sparkles className="w-8 h-8 opacity-40" />
-                <p>Click "Run Test Execution" to send live API request.</p>
+                <p>Click "Run Test Execution" or select a Quick Preset to send live request.</p>
               </div>
             )}
           </div>
