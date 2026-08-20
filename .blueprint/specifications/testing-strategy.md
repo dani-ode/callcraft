@@ -1,6 +1,6 @@
 # Specifications — Professional Testing Strategy & Quality Assurance
 
-Dokumen ini mendeskripsikan strategi pengujian (*testing strategy*) profesional menyeluruh untuk **OCR Platform**. Pengujian dirancang mengikuti piramida pengujian perangkat lunak modern (*Software Testing Pyramid*), mencakup Unit Testing, Integration Testing, End-to-End (E2E) Testing, Load & Performance Testing, serta Audit Keamanan & Retention Memory Audit.
+Dokumen ini mendeskripsikan strategi pengujian (*testing strategy*) profesional menyeluruh untuk **Callcraft**. Pengujian dirancang mengikuti piramida pengujian perangkat lunak modern (*Software Testing Pyramid*), mencakup Unit Testing, Integration Testing, End-to-End (E2E) Testing, Load & Performance Testing, serta Audit Keamanan & Retention Memory Audit.
 
 ---
 
@@ -14,10 +14,10 @@ Dokumen ini mendeskripsikan strategi pengujian (*testing strategy*) profesional 
                  / Load & \      Performance & Load Tests (k6)
                 / Security \     - Throughput, P95 Latency, Memory Leak, SSRF Fuzzing
                /------------\
-              / Integration  \   Integration Tests (Rust testcontainers + SQLx + Redis)
-             /   Testing      \  - Axum Routes, DB Queries, Redis Cache & Rate Limiter
+              / Integration  \   Integration Tests (Python testcontainers + Asyncpg + Redis)
+             /   Testing      \  - FastAPI Routes, DB Queries, Redis Cache & Rate Limiter
             /------------------\
-           /    Unit Testing    \ Unit Tests (Rust Cargo Test + Vitest)
+           /    Unit Testing    \ Unit Tests (Python Pytest + Bun Test)
           /                      \ - Schema Coercion Engine, Tool Generator, Crypto, SSRF Validations
          /------------------------\
 ```
@@ -28,36 +28,31 @@ Dokumen ini mendeskripsikan strategi pengujian (*testing strategy*) profesional 
 
 Unit test menjamin bahwa fungsi-fungsi atomik di dalam kode berjalan sesuai spesifikasi tanpa dependensi eksternal (*isolated*).
 
-### A. Core Rust Unit Tests (`crates/ocr-engine` & `apps/api`)
+### A. Core Python Unit Tests (`apps/api/src/callcraft_engine`)
 
 | Module | Test Coverage Goal | Tooling |
 | :--- | :--- | :--- |
-| **Schema Converter Engine** | Menguji translasi dari `ResponseSchema` ke Tool Calling Spec OpenAI & Gemini | `cargo test` |
-| **Type Coercion Engine** | Menguji toleransi kesalahan tipe AI (misal: `"123"` ➔ `123`, `"15-08-1995"` ➔ Date) | `cargo test` |
-| **SSRF URL Validator** | Menguji pemblokiran IP private (`127.0.0.1`, `10.0.0.0/8`, `169.254.169.254`, IPv6) | `cargo test` |
-| **Crypto Modules** | Menguji dekripsi/enkripsi AES-256-GCM dan hashing Argon2id | `cargo test` |
-| **Base64 Stream Decoder** | Menguji dekripsi Base64 gambar langsung ke `Bytes` buffer RAM | `cargo test` |
-| **AI Adapter Mocks** | Menguji serialisasi request & deserialisasi respon AI Vision | `wiremock` |
+| **Schema Converter Engine** | Menguji translasi dari `ResponseSchema` ke Tool Calling Spec OpenAI & Gemini | `pytest` |
+| **Type Coercion Engine** | Menguji toleransi kesalahan tipe AI (misal: `"123"` ➔ `123`, `"15-08-1995"` ➔ Date) | `pytest` |
+| **SSRF URL Validator** | Menguji pemblokiran IP private (`127.0.0.1`, `10.0.0.0/8`, `169.254.169.254`, IPv6) | `pytest` |
+| **Crypto Modules** | Menguji dekripsi/enkripsi AES-256-GCM dan hashing Argon2id | `pytest` |
+| **Base64 Stream Decoder** | Menguji dekripsi Base64 gambar/file langsung ke `bytes` buffer RAM | `pytest` |
+| **AI Adapter Mocks** | Menguji serialisasi request & deserialisasi respon AI Vision | `pytest-mock` / `respx` |
 
-#### Contoh Unit Test Rust Pseudocode:
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+#### Contoh Unit Test Python Pseudocode:
+```python
+import pytest
+from callcraft_engine.ssrf import validate_url_ip, SsrfError
 
-    #[tokio::test]
-    async fn test_ssrf_validator_blocks_private_ips() {
-        let private_url = Url::parse("http://169.254.169.254/latest/meta-data/").unwrap();
-        let result = validate_url_ip(&private_url);
-        assert!(matches!(result, Err(SecurityError::SSRFForbiddenIP(_))));
-    }
+def test_ssrf_validator_blocks_private_ips():
+    private_url = "http://169.254.169.254/latest/meta-data/"
+    with pytest.raises(SsrfError):
+        validate_url_ip(private_url)
 
-    #[test]
-    fn test_type_coercion_string_to_date() {
-        let schema = ResponseSchema::date_field();
-        let coerced = schema.validate_and_coerce(json!("1995-08-15")).unwrap();
+def test_type_coercion_string_to_date():
+    # Coercion test logic
+    pass
+```
         assert_eq!(coerced, json!("1995-08-15"));
     }
 }

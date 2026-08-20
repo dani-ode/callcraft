@@ -1,22 +1,22 @@
 # Implementation Roadmap — Actionable Execution Phases
 
-Dokumen ini berisi peta jalan (*roadmap*) urutan eksekusi pembuatan sistem **OCR Platform** dari awal hingga siap dipublikasikan ke production VPS. Roadmap dibagi menjadi **6 Fase Eksekusi Taktis**.
+Dokumen ini berisi peta jalan (*roadmap*) urutan eksekusi pembuatan sistem **Callcraft** dari awal hingga siap dipublikasikan ke production VPS. Roadmap dibagi menjadi **6 Fase Eksekusi Taktis**.
 
 ---
 
 ## 🧭 Executive Summary of Phases
 
 ```text
-Phase 1: Project Scaffolding & Workspace Setup
+Phase 1: Project Scaffolding & Workspace Setup (Python + Bun)
   │
   ▼
 Phase 2: Database Migrations & Domain Data Access Layer
   │
   ▼
-Phase 3: Rust Stateless OCR Execution Engine & AI Adapters
+Phase 3: Python Dynamic Multimodal Execution Engine & AI Adapters
   │
   ▼
-Phase 4: Next.js Dashboard & Visual Schema Builder
+Phase 4: Next.js + Bun Dashboard & Visual Schema Builder
   │
   ▼
 Phase 5: Security Hardening, Rate Limiter & Worker Logging
@@ -30,33 +30,34 @@ Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
 ## 🛠️ Phase 1: Project Scaffolding & Workspace Setup
 
 - [ ] **1.1. Inisialisasi Workspace Structure**:
-  - Membuat folder monorepo: `apps/web` (Next.js), `apps/api` (Rust Axum), `apps/worker` (Rust Worker), `crates/ocr-engine` (Rust Core Library).
-  - Membuat `Cargo.toml` root workspace di Rust.
+  - Membuat folder monorepo: `apps/web` (Next.js dengan Bun), `apps/api` (Python FastAPI), `apps/worker` (Python Worker).
+  - Menyiapkan `pyproject.toml` / `requirements.txt` untuk Python 3.12 workspace.
+  - Menyiapkan Bun (`bun.lockb`, `package.json`) di `apps/web`.
 - [ ] **1.2. Konfigurasi Environment & Tooling**:
-  - Menyiapkan `.env.example` dan `.env.local` untuk variable database, Redis, encryption keys.
-  - Setup ESLint, Prettier, Tailwind CSS, shadcn/ui di Next.js.
-  - Setup `tracing`, `tokio`, `axum`, `sqlx`, `serde` di Rust.
+  - Menyiapkan `.env.example` dan `.env` untuk variable database `callcraft_db`, Redis, encryption keys.
+  - Setup Tailwind CSS, shadcn/ui di Next.js dengan Bun runtime.
+  - Setup FastAPI, Pydantic v2, Uvicorn, Asyncpg, Cryptography di Python.
 
 ---
 
 ## 🗄️ Phase 2: Database Migrations & Data Access Layer
 
 - [ ] **2.1. Eksekusi Migration SQL**:
-  - Menjalankan DDL migrasi PostgreSQL (Tabel `users`, `roles`, `permissions`, `ocr_specs`, `api_credentials`, `api_requests`, dll).
-  - Seeding data awal `ai_providers` (Gemini, OpenAI), `ai_models` (Gemini 1.5 Flash, GPT-4o), dan `templates` dasar (KTP Indonesia, Invoice).
-- [ ] **2.2. Implementasi Rust SQLx Models & Redis Cache Layer**:
-  - Membuat repository pattern untuk CRUD `ocr_specs`, `api_credentials`, dan user provider keys.
-  - Membuat modul Redis client untuk caching OCR Specs (`set_ex` dengan TTL 3600s).
+  - Menjalankan DDL migrasi PostgreSQL (Tabel `users`, `roles`, `permissions`, `call_specs`, `api_credentials`, `api_requests`, dll).
+  - Seeding data awal `ai_providers` (Gemini, OpenAI, Anthropic, DeepSeek), `ai_models`, dan `templates` dasar.
+- [ ] **2.2. Implementasi Python Asyncpg/SQLAlchemy Models & Redis Cache Layer**:
+  - Membuat Data Access Layer untuk CRUD `call_specs`, `api_credentials`, dan user provider keys.
+  - Membuat modul Redis client untuk caching Call Specs (`setex` dengan TTL 3600s).
 
 ---
 
-## ⚙️ Phase 3: Rust Stateless OCR Execution Engine & AI Adapters
+## ⚙️ Phase 3: Python Dynamic Multimodal Execution Engine & AI Adapters
 
-- [ ] **3.1. Implementasi In-Memory Image Buffer Handler**:
-  - Membangun Axum extractor untuk Base64 decoding ke Tokio `Bytes` RAM.
-  - Membangun module `reqwest` download URL langsung ke `Bytes` RAM dengan timeout 10 detik.
+- [ ] **3.1. Implementasi In-Memory Buffer Handler**:
+  - Membangun FastAPI extractor untuk Base64 decoding ke buffer RAM (`bytes`).
+  - Membangun module `httpx` download URL langsung ke `bytes` RAM dengan timeout 10 detik.
 - [ ] **3.2. Implementasi AI Provider Adapters**:
-  - **Gemini Adapter**: Menggunakan REST Google AI Studio API dengan Tool Calling / Structured JSON output.
+  - **Gemini Adapter**: Menggunakan REST Google AI Studio API / SDK dengan Tool Calling / Structured JSON output.
   - **OpenAI Adapter**: Menggunakan GPT-4o Chat Completions API dengan `tools` parameter function calling.
 - [ ] **3.3. Implementasi Tool Generator & Post-Processing Validator**:
   - Membuat converter dari `response_schema` deklaratif ke JSON Tool Spec.

@@ -133,8 +133,8 @@ CREATE TABLE templates (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 12. OCR_SPECS
-CREATE TABLE ocr_specs (
+-- 12. CALL_SPECS
+CREATE TABLE call_specs (
     id VARCHAR(26) PRIMARY KEY,
     user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     template_id VARCHAR(26) REFERENCES templates(id) ON DELETE SET NULL,
@@ -148,12 +148,12 @@ CREATE TABLE ocr_specs (
     CONSTRAINT uq_user_spec_slug UNIQUE (user_id, slug)
 );
 
-CREATE INDEX idx_ocr_specs_user_id ON ocr_specs(user_id);
+CREATE INDEX idx_call_specs_user_id ON call_specs(user_id);
 
--- 13. OCR_SPEC_VERSIONS
-CREATE TABLE ocr_spec_versions (
+-- 13. CALL_SPEC_VERSIONS
+CREATE TABLE call_spec_versions (
     id VARCHAR(26) PRIMARY KEY,
-    ocr_spec_id VARCHAR(26) NOT NULL REFERENCES ocr_specs(id) ON DELETE CASCADE,
+    call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
     version_number INT NOT NULL,
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
@@ -161,7 +161,7 @@ CREATE TABLE ocr_spec_versions (
     extraction_prompt TEXT,
     preferred_model_id VARCHAR(26) REFERENCES ai_models(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_spec_version UNIQUE (ocr_spec_id, version_number)
+    CONSTRAINT uq_spec_version UNIQUE (call_spec_id, version_number)
 );
 
 -- 14. SYSTEM_PROMPTS
@@ -180,8 +180,8 @@ CREATE TABLE api_requests (
     id VARCHAR(26) PRIMARY KEY,
     request_id VARCHAR(100) NOT NULL UNIQUE,
     user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    ocr_spec_id VARCHAR(26) NOT NULL REFERENCES ocr_specs(id) ON DELETE CASCADE,
-    ocr_spec_version_id VARCHAR(26) NOT NULL REFERENCES ocr_spec_versions(id) ON DELETE CASCADE,
+    call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
+    call_spec_version_id VARCHAR(26) NOT NULL REFERENCES call_spec_versions(id) ON DELETE CASCADE,
     credential_id VARCHAR(26) REFERENCES api_credentials(id) ON DELETE SET NULL,
     provider_id VARCHAR(26) REFERENCES ai_providers(id) ON DELETE SET NULL,
     model_id VARCHAR(26) REFERENCES ai_models(id) ON DELETE SET NULL,
@@ -208,7 +208,7 @@ CREATE TABLE api_requests (
 );
 
 CREATE INDEX idx_api_requests_user_created ON api_requests(user_id, created_at DESC);
-CREATE INDEX idx_api_requests_spec_id ON api_requests(ocr_spec_id);
+CREATE INDEX idx_api_requests_spec_id ON api_requests(call_spec_id);
 CREATE INDEX idx_api_requests_status ON api_requests(status);
 
 -- 16. USER_USAGE_DAILY

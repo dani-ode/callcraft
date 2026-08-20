@@ -1,12 +1,12 @@
 # Architecture — System Overview
 
-Dokumen ini menjelaskan arsitektur tingkat tinggi dari **OCR Platform**, termasuk pembagian komponen *Control Plane* dan *Data Plane*, alur pemrosesan dokumen *stateless* di RAM, serta siklus hidup request dari masukan client hingga respon JSON terstruktur.
+Dokumen ini menjelaskan arsitektur tingkat tinggi dari **Callcraft**, termasuk pembagian komponen *Control Plane* dan *Data Plane*, alur pemrosesan data dinamis *stateless* di RAM, serta siklus hidup request dari masukan client hingga respon JSON terstruktur.
 
 ---
 
 ## 1. High-Level Architecture
 
-Sistem dirancang mengadopsi arsitektur **Modular Monolith (Rust Axum)** untuk *Data Plane* dan **Next.js (App Router)** untuk *Control Plane*, dipisahkan secara logis namun dapat didedikasikan pada container terpisah.
+Sistem dirancang mengadopsi arsitektur **FastAPI (Python 3.12)** untuk *Data Plane* dan **Next.js (App Router) yang dijalankan di atas Bun** untuk *Control Plane*, dipisahkan secara logis namun dapat didedikasikan pada container terpisah.
 
 ```text
                                    ┌──────────────────────┐
@@ -24,17 +24,17 @@ Sistem dirancang mengadopsi arsitektur **Modular Monolith (Rust Axum)** untuk *D
                     ▼                                                   ▼
        ┌─────────────────────────┐                         ┌─────────────────────────┐
        │   app.yourdomain.com    │                         │   api.yourdomain.com    │
-       │   Dashboard Web App     │                         │   Public OCR API & GW   │
-       │   (Next.js App Router)  │                         │   (Rust / Axum)         │
+       │   Dashboard Web App     │                         │  Public Dynamic API GW  │
+       │   (Next.js + Bun)       │                         │   (Python / FastAPI)    │
        └────────────┬────────────┘                         └────────────┬────────────┘
                     │                                                   │
                     │ Service Credential Auth                           │
                     │ /internal/v1/*                                    │ Customer API Key
-                    └─────────────────────────┬─────────────────────────┘ /v1/ocr/{user_id}
+                    └─────────────────────────┬─────────────────────────┘ /v1/call/{user_id}
                                               │
                                               ▼
                                    ┌──────────────────────┐
-                                   │    Rust Axum API     │
+                                   │   Python FastAPI     │
                                    │  (Execution Engine)  │
                                    └──────────┬───────────┘
                                               │
@@ -43,7 +43,7 @@ Sistem dirancang mengadopsi arsitektur **Modular Monolith (Rust Axum)** untuk *D
                  ▼                            ▼                            ▼
       ┌────────────────────┐       ┌────────────────────┐       ┌────────────────────┐
       │   PostgreSQL 16    │       │     Redis 7        │       │    AI Providers    │
-      │ Spec, Key, User,   │       │ Cache OCR Specs,   │       │ Google Gemini API  │
+      │ Spec, Key, User,   │       │ Cache Call Specs,  │       │ Google Gemini API  │
       │ Metada Request Log │       │ Rate Limits        │       │ OpenAI GPT-4o API  │
       └────────────────────┘       └────────────────────┘       └────────────────────┘
                  ▲                                                         │
@@ -52,7 +52,7 @@ Sistem dirancang mengadopsi arsitektur **Modular Monolith (Rust Axum)** untuk *D
                                               │ Async Outbox Log
                                               ▼
                                    ┌──────────────────────┐
-                                   │     Rust Worker      │
+                                   │    Python Worker     │
                                    │ Analytics Aggregator │
                                    └──────────────────────┘
 ```
@@ -61,25 +61,25 @@ Sistem dirancang mengadopsi arsitektur **Modular Monolith (Rust Axum)** untuk *D
 
 ## 2. Separation of Concerns: Control Plane vs Data Plane
 
-### A. Control Plane (Next.js - `app.yourdomain.com`)
+### A. Control Plane (Next.js + Bun - `app.yourdomain.com`)
 - **Fungsi**: Interface berbasis GUI bagi pengguna dan admin.
 - **Fitur Utama**:
   1. Register, Login, Profile Management, & API Key Generation (Public & Secret Key `sk_live_...`).
-  2. Manajemen AI Provider Keys (Gemini & OpenAI API Key yang diinput pengguna).
-  3. Visual API Specification Builder (React Flow & Monaco Editor) untuk mendesain request schema dan response schema kustom.
-  4. Template Marketplace (KTP, SIM, Passport, Invoice, Receipt, dll).
+  2. Manajemen AI Provider Keys (Gemini, OpenAI, Anthropic, DeepSeek API Key yang diinput pengguna).
+  3. Visual API Specification Builder (React Flow & Monaco Editor) untuk mendesain request schema dan response schema kustom dinamis.
+  4. Template Marketplace (Invoice, Document, Receipt, Form Parser, Custom API Builder).
   5. Monitoring Dashboard & Analytics (API Hit counts, Token consumption, latency distribution, error rate).
   6. Admin Management UI (System models, user role management, prompt system editing).
-- **Catatan**: Next.js **TIDAK PERNAH** memproses traffic *Public OCR API* pengguna eksternal.
+- **Catatan**: Next.js **TIDAK PERNAH** memproses traffic *Public Execution API* pengguna eksternal.
 
-### B. Data Plane (Rust Axum - `api.yourdomain.com`)
+### B. Data Plane (Python FastAPI - `api.yourdomain.com`)
 - **Fungsi**: High-performance execution engine stateless.
 - **Fitur Utama**:
-  1. Receiving & Validating Customer Requests (`POST /v1/ocr/{user_id}`).
+  1. Receiving & Validating Customer Requests (`POST /v1/call/{user_id}`).
   2. Authentication & Rate Limiting (Pengecekan API Key `sk_live_...` & Token Bucket di Redis).
-  3. Spec Resolution: Mengambil definisi OCR Spec dari Redis (fallback PostgreSQL).
-  4. In-Memory Image Handling: Menerima Base64 atau mendownload URL gambar secara langsung ke buffer RAM (Tokio `Bytes`).
-  5. AI Engine Execution: Mengubah response schema menjadi JSON Tool Schema untuk Gemini/OpenAI Vision API.
+  3. Spec Resolution: Mengambil definisi Call Spec dari Redis (fallback PostgreSQL).
+  4. In-Memory Image & Document Handling: Menerima Base64 atau mendownload URL file/gambar secara langsung ke buffer RAM (`bytes`).
+  5. AI Engine Execution: Mengubah response schema menjadi JSON Tool Schema untuk Gemini/OpenAI/LLM Vision API.
   6. Response Mapping & Type Coercion: Memvalidasi keluaran AI terhadap response schema pengguna dan mengembalikan JSON presisi.
   7. Async Request Audit Logging: Mengirimkan metadata hit (token, latency, cost, http status) ke outbox queue tanpa menyimpan gambar/konten dokumen.
 

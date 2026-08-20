@@ -1,38 +1,39 @@
 # Specifications — API Endpoints Reference
 
-Dokumen ini menyajikan spesifikasi kontrak REST API lengkap untuk **OCR Platform**, dibagi menjadi 3 kategori utama: **Internal Management API** (`/internal/v1/*`), **Public Customer OCR Data Plane API** (`/v1/ocr/{user_id}`), dan **Admin Platform API** (`/admin/v1/*`).
+Dokumen ini menyajikan spesifikasi kontrak REST API lengkap untuk **Callcraft**, dibagi menjadi 3 kategori utama: **Internal Management API** (`/internal/v1/*`), **Public Customer Data Plane API** (`/v1/call/{user_id}`), dan **Admin Platform API** (`/admin/v1/*`).
 
 ---
 
-## 1. Public Customer Data Plane OCR API
+## 1. Public Customer Data Plane API
 
-Jalur utama untuk aplikasi eksternal pelanggan dalam mengeksekusi ekstraksi OCR dokumen.
+Jalur utama untuk aplikasi eksternal pelanggan dalam mengeksekusi ekstraksi dan pengolahan data dinamis Callcraft.
 
-### `POST /v1/ocr/{user_id}`
+### `POST /v1/call/{user_id}`
 
-Executes OCR document data extraction based on the specified `X-OCR-SPEC-ID`.
+Executes dynamic multimodal AI processing based on the specified `X-CALL-SPEC-ID`.
 
 #### Request Headers:
 ```http
-Authorization: Bearer ocr_sk_sample_key_1234567890
-X-OCR-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
+Authorization: Bearer call_sk_sample_key_1234567890
+X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
 Content-Type: application/json
 ```
 
 #### Path Parameters:
-- `user_id` (string, required): ULID dari akun user pemilik spesifikasi OCR.
+- `user_id` (string, required): ULID dari akun user pemilik spesifikasi Callcraft.
 
 #### Request Body Options:
 
-##### Option A: Base64 Image Payload
+##### Option A: Base64 File Payload
 ```json
 {
   "image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...",
-  "prompt": "Harap perhatikan NIK jika agak samar"
+  "prompt": "Harap perhatikan NIK jika agak samar",
+  "variables": { "environment": "production" }
 }
 ```
 
-##### Option B: Image URL Download Payload
+##### Option B: Image / Document URL Download Payload
 ```json
 {
   "image": "https://storage.clientdomain.com/documents/ktp-sample.jpg",
@@ -49,7 +50,7 @@ Content-Type: application/json
   "request_id": "req_01HZY9998877665544332211AA",
   "spec": {
     "id": "01HZX89ABCDEF1234567890XYZ",
-    "name": "KTP Indonesia OCR",
+    "name": "Identity Document Extractor",
     "version": 1
   },
   "execution": {

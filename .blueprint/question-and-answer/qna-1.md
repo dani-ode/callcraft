@@ -63,7 +63,7 @@ Saya sarankan arsitektur **Rust modular monolith terlebih dahulu**, dengan worke
                                     │
                                     ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                     OCR PLATFORM                             │
+│                     CALLCRAFT                                │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │                  Rust API Server                       │  │

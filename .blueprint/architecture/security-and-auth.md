@@ -1,16 +1,16 @@
 # Architecture — Security & Authentication
 
-Dokumen ini mendeskripsikan secara mendalam model keamanan, skema autentikasi 3-jalur, penanganan enkripsi kredensial pengguna, Role-Based Access Control (RBAC), serta langkah-langkah proteksi Server-Side Request Forgery (SSRF) pada **OCR Platform**.
+Dokumen ini mendeskripsikan secara mendalam model keamanan, skema autentikasi 3-jalur, penanganan enkripsi kredensial pengguna, Role-Based Access Control (RBAC), serta langkah-langkah proteksi Server-Side Request Forgery (SSRF) pada **Callcraft**.
 
 ---
 
 ## 1. Multi-Tier Authentication Channels
 
-Untuk menjamin prinsip *least privilege*, sistem memisahkan akses ke backend Rust menjadi **3 jalur autentikasi independen**:
+Untuk menjamin prinsip *least privilege*, sistem memisahkan akses ke backend Python FastAPI menjadi **3 jalur autentikasi independen**:
 
 ```text
                                ┌──────────────────────────┐
-                               │   Rust Axum Gateway      │
+                               │  Python FastAPI Gateway  │
                                └────────────┬─────────────┘
                                             │
          ┌──────────────────────────────────┼──────────────────────────────────┐
@@ -19,7 +19,7 @@ Untuk menjamin prinsip *least privilege*, sistem memisahkan akses ke backend Rus
 ┌──────────────────┐               ┌──────────────────┐               ┌──────────────────┐
 │   Channel 1:     │               │   Channel 2:     │               │   Channel 3:     │
 │  Service Auth    │               │ Customer API Key │               │ Admin Auth (RBAC)│
-│ /internal/v1/*   │               │ /v1/ocr/{user_id}│               │  /admin/v1/*     │
+│ /internal/v1/*   │               │ /v1/call/{user_id}│              │  /admin/v1/*     │
 └────────┬─────────┘               └────────┬─────────┘               └────────┬─────────┘
          │                                  │                                  │
    Next.js Server                   Customer External App              Platform Admin User
@@ -27,37 +27,37 @@ Untuk menjamin prinsip *least privilege*, sistem memisahkan akses ke backend Rus
 
 ---
 
-### Channel 1: Service Auth (Next.js Server-Side ➔ Rust API)
+### Channel 1: Service Auth (Next.js Server-Side ➔ Python API)
 - **Target Endpoint**: `/internal/v1/*`
 - **Tujuan**: Memungkinkan server Next.js (App Router Server Actions / Route Handlers) mengelola data platform (seperti membuat user, menyimpan spec, membuat template, mengambil log).
 - **Mekanisme**:
   1. Next.js menyimpan `SERVICE_CLIENT_ID` dan `SERVICE_CLIENT_SECRET` di lingkungan server (`.env.local`). **Credential ini tidak boleh pernah ter-expose ke browser client**.
-  2. Pada setiap request server Next.js ke Rust, Next.js mengirimkan header:
+  2. Pada setiap request server Next.js ke Python FastAPI, Next.js mengirimkan header:
      ```http
      X-Service-Client-Id: svc_nextjs_main
      X-Service-Client-Secret: sec_live_xxxxxxxxxxxxxxxxxxxxxxxx
      ```
-  3. Backend Rust mencocokkan `secret_hash` di database `service_clients` menggunakan Argon2id atau HMAC-SHA256.
+  3. Backend Python mencocokkan `secret_hash` di database `service_clients` menggunakan Argon2id (`argon2-cffi`).
   4. (Pengembangan Opsional): Pertukaran short-lived JWT Service Token (Masa berlaku 15 menit).
 
 ---
 
-### Channel 2: Customer API Key Auth (External App ➔ Rust Data Plane)
-- **Target Endpoint**: `/v1/ocr/{user_id}`
-- **Tujuan**: Autentikasi aplikasi eksternal milik customer yang ingin melakukan eksekusi OCR.
+### Channel 2: Customer API Key Auth (External App ➔ Python Data Plane)
+- **Target Endpoint**: `/v1/call/{user_id}`
+- **Tujuan**: Autentikasi aplikasi eksternal milik customer yang ingin melakukan eksekusi Callcraft API dinamis.
 - **Mekanisme Header**:
   ```http
-  Authorization: Bearer ocr_sk_sample_key_1234567890
-  X-OCR-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
+  Authorization: Bearer call_sk_sample_key_1234567890
+  X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
   ```
 - **Scope & Constraints**:
-  - API Key ini **HANYA** memiliki izin tunggal: `ocr.execute`.
+  - API Key ini **HANYA** memiliki izin tunggal: `call.execute`.
   - API Key **TIDAK BISA** digunakan untuk mengakses endpoint manajemen (`/internal/v1/*` atau `/admin/v1/*`).
-  - Rust API melakukan matching `public_key` dan memverifikasi `secret_key_hash` dengan Redis Cache (fallback PostgreSQL).
+  - Python API melakukan matching `public_key` dan memverifikasi `secret_key_hash` dengan Redis Cache (fallback PostgreSQL).
 
 ---
 
-### Channel 3: Admin Auth & Session (Admin Dashboard ➔ Rust API)
+### Channel 3: Admin Auth & Session (Admin Dashboard ➔ Python API)
 - **Target Endpoint**: `/admin/v1/*`
 - **Tujuan**: Operasi administratif tingkat tinggi seperti manajemen AI Models, manipulasi System Prompts, suspensi User, dan inspeksi audit global.
 - **Mekanisme**:

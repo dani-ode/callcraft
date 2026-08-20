@@ -1,6 +1,6 @@
 # Database Specification — Complete PostgreSQL Schema DDL & ERD
 
-Dokumen ini berisi spesifikasi database relasional PostgreSQL 16+ terlengkap untuk **OCR Platform**. Database ini dirancang untuk mencakup seluruh kebutuhan bisnis dan arsitektur yang didiskusikan pada `qna-1.md` hingga `qna-4.md`, terdiri dari **16 Tabel Relasional Utama**.
+Dokumen ini berisi spesifikasi database relasional PostgreSQL 16+ terlengkap untuk **Callcraft**. Database ini dirancang untuk mencakup seluruh kebutuhan bisnis dan arsitektur yang didiskusikan pada `qna-1.md` hingga `qna-4.md`, terdiri dari **16 Tabel Relasional Utama**.
 
 ---
 
@@ -10,19 +10,19 @@ Dokumen ini berisi spesifikasi database relasional PostgreSQL 16+ terlengkap unt
 | :-: | :--- | :--- | :--- |
 | **1** | `users` | Core User | Akun pengguna platform, email, password hash, status verifikasi |
 | **2** | `roles` | Security & RBAC | Peran sistem (SUPER_ADMIN, ADMIN, SUPPORT, ANALYST, USER) |
-| **3** | `permissions` | Security & RBAC | Hak akses spesifik (misal: `model.manage`, `ocr.execute`, `user.read`) |
+| **3** | `permissions` | Security & RBAC | Hak akses spesifik (misal: `model.manage`, `call.execute`, `user.read`) |
 | **4** | `role_permissions` | Security & RBAC | Relasi *Many-to-Many* antara Roles dan Permissions |
 | **5** | `user_roles` | Security & RBAC | Relasi *Many-to-Many* antara Users dan Roles |
-| **6** | `service_clients` | Internal Auth | Credential autentikasi internal Next.js Server ➔ Rust API (`/internal/v1/*`) |
+| **6** | `service_clients` | Internal Auth | Credential autentikasi internal Next.js Server ➔ Python API (`/internal/v1/*`) |
 | **7** | `api_credentials` | Customer Auth | Pasangan Public Key & Secret Key Hash pelanggan (`sk_live_...`) |
-| **8** | `ai_providers` | AI Registry | Registri provider AI (Google Gemini, OpenAI, dll) |
-| **9** | `ai_models` | AI Registry | Registri model AI Vision, fitur tool calling, dan pricing per token |
+| **8** | `ai_providers` | AI Registry | Registri provider AI (Google Gemini, OpenAI, Anthropic, DeepSeek) |
+| **9** | `ai_models` | AI Registry | Registri model AI Vision/LLM, fitur tool calling, dan pricing per token |
 | **10**| `user_ai_providers` | User AI Credentials| API Key AI Provider pengguna yang dienkripsi **AES-256-GCM** |
-| **11**| `templates` | OCR Blueprint | Master template resmi (KTP, SIM, Passport, Invoice, Receipt, NPWP) |
-| **12**| `ocr_specs` | OCR Specs | Entitas spesifikasi API OCR buatan pengguna |
-| **13**| `ocr_spec_versions` | OCR Specs | Histori versi schema (Request/Response JSON Schema, Prompts) |
+| **11**| `templates` | Callcraft Blueprint| Master template resmi (Invoice, Receipt, Document Parser, Custom API) |
+| **12**| `call_specs` | Call Specs | Entitas spesifikasi API Callcraft buatan pengguna |
+| **13**| `call_spec_versions` | Call Specs | Histori versi schema (Request/Response JSON Schema, Prompts) |
 | **14**| `system_prompts` | Platform Config | Master system prompt & prompt tool calling yang dikelola Admin |
-| **15**| `api_requests` | Audit Logs | Log metadata eksekusi OCR (Tanpa menyimpan payload gambar/dokumen) |
+| **15**| `api_requests` | Audit Logs | Log metadata eksekusi Callcraft (Tanpa menyimpan payload gambar/dokumen) |
 | **16**| `user_usage_daily` | Analytics | Agregasi harian penggunaan API, token, dan estimasi biaya per user |
 
 ---
@@ -47,12 +47,12 @@ Dokumen ini berisi spesifikasi database relasional PostgreSQL 16+ terlengkap unt
        │                            │                            │
        ▼                            ▼                            ▼
 ┌──────────────┐          ┌────────────────────┐       ┌──────────────────┐
-│  ocr_specs   │          │ user_ai_providers  │       │ api_credentials  │
+│  call_specs  │          │ user_ai_providers  │       │ api_credentials  │
 └──────┬───────┘          └─────────┬──────────┘       └─────────┬────────┘
        │                            │                            │
        ▼                            │                            │
 ┌──────────────────────┐            │                            │
-│  ocr_spec_versions   │            │                            │
+│  call_spec_versions  │            │                            │
 └──────┬───────────────┘            │                            │
        │                            │                            │
        └────────────────────────────┼────────────────────────────┘

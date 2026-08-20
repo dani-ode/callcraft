@@ -15,11 +15,8 @@ FROM python:3.12-slim as runner
 WORKDIR /app
 
 COPY --from=builder /install /usr/local
-COPY apps/api /app/apps/api
+COPY apps/worker /app/apps/worker
 
-ENV PYTHONPATH=/app/apps/api/src
-ENV PORT=8080
+ENV PYTHONPATH=/app/apps/worker
 
-EXPOSE 8080
-
-CMD ["python", "-m", "uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "apps/worker/main.py"]

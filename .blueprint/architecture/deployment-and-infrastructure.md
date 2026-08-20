@@ -1,6 +1,6 @@
 # Architecture — Deployment & Infrastructure
 
-Dokumen ini berisi spesifikasi penataan infrastruktur dan petunjuk pengerjaan *deployment* **OCR Platform** pada server VPS Ubuntu yang sudah mengoperasikan Apache Web Server.
+Dokumen ini berisi spesifikasi penataan infrastruktur dan petunjuk pengerjaan *deployment* **Callcraft** pada server VPS Ubuntu yang sudah mengoperasikan Apache Web Server.
 
 ---
 
@@ -29,21 +29,21 @@ Aplikasi dikemas dalam **Docker Container** dan dipublikasikan ke publik melalui
 │  │                         DOCKER ENGINE                            │  │
 │  │                                                                  │  │
 │  │   ┌─────────────────────┐             ┌──────────────────────┐   │  │
-│  │   │      ocr-web        │             │       ocr-api        │   │  │
-│  │   │  (Next.js App)      │             │    (Rust Axum)       │   │  │
+│  │   │   callcraft-web     │             │    callcraft-api     │   │  │
+│  │   │   (Next.js + Bun)   │             │   (Python FastAPI)   │   │  │
 │  │   │  Bound: 127.0.0.1:3000            │  Bound: 127.0.0.1:8080│   │  │
 │  │   └──────────┬──────────┘             └──────────┬───────────┘   │  │
 │  │              │                                   │               │  │
 │  │              └─────────────────┬─────────────────┘               │  │
 │  │                                │                                 │  │
 │  │   ┌─────────────────────┐      │      ┌──────────────────────┐   │  │
-│  │   │     ocr-worker      │      │      │     ocr-postgres     │   │  │
-│  │   │ (Rust Outbox Log)   │◄─────┼─────►│   (PostgreSQL 16)    │   │  │
+│  │   │  callcraft-worker   │      │      │  callcraft-postgres  │   │  │
+│  │   │(Python Outbox Log)  │◄─────┼─────►│   (PostgreSQL 16)    │   │  │
 │  │   └─────────────────────┘      │      │ No External Port     │   │  │
 │  │                                │      └──────────────────────┘   │  │
 │  │                                ▼                                 │  │
 │  │                       ┌──────────────────┐                       │  │
-│  │                       │    ocr-redis     │                       │  │
+│  │                       │  callcraft-redis │                       │  │
 │  │                       │    (Redis 7)     │                       │  │
 │  │                       │ No External Port │                       │  │
 │  │                       └──────────────────┘                       │  │

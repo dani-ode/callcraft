@@ -1,6 +1,6 @@
 # Specifications — Dynamic API Specification Engine
 
-Dokumen ini menjelaskan rancangan teknis **API Specification Engine** pada **OCR Platform**, mencakup skema JSON deklaratif, taksonomi tipe data platform, algoritma translasi ke *AI Function/Tool Calling*, serta mekanisme validasi dan *Type Coercion* otomatis.
+Dokumen ini menjelaskan rancangan teknis **API Specification Engine** pada **Callcraft**, mencakup skema JSON deklaratif, taksonomi tipe data platform, algoritma translasi ke *AI Function/Tool Calling*, serta mekanisme validasi Pydantic dan *Type Coercion* otomatis.
 
 ---
 
@@ -35,7 +35,7 @@ Platform Data Types
 ## 2. Request & Response Schema Specifications
 
 ### A. Request Schema Standard
-Mendefinisikan input payload HTTP `POST /v1/ocr/{user_id}` yang diterima dari aplikasi customer:
+Mendefinisikan input payload HTTP `POST /v1/call/{user_id}` yang diterima dari aplikasi customer:
 
 ```json
 {
@@ -44,13 +44,18 @@ Mendefinisikan input payload HTTP `POST /v1/ocr/{user_id}` yang diterima dari ap
     "image": {
       "type": "image",
       "sources": ["base64", "url"],
-      "required": true,
-      "description": "File gambar dokumen (Base64 string atau HTTP URL)"
+      "required": false,
+      "description": "File gambar atau dokumen (Base64 string atau HTTP URL)"
     },
     "prompt": {
       "type": "string",
       "required": false,
-      "description": "Instruksi khusus tambahan untuk ekstraksi ini"
+      "description": "Instruksi khusus tambahan dari pengguna"
+    },
+    "variables": {
+      "type": "object",
+      "required": false,
+      "description": "Variabel konteks JSON dinamis"
     }
   }
 }
@@ -220,56 +225,48 @@ Raw Tool Arguments JSON (Returned by AI)
 
 ---
 
-## 5. Rust Core Data Types & Struct Specifications
+## 5. Python Core Data Types & Pydantic Specifications
 
-Struktur data internal di Rust (`crates/ocr-engine`):
+Struktur data internal di Python (`apps/api/src/callcraft_engine`):
 
-```rust
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+```python
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
+from enum import Enum
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PlatformDataType {
-    String,
-    Text,
-    Integer,
-    Number,
-    Boolean,
-    Email,
-    Phone,
-    Date,
-    DateTime,
-    Currency,
-    Enum { values: Vec<String> },
-    Object { properties: HashMap<String, FieldDefinition> },
-    Array { items: Box<FieldDefinition> },
-}
+class PlatformDataType(str, Enum):
+    STRING = "string"
+    TEXT = "text"
+    INTEGER = "integer"
+    NUMBER = "number"
+    BOOLEAN = "boolean"
+    EMAIL = "email"
+    PHONE = "phone"
+    DATE = "date"
+    DATETIME = "datetime"
+    CURRENCY = "currency"
+    ENUM = "enum"
+    OBJECT = "object"
+    ARRAY = "array"
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FieldDefinition {
-    pub r#type: PlatformDataType,
-    pub required: bool,
-    pub description: Option<String>,
-    pub default: Option<serde_json::Value>,
-}
+class FieldDefinition(BaseModel):
+    type: PlatformDataType
+    required: bool = True
+    description: Optional[str] = None
+    default: Optional[Any] = None
+    enum_values: Optional[List[str]] = None
+    properties: Optional[Dict[str, "FieldDefinition"]] = None
+    items: Optional["FieldDefinition"] = None
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseSchema {
-    pub title: Option<String>,
-    pub properties: HashMap<String, FieldDefinition>,
-}
+class ResponseSchema(BaseModel):
+    title: Optional[str] = None
+    properties: Dict[str, FieldDefinition]
 
-impl ResponseSchema {
-    /// Mengonversi ResponseSchema menjadi JSON Schema standar untuk Tool Calling AI
-    pub fn to_ai_tool_schema(&self) -> serde_json::Value {
-        // Implementation logic
-        serde_json::json!({})
-    }
+    def to_ai_tool_schema(self, function_name: str = "extract_data", description: str = "") -> Dict[str, Any]:
+        """Mengonversi ResponseSchema menjadi JSON Schema standar untuk Tool Calling AI"""
+        pass
     
-    /// Memvalidasi dan melakukan coercion pada raw JSON output milik AI
-    pub fn validate_and_coerce(&self, raw: serde_json::Value) -> Result<serde_json::Value, ValidationError> {
-        // Implementation logic
-        Ok(raw)
-    }
-}
+    def validate_and_coerce(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Memvalidasi dan melakukan coercion pada raw JSON output milik AI"""
+        pass
 ```

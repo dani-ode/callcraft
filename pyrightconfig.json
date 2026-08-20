@@ -1,0 +1,8 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "apps/api/src",
+    "apps/worker"
+  ]
+}
