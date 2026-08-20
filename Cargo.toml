@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/api",
+    "apps/worker",
+    "crates/ocr-engine",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["OCR Platform Team"]
+license = "MIT"
+
+[workspace.dependencies]
+# Shared dependencies across crates
+tokio = { version = "1.38", features = ["full"] }
+axum = { version = "0.7", features = ["macros", "multipart"] }
+tower = { version = "0.4", features = ["util", "timeout", "limit"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "limit"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
+redis = { version = "0.25", features = ["tokio-comp", "aio", "connection-manager"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+ulid = "1.1"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+thiserror = "1.0"
+anyhow = "1.0"
+bytes = "1.6"
+url = "2.5"
+dotenvy = "0.15"
+
+# Internal workspace crates
+ocr-engine = { path = "crates/ocr-engine" }

@@ -1,0 +1,228 @@
+-- Enable Extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- 1. USERS
+CREATE TABLE users (
+    id VARCHAR(26) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    email_verified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_status ON users(status);
+
+-- 2. ROLES
+CREATE TABLE roles (
+    id VARCHAR(26) PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. PERMISSIONS
+CREATE TABLE permissions (
+    id VARCHAR(26) PRIMARY KEY,
+    code VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. ROLE_PERMISSIONS
+CREATE TABLE role_permissions (
+    role_id VARCHAR(26) NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permission_id VARCHAR(26) NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_id)
+);
+
+-- 5. USER_ROLES
+CREATE TABLE user_roles (
+    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id VARCHAR(26) NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+
+-- 6. SERVICE_CLIENTS
+CREATE TABLE service_clients (
+    id VARCHAR(26) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    client_id VARCHAR(100) NOT NULL UNIQUE,
+    secret_hash VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    permissions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. API_CREDENTIALS
+CREATE TABLE api_credentials (
+    id VARCHAR(26) PRIMARY KEY,
+    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    public_key VARCHAR(100) NOT NULL UNIQUE,
+    secret_key_hash VARCHAR(255) NOT NULL,
+    environment VARCHAR(20) NOT NULL DEFAULT 'production',
+    last_used_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_api_credentials_user_id ON api_credentials(user_id);
+CREATE INDEX idx_api_credentials_public_key ON api_credentials(public_key);
+
+-- 8. AI_PROVIDERS
+CREATE TABLE ai_providers (
+    id VARCHAR(26) PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. AI_MODELS
+CREATE TABLE ai_models (
+    id VARCHAR(26) PRIMARY KEY,
+    provider_id VARCHAR(26) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    model_identifier VARCHAR(100) NOT NULL,
+    supports_image BOOLEAN NOT NULL DEFAULT true,
+    supports_tool_calling BOOLEAN NOT NULL DEFAULT true,
+    supports_structured_output BOOLEAN NOT NULL DEFAULT true,
+    cost_per_1k_prompt_tokens NUMERIC(10, 6) DEFAULT 0.000150,
+    cost_per_1k_completion_tokens NUMERIC(10, 6) DEFAULT 0.000600,
+    is_default BOOLEAN NOT NULL DEFAULT false,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_ai_models_provider ON ai_models(provider_id);
+
+-- 10. USER_AI_PROVIDERS
+CREATE TABLE user_ai_providers (
+    id VARCHAR(26) PRIMARY KEY,
+    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider_id VARCHAR(26) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+    encrypted_api_key TEXT NOT NULL,
+    key_nonce VARCHAR(100) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_provider UNIQUE (user_id, provider_id)
+);
+
+-- 11. TEMPLATES
+CREATE TABLE templates (
+    id VARCHAR(26) PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    category VARCHAR(50) NOT NULL,
+    request_schema JSONB NOT NULL,
+    response_schema JSONB NOT NULL,
+    system_prompt TEXT NOT NULL,
+    extraction_prompt TEXT,
+    is_official BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 12. OCR_SPECS
+CREATE TABLE ocr_specs (
+    id VARCHAR(26) PRIMARY KEY,
+    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    template_id VARCHAR(26) REFERENCES templates(id) ON DELETE SET NULL,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) NOT NULL,
+    description TEXT,
+    active_version_number INT NOT NULL DEFAULT 1,
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_spec_slug UNIQUE (user_id, slug)
+);
+
+CREATE INDEX idx_ocr_specs_user_id ON ocr_specs(user_id);
+
+-- 13. OCR_SPEC_VERSIONS
+CREATE TABLE ocr_spec_versions (
+    id VARCHAR(26) PRIMARY KEY,
+    ocr_spec_id VARCHAR(26) NOT NULL REFERENCES ocr_specs(id) ON DELETE CASCADE,
+    version_number INT NOT NULL,
+    request_schema JSONB NOT NULL,
+    response_schema JSONB NOT NULL,
+    system_prompt TEXT,
+    extraction_prompt TEXT,
+    preferred_model_id VARCHAR(26) REFERENCES ai_models(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_spec_version UNIQUE (ocr_spec_id, version_number)
+);
+
+-- 14. SYSTEM_PROMPTS
+CREATE TABLE system_prompts (
+    id VARCHAR(26) PRIMARY KEY,
+    code VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    content TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 15. API_REQUESTS
+CREATE TABLE api_requests (
+    id VARCHAR(26) PRIMARY KEY,
+    request_id VARCHAR(100) NOT NULL UNIQUE,
+    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ocr_spec_id VARCHAR(26) NOT NULL REFERENCES ocr_specs(id) ON DELETE CASCADE,
+    ocr_spec_version_id VARCHAR(26) NOT NULL REFERENCES ocr_spec_versions(id) ON DELETE CASCADE,
+    credential_id VARCHAR(26) REFERENCES api_credentials(id) ON DELETE SET NULL,
+    provider_id VARCHAR(26) REFERENCES ai_providers(id) ON DELETE SET NULL,
+    model_id VARCHAR(26) REFERENCES ai_models(id) ON DELETE SET NULL,
+    
+    status VARCHAR(50) NOT NULL,
+    http_status INT NOT NULL,
+    
+    input_type VARCHAR(20) NOT NULL,
+    input_size_bytes INT NOT NULL,
+    
+    processing_time_ms INT NOT NULL,
+    prompt_tokens INT DEFAULT 0,
+    completion_tokens INT DEFAULT 0,
+    total_tokens INT DEFAULT 0,
+    estimated_cost_usd NUMERIC(10, 6) DEFAULT 0.000000,
+    
+    error_code VARCHAR(100),
+    error_message TEXT,
+    
+    client_ip VARCHAR(45),
+    user_agent TEXT,
+    
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_api_requests_user_created ON api_requests(user_id, created_at DESC);
+CREATE INDEX idx_api_requests_spec_id ON api_requests(ocr_spec_id);
+CREATE INDEX idx_api_requests_status ON api_requests(status);
+
+-- 16. USER_USAGE_DAILY
+CREATE TABLE user_usage_daily (
+    id VARCHAR(26) PRIMARY KEY,
+    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    usage_date DATE NOT NULL,
+    total_requests INT NOT NULL DEFAULT 0,
+    successful_requests INT NOT NULL DEFAULT 0,
+    failed_requests INT NOT NULL DEFAULT 0,
+    total_tokens BIGINT NOT NULL DEFAULT 0,
+    total_cost_usd NUMERIC(12, 6) NOT NULL DEFAULT 0.000000,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_daily_usage UNIQUE (user_id, usage_date)
+);
+
+CREATE INDEX idx_user_usage_daily_date ON user_usage_daily(user_id, usage_date DESC);

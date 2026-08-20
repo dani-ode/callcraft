@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  ocr-postgres:
+    image: postgres:16-alpine
+    container_name: ocr-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ocr_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-ocr_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret_password}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ocr-network
+
+  ocr-redis:
+    image: redis:7-alpine
+    container_name: ocr-redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD:-redis_password}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ocr-network
+
+  ocr-api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: ocr-api
+    restart: always
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - APP_ENV=production
+      - PORT=8080
+      - DATABASE_URL=postgres://${POSTGRES_USER:-ocr_user}:${POSTGRES_PASSWORD:-secret_password}@ocr-postgres:5432/${POSTGRES_DB:-ocr_platform}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password}@ocr-redis:6379
+      - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      - SERVICE_CLIENT_SECRET=${SERVICE_CLIENT_SECRET:-sec_live_default_nextjs_service_secret_key_12345}
+    depends_on:
+      - ocr-postgres
+      - ocr-redis
+    networks:
+      - ocr-network
+
+  ocr-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: ocr-worker
+    restart: always
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgres://${POSTGRES_USER:-ocr_user}:${POSTGRES_PASSWORD:-secret_password}@ocr-postgres:5432/${POSTGRES_DB:-ocr_platform}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password}@ocr-redis:6379
+    depends_on:
+      - ocr-postgres
+      - ocr-redis
+    networks:
+      - ocr-network
+
+  ocr-web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    container_name: ocr-web
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - INTERNAL_RUST_API_URL=http://ocr-api:8080/internal/v1
+      - SERVICE_CLIENT_ID=svc_nextjs_main
+      - SERVICE_CLIENT_SECRET=${SERVICE_CLIENT_SECRET:-sec_live_default_nextjs_service_secret_key_12345}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-supersecret_nextauth_session_key_9988776655}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+    depends_on:
+      - ocr-api
+    networks:
+      - ocr-network
+
+networks:
+  ocr-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
