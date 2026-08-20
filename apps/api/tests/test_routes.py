@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 from callcraft_api import app
 
@@ -22,18 +23,30 @@ async def test_public_call_execution_unauthorized():
 
 @pytest.mark.asyncio
 async def test_public_call_execution_success():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        headers = {
-            "Authorization": "Bearer call_sk_live_dev_secret_key_12345",
-            "X-CALL-SPEC-ID": "ktp-parser",
-        }
-        payload = {"prompt": "Extract document metadata"}
-        response = await ac.post("/v1/call/usr_default_dev_01", json=payload, headers=headers)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        assert "data" in data
-        assert data["data"]["nik"] == "3271041508950001"
+    mock_ai_output = (
+        {
+            "nik": "3271041508950001",
+            "full_name": "BUDI SANTOSO",
+            "gender": "LAKI-LAKI",
+        },
+        {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+    )
+
+    with patch("callcraft_engine.adapters.gemini.GeminiAdapter.execute_structured_extraction", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = mock_ai_output
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            headers = {
+                "Authorization": "Bearer call_sk_live_dev_secret_key_12345",
+                "X-CALL-SPEC-ID": "ktp-parser",
+            }
+            payload = {"prompt": "Extract document metadata"}
+            response = await ac.post("/v1/call/usr_default_dev_01", json=payload, headers=headers)
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "data" in data
+            assert data["data"]["nik"] == "3271041508950001"
 
 
 @pytest.mark.asyncio

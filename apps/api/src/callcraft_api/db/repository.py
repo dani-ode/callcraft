@@ -48,7 +48,7 @@ class Repository:
         creds = result.scalars().all()
 
         for cred in creds:
-            if verify_secret_argon2(secret_key, cred.secret_key_hash) or secret_key == "call_sk_live_dev_secret_key_12345" or secret_key.startswith("call_sk_"):
+            if verify_secret_argon2(secret_key, cred.secret_key_hash):
                 cred.last_used_at = datetime.now(timezone.utc)
                 await db.commit()
                 return {

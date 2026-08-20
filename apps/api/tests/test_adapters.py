@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock, patch
 from callcraft_engine.adapters.factory import get_adapter
 from callcraft_engine.adapters.gemini import GeminiAdapter
 from callcraft_engine.adapters.openai import OpenAIAdapter
@@ -41,54 +42,44 @@ def test_adapter_factory_dispatch():
 
 
 @pytest.mark.asyncio
-async def test_gemini_adapter_mock_extraction():
+async def test_gemini_adapter_missing_key_raises_error():
     adapter = GeminiAdapter()
-    tool_schema = {
-        "name": "extract_data",
-        "parameters": {
-            "properties": {
-                "nik": {"type": "string"},
-                "full_name": {"type": "string"},
-            }
-        },
-    }
-    res, tokens = await adapter.execute_structured_extraction(
-        image_bytes=b"sample_fake_image_bytes",
-        mime_type="image/jpeg",
-        tool_schema=tool_schema,
-        system_prompt="System instructions",
-        user_prompt="Extraction prompt",
-        api_key="mock_demo_key",
-        model_identifier="gemini-1.5-flash",
-    )
-
-    assert "nik" in res
-    assert "full_name" in res
-    assert tokens["total_tokens"] > 0
+    with pytest.raises(ValueError, match="Google Gemini API Key is missing"):
+        await adapter.execute_structured_extraction(
+            image_bytes=None,
+            mime_type=None,
+            tool_schema={},
+            system_prompt=None,
+            user_prompt=None,
+            api_key="",
+        )
 
 
 @pytest.mark.asyncio
-async def test_openai_adapter_mock_extraction():
+async def test_openai_adapter_missing_key_raises_error():
     adapter = OpenAIAdapter()
-    tool_schema = {
-        "name": "extract_data",
-        "parameters": {
-            "properties": {
-                "invoice_number": {"type": "string"},
-                "total_amount": {"type": "number"},
-            }
-        },
-    }
-    res, tokens = await adapter.execute_structured_extraction(
-        image_bytes=b"sample_fake_image_bytes",
-        mime_type="image/jpeg",
-        tool_schema=tool_schema,
-        system_prompt="System instructions",
-        user_prompt="Extraction prompt",
-        api_key="mock_demo_key",
-        model_identifier="gpt-4o",
-    )
+    with pytest.raises(ValueError, match="OpenAI API Key is missing"):
+        await adapter.execute_structured_extraction(
+            image_bytes=None,
+            mime_type=None,
+            tool_schema={},
+            system_prompt=None,
+            user_prompt=None,
+            api_key="",
+        )
 
-    assert "invoice_number" in res
-    assert "total_amount" in res
-    assert tokens["total_tokens"] > 0
+
+@pytest.mark.asyncio
+async def test_gemini_adapter_http_error_reporting():
+    adapter = GeminiAdapter()
+    tool_schema = {"name": "extract_data", "parameters": {"properties": {"nik": {"type": "string"}}}}
+    
+    with pytest.raises(ValueError, match="Gemini API Error"):
+        await adapter.execute_structured_extraction(
+            image_bytes=b"fake_bytes",
+            mime_type="image/jpeg",
+            tool_schema=tool_schema,
+            system_prompt="sys",
+            user_prompt="usr",
+            api_key="invalid_test_key",
+        )
