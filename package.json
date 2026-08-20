@@ -1,0 +1,12 @@
+{
+  "name": "callcraft",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "bun --cwd apps/web dev",
+    "build:web": "bun --cwd apps/web build",
+    "test:web": "bun --cwd apps/web test"
+  }
+}

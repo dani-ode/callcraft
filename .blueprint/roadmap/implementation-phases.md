@@ -29,11 +29,11 @@ Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
 
 ## 🛠️ Phase 1: Project Scaffolding & Workspace Setup
 
-- [ ] **1.1. Monorepo Structure Initialization**:
+- [x] **1.1. Monorepo Structure Initialization**:
   - Create monorepo directory layout: `apps/web` (Next.js with Bun), `apps/api` (Python 3.12 FastAPI), `apps/worker` (Python Worker).
   - Configure root `pyproject.toml` and `requirements.txt` for Python dependencies.
   - Set up Bun (`package.json`, `bun.lockb`, `pyrightconfig.json`) in `apps/web` and workspace root.
-- [ ] **1.2. Environment & Tooling Configuration**:
+- [x] **1.2. Environment & Tooling Configuration**:
   - Configure `.env.example` and `.env` for database (`callcraft_db`), Redis connection strings, and encryption keys.
   - Configure Tailwind CSS, shadcn/ui, and TypeScript in Next.js with Bun runtime.
   - Set up FastAPI, Pydantic v2, Uvicorn, Asyncpg, and Cryptography in Python.
