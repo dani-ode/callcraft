@@ -270,7 +270,7 @@ class Repository:
                 "httpStatus": r.http_status,
                 "processingTimeMs": r.processing_time_ms,
                 "totalTokens": r.total_tokens,
-                "costUsd": float(r.estimated_cost_usd or 0.0),
+                "costUsd": r.estimated_cost_usd or 0.0,
                 "createdAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
             }
             for r in reqs

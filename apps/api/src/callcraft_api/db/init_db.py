@@ -23,10 +23,9 @@ logger = logging.getLogger("callcraft.db.init")
 
 async def init_db(session: AsyncSession) -> None:
     """Initializes tables and seeds initial metadata in database."""
-    bind = session.bind
-    if bind is not None:
-        async with bind.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    conn = await session.connection()
+    if conn is not None:
+        await conn.run_sync(Base.metadata.create_all)
 
     # 1. Seed AI Providers
     provider_data = [
