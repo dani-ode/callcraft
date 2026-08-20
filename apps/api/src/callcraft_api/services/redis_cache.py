@@ -73,7 +73,8 @@ class RedisCacheService:
                     val = await self._client.lpop(key)
                     if not val:
                         break
-                    items.append(json.loads(val))
+                    if isinstance(val, (str, bytes)):
+                        items.append(json.loads(val))
                 return items
             except Exception as e:
                 logger.warning(f"Redis pop_outbox error: {e}")
