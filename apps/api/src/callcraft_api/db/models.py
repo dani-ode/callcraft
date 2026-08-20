@@ -5,6 +5,7 @@ from sqlalchemy import (
     BOOLEAN,
     DATE,
     INT,
+    JSON,
     NUMERIC,
     TEXT,
     VARCHAR,
@@ -16,7 +17,6 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -83,7 +83,7 @@ class ServiceClient(Base):
     client_id: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False)
     secret_hash: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     status: Mapped[str] = mapped_column(VARCHAR(50), default="active", nullable=False)
-    permissions: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=list, nullable=False)
+    permissions: Mapped[Dict[str, Any]] = mapped_column(JSON, default=list, nullable=False)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -162,8 +162,8 @@ class Template(Base):
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     category: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
-    request_schema: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    response_schema: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    request_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+    response_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     system_prompt: Mapped[str] = mapped_column(TEXT, nullable=False)
     extraction_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
     is_official: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
@@ -197,8 +197,8 @@ class CallSpecVersion(Base):
     id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
     call_spec_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("call_specs.id", ondelete="CASCADE"), nullable=False)
     version_number: Mapped[int] = mapped_column(INT, nullable=False)
-    request_schema: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    response_schema: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    request_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+    response_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     system_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
     extraction_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
     preferred_model_id: Mapped[Optional[str]] = mapped_column(VARCHAR(26), ForeignKey("ai_models.id"))

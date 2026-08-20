@@ -3,103 +3,47 @@ import { ApiCredential, CallSpec, ExecutionLog, Template, UserAiProvider } from 
 const PYTHON_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080";
 
 export async function fetchCallSpecs(): Promise<CallSpec[]> {
-  try {
-    const res = await fetch(`${PYTHON_API_URL}/internal/v1/specs`, { cache: "no-store" });
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (e) {
-    console.warn("Using local mock specs fallback:", e);
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/specs`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch call specs: ${res.statusText}`);
   }
-
-  return [
-    {
-      id: "spc_01HZX01SPEC0000000001",
-      name: "Indonesian KTP Parser",
-      slug: "ktp-parser",
-      description: "Extracts NIK, Full Name, DOB, Gender, and Address from KTP image.",
-      activeVersionNumber: 1,
-      status: "active",
-      updatedAt: new Date().toISOString(),
-      responseSchema: {
-        properties: {
-          nik: { type: "string", required: true },
-          full_name: { type: "string", required: true },
-          gender: { type: "enum", enum_values: ["LAKI-LAKI", "PEREMPUAN"], required: true },
-        },
-      },
-    },
-    {
-      id: "spc_01HZX01SPEC0000000002",
-      name: "Invoice Data Extractor",
-      slug: "invoice-extractor",
-      description: "Extracts invoice number, vendor name, invoice date, line items, and total amount.",
-      activeVersionNumber: 2,
-      status: "active",
-      updatedAt: new Date().toISOString(),
-      responseSchema: {
-        properties: {
-          invoice_number: { type: "string", required: true },
-          vendor_name: { type: "string", required: true },
-          total_amount: { type: "number", required: true },
-        },
-      },
-    },
-  ];
+  return await res.json();
 }
 
 export async function fetchTemplates(): Promise<Template[]> {
-  return [
-    {
-      id: "tmpl_01",
-      code: "invoice-parser",
-      name: "Invoice Data Extractor",
-      description: "Extracts invoice metadata including invoice number, vendor, line items, and total amount.",
-      category: "Financial",
-      isOfficial: true,
-      requestSchema: { properties: { image: { type: "string" } } },
-      responseSchema: {
-        properties: {
-          invoice_number: { type: "string", required: true },
-          vendor_name: { type: "string", required: true },
-          invoice_date: { type: "date", required: true },
-          total_amount: { type: "number", required: true },
-        },
-      },
-    },
-    {
-      id: "tmpl_02",
-      code: "ktp-id-parser",
-      name: "Indonesian KTP / National ID Parser",
-      description: "Extracts NIK, Full Name, Gender, DOB, and Address details from KTP document.",
-      category: "Document Parsing",
-      isOfficial: true,
-      requestSchema: { properties: { image: { type: "string" } } },
-      responseSchema: {
-        properties: {
-          nik: { type: "string", required: true },
-          full_name: { type: "string", required: true },
-          gender: { type: "enum", enum_values: ["LAKI-LAKI", "PEREMPUAN"], required: true },
-        },
-      },
-    },
-    {
-      id: "tmpl_03",
-      code: "receipt-parser",
-      name: "Retail Receipt Parser",
-      description: "Extracts merchant name, transaction date, line items, tax, and total paid.",
-      category: "Financial",
-      isOfficial: true,
-      requestSchema: { properties: { image: { type: "string" } } },
-      responseSchema: {
-        properties: {
-          merchant_name: { type: "string", required: true },
-          transaction_date: { type: "date", required: true },
-          total_paid: { type: "number", required: true },
-        },
-      },
-    },
-  ];
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/templates`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch templates: ${res.statusText}`);
+  }
+  return await res.json();
+}
+
+export async function fetchApiKeys(): Promise<ApiCredential[]> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/keys`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch API keys: ${res.statusText}`);
+  }
+  return await res.json();
+}
+
+export async function createApiKey(name: string): Promise<{ credential: ApiCredential; secret_key: string }> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/keys`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to create API key: ${res.statusText}`);
+  }
+  return await res.json();
+}
+
+export async function fetchExecutionLogs(): Promise<ExecutionLog[]> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/logs`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch logs: ${res.statusText}`);
+  }
+  return await res.json();
 }
 
 export async function executeCallcraftApi(payload: {

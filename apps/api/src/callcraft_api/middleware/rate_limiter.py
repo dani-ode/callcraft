@@ -1,13 +1,14 @@
 import time
 import logging
 from typing import Dict, Tuple
-from fastapi import Request, HTTPException, status
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from callcraft_api.services.redis_cache import redis_service
 
 logger = logging.getLogger("callcraft.middleware.rate_limiter")
 
-# Fallback in-memory rate limiting counters {api_key: (count, reset_timestamp)}
+# In-memory rate limiting counters {api_key: (count, reset_timestamp)}
 _MEM_RATE_LIMITS: Dict[str, Tuple[int, float]] = {}
 
 
@@ -23,8 +24,6 @@ class TokenBucketRateLimiterMiddleware(BaseHTTPMiddleware):
             api_key = auth_header.replace("Bearer ", "").strip() if auth_header and auth_header.startswith("Bearer ") else "anonymous"
 
             current_time = time.time()
-
-            # Redis / Memory rate check
             redis_key = f"callcraft:rate:{api_key}"
             allowed = True
 
@@ -51,9 +50,9 @@ class TokenBucketRateLimiterMiddleware(BaseHTTPMiddleware):
                     allowed = False
 
             if not allowed:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Rate limit exceeded. Maximum allowed is {self.rate_limit_per_minute} requests per minute.",
+                    content={"detail": f"Rate limit exceeded. Maximum allowed is {self.rate_limit_per_minute} requests per minute."},
                     headers={"Retry-After": "60"},
                 )
 

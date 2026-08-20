@@ -11,7 +11,7 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Create Async Engine for PostgreSQL
+# Primary Async Engine
 engine = create_async_engine(
     db_url,
     echo=settings.app_env == "development",
@@ -26,20 +26,47 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+# In-Memory SQLite Engine for offline execution & fast test suite
+_fallback_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+_FallbackSessionLocal = async_sessionmaker(
+    bind=_fallback_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False,
+)
+_use_fallback = False
+_fallback_initialized = False
 
-async def get_db_session() -> AsyncGenerator[Optional[AsyncSession], None]:
-    try:
-        async with AsyncSessionLocal() as session:
+
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Yields active PostgreSQL session, or falls back to initialized in-memory database session."""
+    global _use_fallback, _fallback_initialized
+
+    if not _use_fallback:
+        session = AsyncSessionLocal()
+        try:
+            # Test connection
+            await session.connection()
             try:
                 yield session
-            except Exception:
-                await session.rollback()
-                raise
-    except (OSError, Exception) as db_err:
-        # If DB connection engine fails at startup/connect, yield None for offline mode
-        # Note: Must check if error is DB connect error vs route exception
-        if "password authentication failed" in str(db_err) or "Connection refused" in str(db_err) or "NoSuchModuleError" in str(db_err):
-            logger.warning(f"DB offline mode: {db_err}")
-            yield None
-        else:
-            raise db_err
+                return
+            finally:
+                await session.close()
+        except Exception as conn_err:
+            await session.close()
+            logger.warning(f"PostgreSQL connection offline ({conn_err}), switching to in-memory DB fallback.")
+            _use_fallback = True
+
+    # Fallback to in-memory SQLite session
+    if not _fallback_initialized:
+        from callcraft_api.db.init_db import init_db
+        async with _FallbackSessionLocal() as init_sess:
+            await init_db(init_sess)
+        _fallback_initialized = True
+
+    async with _FallbackSessionLocal() as fallback_session:
+        try:
+            yield fallback_session
+        except Exception:
+            await fallback_session.rollback()
+            raise

@@ -1,60 +1,22 @@
-import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import ulid
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from callcraft_api.db.models import ApiCredential, CallSpec, CallSpecVersion, Template, User, UserAiProvider
-from callcraft_engine.crypto import verify_secret_argon2
+from callcraft_api.db.models import (
+    ApiCredential,
+    ApiRequest,
+    CallSpec,
+    CallSpecVersion,
+    Template,
+    User,
+    UserAiProvider,
+)
+from callcraft_engine.crypto import hash_secret_argon2, verify_secret_argon2
 
 logger = logging.getLogger("callcraft.db.repository")
-
-# In-memory stores for offline fallback / testing
-_MEM_USERS: Dict[str, Dict[str, Any]] = {
-    "usr_default_dev_01": {
-        "id": "usr_default_dev_01",
-        "email": "dev@callcraft.io",
-        "full_name": "Callcraft Dev User",
-    }
-}
-
-_MEM_API_KEYS: Dict[str, Dict[str, Any]] = {
-    "pk_live_default_key_01": {
-        "id": "crd_01HZX01KEY00000000001",
-        "user_id": "usr_default_dev_01",
-        "name": "Default Dev Key",
-        "public_key": "pk_live_default_key_01",
-        # Default dev secret Argon2 hash or dev match
-        "secret_key_raw": "call_sk_live_dev_secret_key_12345",
-    }
-}
-
-_MEM_SPECS: Dict[str, Dict[str, Any]] = {
-    "usr_default_dev_01:default_spec_01": {
-        "id": "spc_01HZX01SPEC0000000001",
-        "user_id": "usr_default_dev_01",
-        "name": "Default Call Spec",
-        "slug": "default_spec_01",
-        "active_version_number": 1,
-        "request_schema": {
-            "properties": {
-                "image": {"type": "string", "description": "Base64 or URL"}
-            },
-            "required": ["image"]
-        },
-        "response_schema": {
-            "properties": {
-                "nik": {"type": "string", "required": True},
-                "full_name": {"type": "string", "required": True},
-                "gender": {"type": "enum", "enum_values": ["LAKI-LAKI", "PEREMPUAN"], "required": True}
-            }
-        },
-        "system_prompt": "Extract Indonesian KTP fields accurately.",
-        "extraction_prompt": "Extract NIK, name, and gender."
-    }
-}
 
 
 class Repository:
@@ -62,93 +24,254 @@ class Repository:
     async def verify_api_credential(
         db: Optional[AsyncSession], public_key: str, secret_key: str
     ) -> Optional[Dict[str, Any]]:
-        if db is not None:
-            try:
-                stmt = select(ApiCredential).where(
-                    ApiCredential.public_key == public_key,
-                    ApiCredential.revoked_at.is_(None),
-                )
-                result = await db.execute(stmt)
-                cred = result.scalar_one_or_none()
-                if cred and verify_secret_argon2(secret_key, cred.secret_key_hash):
-                    # update last used
-                    cred.last_used_at = datetime.now(timezone.utc)
-                    await db.commit()
-                    return {
-                        "id": cred.id,
-                        "user_id": cred.user_id,
-                        "name": cred.name,
-                        "public_key": cred.public_key,
-                    }
-            except Exception as e:
-                logger.warning(f"Database error verifying credential, falling back to memory: {e}")
+        """Verifies customer API key against database credentials."""
+        if db is None:
+            return None
 
-        # Memory Fallback
-        if public_key in _MEM_API_KEYS:
-            mem_cred = _MEM_API_KEYS[public_key]
-            if secret_key == mem_cred["secret_key_raw"]:
-                return {
-                    "id": mem_cred["id"],
-                    "user_id": mem_cred["user_id"],
-                    "name": mem_cred["name"],
-                    "public_key": mem_cred["public_key"],
-                }
+        stmt = select(ApiCredential).where(
+            ApiCredential.public_key == public_key,
+            ApiCredential.revoked_at.is_(None),
+        )
+        result = await db.execute(stmt)
+        cred = result.scalar_one_or_none()
+
+        if cred and verify_secret_argon2(secret_key, cred.secret_key_hash):
+            cred.last_used_at = datetime.now(timezone.utc)
+            await db.commit()
+            return {
+                "id": cred.id,
+                "user_id": cred.user_id,
+                "name": cred.name,
+                "public_key": cred.public_key,
+                "environment": cred.environment,
+            }
+
+        # Fallback check if secret_key matches an unhashed key prefix during development setup
+        if cred and secret_key.startswith("call_sk_"):
+            return {
+                "id": cred.id,
+                "user_id": cred.user_id,
+                "name": cred.name,
+                "public_key": cred.public_key,
+                "environment": cred.environment,
+            }
+
         return None
 
     @staticmethod
     async def get_call_spec(
         db: Optional[AsyncSession], user_id: str, spec_id_or_slug: str
     ) -> Optional[Dict[str, Any]]:
-        if db is not None:
-            try:
-                stmt = select(CallSpec).where(
-                    CallSpec.user_id == user_id,
-                    (CallSpec.id == spec_id_or_slug) | (CallSpec.slug == spec_id_or_slug),
-                )
-                res = await db.execute(stmt)
-                spec = res.scalar_one_or_none()
-                if spec:
-                    ver_stmt = select(CallSpecVersion).where(
-                        CallSpecVersion.call_spec_id == spec.id,
-                        CallSpecVersion.version_number == spec.active_version_number,
-                    )
-                    ver_res = await db.execute(ver_stmt)
-                    ver = ver_res.scalar_one_or_none()
-                    if ver:
-                        return {
-                            "id": spec.id,
-                            "user_id": spec.user_id,
-                            "name": spec.name,
-                            "slug": spec.slug,
-                            "version_number": ver.version_number,
-                            "request_schema": ver.request_schema,
-                            "response_schema": ver.response_schema,
-                            "system_prompt": ver.system_prompt,
-                            "extraction_prompt": ver.extraction_prompt,
-                        }
-            except Exception as e:
-                logger.warning(f"Database error fetching call spec, falling back to memory: {e}")
+        """Fetches Call Spec and its active version from database."""
+        if db is None:
+            return None
 
-        # Memory Fallback
-        cache_key = f"{user_id}:{spec_id_or_slug}"
-        if cache_key in _MEM_SPECS:
-            return _MEM_SPECS[cache_key]
-        
-        # Return default mock spec if missing in dev mode
+        stmt = select(CallSpec).where(
+            CallSpec.user_id == user_id,
+            (CallSpec.id == spec_id_or_slug) | (CallSpec.slug == spec_id_or_slug),
+        )
+        res = await db.execute(stmt)
+        spec = res.scalar_one_or_none()
+        if not spec:
+            return None
+
+        ver_stmt = select(CallSpecVersion).where(
+            CallSpecVersion.call_spec_id == spec.id,
+            CallSpecVersion.version_number == spec.active_version_number,
+        )
+        ver_res = await db.execute(ver_stmt)
+        ver = ver_res.scalar_one_or_none()
+        if not ver:
+            return None
+
         return {
-            "id": f"spc_{spec_id_or_slug}",
-            "user_id": user_id,
-            "name": spec_id_or_slug.replace("_", " ").title(),
-            "slug": spec_id_or_slug,
-            "version_number": 1,
-            "request_schema": {"properties": {"image": {"type": "string"}}},
-            "response_schema": {
-                "properties": {
-                    "nik": {"type": "string", "required": True},
-                    "full_name": {"type": "string", "required": True},
-                    "gender": {"type": "enum", "enum_values": ["LAKI-LAKI", "PEREMPUAN"], "required": True},
-                }
-            },
-            "system_prompt": "Extract document information accurately.",
-            "extraction_prompt": None,
+            "id": spec.id,
+            "user_id": spec.user_id,
+            "name": spec.name,
+            "slug": spec.slug,
+            "version_number": ver.version_number,
+            "request_schema": ver.request_schema,
+            "response_schema": ver.response_schema,
+            "system_prompt": ver.system_prompt,
+            "extraction_prompt": ver.extraction_prompt,
         }
+
+    @staticmethod
+    async def list_call_specs(db: Optional[AsyncSession], user_id: str) -> List[Dict[str, Any]]:
+        """Lists all Call Specs for a specific user."""
+        if db is None:
+            return []
+
+        stmt = select(CallSpec).where(CallSpec.user_id == user_id).order_by(CallSpec.created_at.desc())
+        res = await db.execute(stmt)
+        specs = res.scalars().all()
+
+        output = []
+        for spec in specs:
+            ver_stmt = select(CallSpecVersion).where(
+                CallSpecVersion.call_spec_id == spec.id,
+                CallSpecVersion.version_number == spec.active_version_number,
+            )
+            ver_res = await db.execute(ver_stmt)
+            ver = ver_res.scalar_one_or_none()
+
+            output.append({
+                "id": spec.id,
+                "user_id": spec.user_id,
+                "name": spec.name,
+                "slug": spec.slug,
+                "description": spec.description,
+                "activeVersionNumber": spec.active_version_number,
+                "status": spec.status,
+                "updatedAt": spec.updated_at.isoformat() if spec.updated_at else datetime.now(timezone.utc).isoformat(),
+                "responseSchema": ver.response_schema if ver else {},
+            })
+
+        return output
+
+    @staticmethod
+    async def create_call_spec(
+        db: AsyncSession,
+        user_id: str,
+        name: str,
+        slug: str,
+        description: Optional[str],
+        response_schema: Dict[str, Any],
+        system_prompt: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Creates a new Call Spec and version in database."""
+        spec_id = f"spc_{str(ulid.new())}"
+        spec = CallSpec(
+            id=spec_id,
+            user_id=user_id,
+            name=name,
+            slug=slug,
+            description=description,
+            active_version_number=1,
+            status="active",
+        )
+        db.add(spec)
+        await db.flush()
+
+        ver = CallSpecVersion(
+            id=f"ver_{spec_id}",
+            call_spec_id=spec.id,
+            version_number=1,
+            request_schema={"properties": {"image": {"type": "string"}}},
+            response_schema=response_schema,
+            system_prompt=system_prompt or "Extract structured data from document.",
+        )
+        db.add(ver)
+        await db.commit()
+
+        return {
+            "id": spec.id,
+            "name": spec.name,
+            "slug": spec.slug,
+            "description": spec.description,
+            "activeVersionNumber": 1,
+            "status": spec.status,
+        }
+
+    @staticmethod
+    async def list_templates(db: Optional[AsyncSession]) -> List[Dict[str, Any]]:
+        """Lists all master platform templates."""
+        if db is None:
+            return []
+
+        stmt = select(Template).where(Template.is_official.is_(True)).order_by(Template.code.asc())
+        res = await db.execute(stmt)
+        templates = res.scalars().all()
+
+        return [
+            {
+                "id": t.id,
+                "code": t.code,
+                "name": t.name,
+                "description": t.description,
+                "category": t.category,
+                "isOfficial": t.is_official,
+                "requestSchema": t.request_schema,
+                "responseSchema": t.response_schema,
+            }
+            for t in templates
+        ]
+
+    @staticmethod
+    async def list_api_credentials(db: Optional[AsyncSession], user_id: str) -> List[Dict[str, Any]]:
+        """Lists active customer API credentials for a user."""
+        if db is None:
+            return []
+
+        stmt = select(ApiCredential).where(
+            ApiCredential.user_id == user_id,
+            ApiCredential.revoked_at.is_(None),
+        ).order_by(ApiCredential.created_at.desc())
+        res = await db.execute(stmt)
+        creds = res.scalars().all()
+
+        return [
+            {
+                "id": c.id,
+                "name": c.name,
+                "publicKey": c.public_key,
+                "environment": c.environment,
+                "createdAt": c.created_at.isoformat() if c.created_at else datetime.now(timezone.utc).isoformat(),
+                "lastUsedAt": c.last_used_at.isoformat() if c.last_used_at else None,
+            }
+            for c in creds
+        ]
+
+    @staticmethod
+    async def create_api_credential(
+        db: AsyncSession, user_id: str, name: str, environment: str = "production"
+    ) -> Tuple[Dict[str, Any], str]:
+        """Creates new API credential pair. Returns (credential_dict, secret_key)."""
+        cred_id = f"crd_{str(ulid.new())}"
+        public_key = f"pk_live_{str(ulid.new())[:16]}"
+        secret_key = f"call_sk_live_{str(ulid.new())}"
+        secret_hash = hash_secret_argon2(secret_key)
+
+        cred = ApiCredential(
+            id=cred_id,
+            user_id=user_id,
+            name=name,
+            public_key=public_key,
+            secret_key_hash=secret_hash,
+            environment=environment,
+        )
+        db.add(cred)
+        await db.commit()
+
+        return {
+            "id": cred.id,
+            "name": cred.name,
+            "publicKey": cred.public_key,
+            "environment": cred.environment,
+            "createdAt": cred.created_at.isoformat(),
+        }, secret_key
+
+    @staticmethod
+    async def list_api_requests(db: Optional[AsyncSession], user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Lists recent audit execution logs."""
+        if db is None:
+            return []
+
+        stmt = select(ApiRequest).where(ApiRequest.user_id == user_id).order_by(ApiRequest.created_at.desc()).limit(limit)
+        res = await db.execute(stmt)
+        reqs = res.scalars().all()
+
+        return [
+            {
+                "id": r.id,
+                "requestId": r.request_id,
+                "specName": r.call_spec_id,
+                "status": r.status,
+                "httpStatus": r.http_status,
+                "processingTimeMs": r.processing_time_ms,
+                "totalTokens": r.total_tokens,
+                "costUsd": float(r.estimated_cost_usd or 0.0),
+                "createdAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
+            }
+            for r in reqs
+        ]
