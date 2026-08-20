@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from callcraft_api.config import settings
 from callcraft_api.db.repository import Repository
 from callcraft_api.db.session import get_db_session
 from callcraft_api.services.redis_cache import redis_service
@@ -45,7 +46,7 @@ async def execute_callcraft(
 ):
     start_time = time.time()
 
-    # 1. Authenticate Bearer API Key
+    # 1. Authenticate Bearer API Key dynamically against DB credentials
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -53,9 +54,8 @@ async def execute_callcraft(
         )
 
     secret_key = authorization.replace("Bearer ", "").strip()
-    public_key = "pk_live_default_key_01"
+    cred = await Repository.verify_api_credential(db, secret_key)
     
-    cred = await Repository.verify_api_credential(db, public_key, secret_key)
     if not cred and not secret_key.startswith("call_sk_"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -63,7 +63,7 @@ async def execute_callcraft(
         )
 
     # 2. Fetch Call Spec (Redis Cache -> DB Repo)
-    spec_slug = x_call_spec_id or "default_spec_01"
+    spec_slug = x_call_spec_id or "ktp-parser"
     cached_spec = await redis_service.get_spec(user_id, spec_slug)
     
     if not cached_spec:
@@ -120,9 +120,12 @@ async def execute_callcraft(
     response_schema_obj = ResponseSchema(properties=field_defs)
     tool_schema = generate_ai_tool_schema("extract_structured_data", "Extract structured JSON from document", response_schema_obj)
 
-    # 5. Dispatch to AI Provider Adapter
+    # 5. Dispatch to AI Provider Adapter with User AI Key or System Fallback
     provider_code = x_call_provider.lower() if x_call_provider else "gemini"
     adapter = get_adapter(provider_code)
+
+    user_ai_key = await Repository.get_user_ai_provider_key(db, user_id, provider_code)
+    active_api_key = user_ai_key or getattr(settings, f"{provider_code}_api_key", None) or secret_key
 
     system_prompt = cached_spec.get("system_prompt") or "Extract all requested structured fields accurately."
     user_prompt = payload.prompt or cached_spec.get("extraction_prompt")
@@ -134,8 +137,8 @@ async def execute_callcraft(
             tool_schema=tool_schema.get("function", tool_schema),
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            api_key="mock_demo_key",
-            model_identifier="gemini-1.5-flash",
+            api_key=active_api_key,
+            model_identifier="gemini-1.5-flash" if provider_code == "gemini" else "gpt-4o",
         )
     except Exception as e:
         logger.error(f"AI Provider execution failed: {e}")
@@ -185,7 +188,7 @@ async def execute_callcraft(
         },
         "execution": {
             "provider": provider_code,
-            "model": "gemini-1.5-flash",
+            "model": "gemini-1.5-flash" if provider_code == "gemini" else "gpt-4o",
             "processing_time_ms": processing_time_ms,
             "tokens": tokens,
         },
