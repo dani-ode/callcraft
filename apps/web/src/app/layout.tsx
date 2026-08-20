@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Sidebar } from "@/components/sidebar";
+import { Header } from "@/components/header";
 
 export const metadata: Metadata = {
-  title: "OCR Platform — AI-Powered Stateless OCR-as-a-Service",
-  description: "Build custom visual OCR APIs powered by Gemini & OpenAI Vision models with zero data retention privacy.",
+  title: "Callcraft — AI-Powered Dynamic Multimodal Execution Engine",
+  description: "Dynamic AI Tool Calling, Structured JSON Coercion, and Multimodal API Gateway.",
 };
 
 export default function RootLayout({
@@ -12,9 +14,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased bg-[#090d16] text-slate-100 min-h-screen">
-        {children}
+    <html lang="en" className="dark">
+      <body className="bg-[#07090e] text-slate-100 min-h-screen flex antialiased">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <Header />
+          <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        </div>
       </body>
     </html>
   );
