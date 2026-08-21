@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Play, Sparkles, Copy, Check, FileText, CheckCircle2, Zap } from "lucide-react";
 import { executeCallcraftApi } from "@/lib/api-client";
+import { useAuth } from "@/context/auth-context";
 
 const SAMPLE_PRESETS = [
   {
@@ -26,6 +27,7 @@ const SAMPLE_PRESETS = [
 ];
 
 export default function PlaygroundPage() {
+  const { user } = useAuth();
   const [specId, setSpecId] = useState("ktp-parser");
   const [provider, setProvider] = useState("gemini");
   const [apiKey, setApiKey] = useState("call_sk_live_dev_secret_key_12345");
@@ -50,7 +52,7 @@ export default function PlaygroundPage() {
 
     try {
       const data = await executeCallcraftApi({
-        userId: "usr_default_dev_01",
+        userId: user?.id || "usr_dev_active",
         specId,
         provider,
         apiKey,

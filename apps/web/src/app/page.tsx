@@ -1,211 +1,288 @@
-import Link from "next/link";
-import {
-  ArrowUpRight,
-  CheckCircle2,
-  Clock,
-  Code2,
-  Cpu,
-  Key,
-  Layers,
-  Play,
-  Zap,
-} from "lucide-react";
+"use client";
 
-export default function OverviewPage() {
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Feather,
+  ArrowRight,
+  Sparkles,
+  Zap,
+  Code2,
+  Play,
+  Layers,
+  ExternalLink,
+  LogIn,
+  UserPlus,
+  LayoutDashboard,
+  FileText,
+} from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuth } from "@/context/auth-context";
+import { useAppInit } from "@/context/app-init-context";
+
+export default function LandingPage() {
+  const { user, isLoading } = useAuth();
+  const { appInit, AppIconComponent, isCustomImageIcon, isLoading: loadingSettings } = useAppInit();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loadingSettings && appInit.disableLandingPage && !isLoading) {
+      if (user) {
+        router.replace("/dashboard");
+      } else {
+        router.replace("/login");
+      }
+    }
+  }, [user, isLoading, appInit, loadingSettings, router]);
+
+  if (loadingSettings || (appInit.disableLandingPage && !isLoading)) {
+    return null;
+  }
+
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
-      {/* Hero Welcome Banner */}
-      <div className="relative rounded-3xl p-8 overflow-hidden glass-panel border border-indigo-500/20 bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-slate-950">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
-        <div className="max-w-2xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
-            <Zap className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Python Data Plane & Bun Runtime Online</span>
+    <div className="min-h-screen bg-background text-foreground flex flex-col justify-between selection:bg-[#e1b329]/30">
+      {/* Top Public Header */}
+      <header className="h-20 glass-panel border-b border-[#edd6bb]/15 px-8 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#e1b329] via-[#ffb443] to-[#8a715e] p-0.5 shadow-lg shadow-[#e1b329]/20">
+            <div className="w-full h-full bg-[#120e0b] dark:bg-[#120e0b] bg-[#f5ebe0] rounded-[10px] flex items-center justify-center overflow-hidden">
+              {isCustomImageIcon ? (
+                <img src={appInit.appIcon} alt={appInit.appName || "Logo"} className="w-5 h-5 object-contain" />
+              ) : (
+                <AppIconComponent className="w-5 h-5 text-[#e1b329]" />
+              )}
+            </div>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Welcome to <span className="gradient-text">Callcraft</span>
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight gradient-text">
+              {appInit.appName || "Callcraft"}
+            </h1>
+            <p className="text-[10px] text-[#8b7e6d] font-medium">
+              {appInit.tagline || "Multimodal AI Execution Gateway"}
+            </p>
+          </div>
+        </div>
+
+        {/* Public Navigation */}
+        <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-[#8a715e] dark:text-[#edd6bb]">
+          <a href="#features" className="hover:text-[#e1b329] transition-colors">Features</a>
+          <a href="#code-demo" className="hover:text-[#e1b329] transition-colors">Live API Demo</a>
+          <a
+            href="http://127.0.0.1:8080/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:text-[#e1b329] transition-colors"
+          >
+            <span>API Docs</span>
+            <ExternalLink className="w-3 h-3 text-[#e1b329]" />
+          </a>
+        </nav>
+
+        {/* Top Right Action Buttons */}
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          {user ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-[#edd6bb]/20">
+                <div className="w-6 h-6 rounded-full bg-[#e1b329]/20 text-[#e1b329] text-[10px] font-bold flex items-center justify-center">
+                  {user.avatar || "U"}
+                </div>
+                <span className="text-xs font-bold text-[#8a715e] dark:text-[#edd6bb]">{user.name}</span>
+              </div>
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 font-bold text-xs shadow-lg shadow-[#e1b329]/20 flex items-center gap-1.5 transition-all"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span>Go to Console</span>
+              </Link>
+            </div>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="px-4 py-2 rounded-xl glass-panel hover:bg-[#edd6bb]/10 text-xs font-bold border border-[#edd6bb]/20 flex items-center gap-1.5 transition-all"
+              >
+                <LogIn className="w-3.5 h-3.5 text-[#e1b329]" />
+                <span>Sign In</span>
+              </Link>
+              <Link
+                href="/register"
+                className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 font-bold text-xs shadow-lg shadow-[#e1b329]/20 flex items-center gap-1.5 transition-all"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Get Started Free</span>
+              </Link>
+            </>
+          )}
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="space-y-24 py-16 px-6 max-w-7xl mx-auto flex-1">
+        <div className="text-center max-w-4xl mx-auto space-y-6">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#e1b329]/15 border border-[#e1b329]/30 text-[#8a715e] dark:text-[#ffb443] text-xs font-bold shadow-sm">
+            <Sparkles className="w-4 h-4 text-[#e1b329]" />
+            <span>Multimodal PDF & Vision AI Coercion Engine</span>
+          </div>
+
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
+            Convert Document & PDF Streams into <span className="gradient-text">Validated JSON</span>
           </h1>
-          <p className="text-sm text-slate-300 leading-relaxed">
-            Dynamic Multimodal Execution Engine for converting image streams into strictly coerced, validated JSON payloads using Google Gemini and OpenAI.
+
+          <p className="text-sm md:text-base text-[#8b7e6d] dark:text-[#edd6bb]/80 max-w-2xl mx-auto leading-relaxed">
+            {appInit.description ||
+              "Callcraft empowers developers to design dynamic extraction specifications, enforce strict model schema constraints, and execute zero-disk RAM stream processing with Bring-Your-Own External API Keys."}
           </p>
-          <div className="pt-2 flex flex-wrap gap-3">
-            <Link
-              href="/specs"
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all"
-            >
-              <Code2 className="w-4 h-4" />
-              <span>Create Call Spec</span>
-            </Link>
+
+          <div className="pt-4 flex flex-wrap items-center justify-center gap-4">
+            {user ? (
+              <Link
+                href="/dashboard"
+                className="px-6 py-3.5 rounded-2xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-sm font-extrabold shadow-xl shadow-[#e1b329]/25 flex items-center gap-2.5 transition-all transform hover:-translate-y-0.5"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Open Developer Console</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <Link
+                href="/register"
+                className="px-6 py-3.5 rounded-2xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-sm font-extrabold shadow-xl shadow-[#e1b329]/25 flex items-center gap-2.5 transition-all transform hover:-translate-y-0.5"
+              >
+                <span>Start Building Free</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
+
             <Link
               href="/playground"
-              className="px-4 py-2.5 rounded-xl glass-panel hover:bg-slate-800/80 text-slate-200 text-xs font-semibold flex items-center gap-2 transition-all"
+              className="px-6 py-3.5 rounded-2xl glass-panel hover:bg-[#e1b329]/15 text-sm font-bold border border-[#edd6bb]/25 flex items-center gap-2.5 transition-all"
             >
-              <Play className="w-4 h-4 text-indigo-400" />
-              <span>Open Playground</span>
+              <Play className="w-4 h-4 text-[#e1b329]" />
+              <span>Try Live Playground</span>
             </Link>
           </div>
         </div>
-      </div>
 
-      {/* Metric Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Total API Executions</span>
-            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
-              <Zap className="w-4 h-4" />
+        {/* Feature Grid Cards Section */}
+        <div id="features" className="space-y-8">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-extrabold tracking-tight">Built for Production Scale Multimodality</h2>
+            <p className="text-xs text-[#8b7e6d]">Everything you need to orchestrate tool-calling and document extraction</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="glass-panel glass-panel-hover p-6 rounded-3xl border border-[#edd6bb]/20 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#e1b329]/15 text-[#e1b329] flex items-center justify-center font-bold">
+                <Code2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold">Visual Call Specs Builder</h3>
+              <p className="text-xs text-[#8b7e6d] leading-relaxed">
+                Design extraction prompts, configure PDF input streams, enable Bring-Your-Own External API Keys, and enforce target JSON schemas.
+              </p>
+            </div>
+
+            <div className="glass-panel glass-panel-hover p-6 rounded-3xl border border-[#edd6bb]/20 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#ffb443]/15 text-[#ffb443] flex items-center justify-center font-bold">
+                <Zap className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold">Zero-Disk RAM Execution</h3>
+              <p className="text-xs text-[#8b7e6d] leading-relaxed">
+                Document streams, image buffers, and PDF pages are decoded directly in RAM memory. Zero bytes of sensitive user data are retained on server disks.
+              </p>
+            </div>
+
+            <div className="glass-panel glass-panel-hover p-6 rounded-3xl border border-[#edd6bb]/20 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#8a715e]/20 text-[#8a715e] dark:text-[#edd6bb] flex items-center justify-center font-bold">
+                <Layers className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold">Argon2id & External Keys</h3>
+              <p className="text-xs text-[#8b7e6d] leading-relaxed">
+                Pass external provider API keys dynamically via headers or enforce saved provider keys encrypted with AES-256-GCM.
+              </p>
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-100">12,840</p>
-          <p className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+14.2% from last week</span>
-          </p>
         </div>
 
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Avg Processing Latency</span>
-            <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-100">840 ms</p>
-          <p className="text-[11px] text-slate-400">RAM Stream Processing</p>
-        </div>
-
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Active Call Specs</span>
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
-              <Layers className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-100">6 Specs</p>
-          <p className="text-[11px] text-indigo-400 font-medium">100% Validated Coercion</p>
-        </div>
-
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Security Storage Residual</span>
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-emerald-400">0 Bytes</p>
-          <p className="text-[11px] text-slate-400">Zero Disk Document Retention</p>
-        </div>
-      </div>
-
-      {/* Recent Executions & Active Specs Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Executions Table */}
-        <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border border-slate-800/80 space-y-4">
-          <div className="flex items-center justify-between">
+        {/* Live Code API Demo Section */}
+        <div id="code-demo" className="glass-panel p-8 rounded-3xl border border-[#edd6bb]/20 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-slate-100">Recent API Executions</h2>
-              <p className="text-xs text-slate-400">Live stream logs from FastAPI & Redis outbox</p>
+              <span className="text-[11px] font-mono text-[#e1b329] font-bold uppercase tracking-wider">REST API Gateway</span>
+              <h3 className="text-xl font-extrabold">Execute Call Spec with Image or PDF Stream</h3>
             </div>
-            <Link href="/analytics" className="text-xs text-indigo-400 hover:underline font-medium">
-              View all
+            <Link
+              href="/specs"
+              className="px-4 py-2 rounded-xl bg-[#e1b329]/15 text-[#8a715e] dark:text-[#edd6bb] text-xs font-bold border border-[#e1b329]/30 flex items-center gap-1.5 self-start md:self-auto"
+            >
+              <span>Explore Call Specs Catalog</span>
+              <ArrowRight className="3.5 h-3.5" />
             </Link>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="text-slate-400 border-b border-slate-800 bg-slate-900/40">
-                <tr>
-                  <th className="py-2.5 px-3">Request ID</th>
-                  <th className="py-2.5 px-3">Spec</th>
-                  <th className="py-2.5 px-3">Provider</th>
-                  <th className="py-2.5 px-3">Latency</th>
-                  <th className="py-2.5 px-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/50 text-slate-300">
-                <tr>
-                  <td className="py-3 px-3 font-mono text-[11px] text-indigo-300">req_01HZX99...</td>
-                  <td className="py-3 px-3 font-medium">KTP Parser</td>
-                  <td className="py-3 px-3">Gemini 1.5 Flash</td>
-                  <td className="py-3 px-3 font-mono">750 ms</td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                      200 SUCCESS
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-3 px-3 font-mono text-[11px] text-indigo-300">req_01HZX88...</td>
-                  <td className="py-3 px-3 font-medium">Invoice Extractor</td>
-                  <td className="py-3 px-3">GPT-4o</td>
-                  <td className="py-3 px-3 font-mono">1,120 ms</td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                      200 SUCCESS
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-3 px-3 font-mono text-[11px] text-indigo-300">req_01HZX77...</td>
-                  <td className="py-3 px-3 font-medium">Receipt Parser</td>
-                  <td className="py-3 px-3">Gemini 1.5 Flash</td>
-                  <td className="py-3 px-3 font-mono">680 ms</td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                      200 SUCCESS
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* AI Providers Status */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800/80 space-y-4">
-          <h2 className="text-lg font-bold text-slate-100">AI Provider Registry</h2>
-          <div className="space-y-3">
-            <div className="p-3.5 rounded-xl glass-panel border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-xs">
-                  G
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-200">Google Gemini</p>
-                  <p className="text-[10px] text-slate-400">Structured Tool Calling</p>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold">Active</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
+            <div className="bg-[#120e0b] dark:bg-[#120e0b] bg-[#f5ebe0] p-4 rounded-2xl border border-[#edd6bb]/15 space-y-2 overflow-x-auto">
+              <span className="text-[10px] text-[#8b7e6d] font-bold">// HTTP Request with PDF Stream & External Key</span>
+              <pre className="text-[#edd6bb] text-[11px] leading-relaxed">
+{`curl -X POST http://localhost:8080/v1/call/usr_demo \\
+  -H "Authorization: Bearer call_sk_live_9988..." \\
+  -H "X-CALL-SPEC-ID: invoice-extractor" \\
+  -H "X-AI-API-KEY: sk-proj-ext-key-99" \\
+  -H "X-AI-MODEL-NAME: gpt-4o" \\
+  -F "pdf=@invoice_doc.pdf"`}
+              </pre>
             </div>
 
-            <div className="p-3.5 rounded-xl glass-panel border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-xs">
-                  O
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-200">OpenAI GPT-4o</p>
-                  <p className="text-[10px] text-slate-400">Function Calling Specs</p>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold">Active</span>
-            </div>
-
-            <div className="p-3.5 rounded-xl glass-panel border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-xs">
-                  A
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-200">Anthropic Claude</p>
-                  <p className="text-[10px] text-slate-400">Multi-provider JSON</p>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold">Active</span>
+            <div className="bg-[#120e0b] dark:bg-[#120e0b] bg-[#f5ebe0] p-4 rounded-2xl border border-[#edd6bb]/15 space-y-2 overflow-x-auto">
+              <span className="text-[10px] text-emerald-400 font-bold">// Coerced JSON Payload Output</span>
+              <pre className="text-emerald-400 text-[11px] leading-relaxed">
+{`{
+  "success": true,
+  "request_id": "req_01M0K89X",
+  "data": {
+    "invoice_number": "INV-2026-9041",
+    "vendor_name": "ACME LOGISTICS",
+    "total_amount": 4250.00
+  }
+}`}
+              </pre>
             </div>
           </div>
         </div>
-      </div>
+      </main>
+
+      {/* Public Footer */}
+      <footer className="border-t border-[#edd6bb]/15 glass-panel py-8 px-8 mt-12">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-[#8b7e6d]">
+          <div className="flex items-center gap-2">
+            {isCustomImageIcon ? (
+              <img src={appInit.appIcon} alt={appInit.appName || "Logo"} className="w-4 h-4 object-contain" />
+            ) : (
+              <AppIconComponent className="w-4 h-4 text-[#e1b329]" />
+            )}
+            <span className="font-bold text-[#8a715e] dark:text-[#edd6bb]">
+              {appInit.appName || "Callcraft"} Execution Gateway
+            </span>
+            <span>© 2026. All rights reserved.</span>
+          </div>
+
+          <div className="flex items-center gap-6 font-bold">
+            {user ? (
+              <>
+                <Link href="/specs" className="hover:text-[#e1b329]">Developer Console</Link>
+                <Link href="/dashboard" className="hover:text-[#e1b329]">Developer Dashboard</Link>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className="hover:text-[#e1b329]">Login</Link>
+                <Link href="/register" className="hover:text-[#e1b329]">Register</Link>
+              </>
+            )}
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

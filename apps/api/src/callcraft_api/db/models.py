@@ -28,22 +28,22 @@ class Base(DeclarativeBase):
 role_permissions = Table(
     "role_permissions",
     Base.metadata,
-    Column("role_id", VARCHAR(26), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
-    Column("permission_id", VARCHAR(26), ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", VARCHAR(50), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("permission_id", VARCHAR(50), ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True),
 )
 
 user_roles = Table(
     "user_roles",
     Base.metadata,
-    Column("user_id", VARCHAR(26), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", VARCHAR(26), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", VARCHAR(50), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
 )
 
 
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     email: Mapped[str] = mapped_column(VARCHAR(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     full_name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
@@ -60,7 +60,7 @@ class User(Base):
 class Role(Base):
     __tablename__ = "roles"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     name: Mapped[str] = mapped_column(VARCHAR(50), unique=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -69,7 +69,7 @@ class Role(Base):
 class Permission(Base):
     __tablename__ = "permissions"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     code: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -78,7 +78,7 @@ class Permission(Base):
 class ServiceClient(Base):
     __tablename__ = "service_clients"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     name: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False)
     client_id: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False)
     secret_hash: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
@@ -92,8 +92,8 @@ class ServiceClient(Base):
 class ApiCredential(Base):
     __tablename__ = "api_credentials"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
-    user_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     public_key: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False, index=True)
     secret_key_hash: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
@@ -109,7 +109,7 @@ class ApiCredential(Base):
 class AiProvider(Base):
     __tablename__ = "ai_providers"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     code: Mapped[str] = mapped_column(VARCHAR(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
@@ -121,8 +121,8 @@ class AiProvider(Base):
 class AiModel(Base):
     __tablename__ = "ai_models"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
-    provider_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("ai_providers.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("ai_providers.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     model_identifier: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     supports_image: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
@@ -140,9 +140,9 @@ class AiModel(Base):
 class UserAiProvider(Base):
     __tablename__ = "user_ai_providers"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
-    user_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    provider_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("ai_providers.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    provider_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("ai_providers.id", ondelete="CASCADE"), nullable=False)
     encrypted_api_key: Mapped[str] = mapped_column(TEXT, nullable=False)
     key_nonce: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
@@ -157,16 +157,58 @@ class UserAiProvider(Base):
 class Template(Base):
     __tablename__ = "templates"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
-    code: Mapped[str] = mapped_column(VARCHAR(50), unique=True, nullable=False)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    code: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT)
-    category: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
+    category: Mapped[str] = mapped_column(VARCHAR(50), nullable=False, index=True)
     request_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     response_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     system_prompt: Mapped[str] = mapped_column(TEXT, nullable=False)
     extraction_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
     is_official: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
+    is_published: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
+    fork_count: Mapped[int] = mapped_column(INT, default=0, nullable=False)
+    likes_count: Mapped[int] = mapped_column(INT, default=0, nullable=False)
+    rating_avg: Mapped[float] = mapped_column(NUMERIC(3, 2), default=5.00, nullable=False)
+    reviews_count: Mapped[int] = mapped_column(INT, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    user: Mapped[Optional["User"]] = relationship("User")
+
+
+class TemplateLike(Base):
+    __tablename__ = "template_likes"
+
+    template_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("templates.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class TemplateComment(Base):
+    __tablename__ = "template_comments"
+
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    template_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_name: Mapped[str] = mapped_column(VARCHAR(100), default="Developer", nullable=False)
+    rating: Mapped[int] = mapped_column(INT, default=5, nullable=False)
+    comment: Mapped[str] = mapped_column(TEXT, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AppInit(Base):
+    __tablename__ = "app_init"
+
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    app_name: Mapped[str] = mapped_column(VARCHAR(100), default="Callcraft", nullable=False)
+    app_icon: Mapped[str] = mapped_column(TEXT, default="Feather", nullable=False)
+    tagline: Mapped[str] = mapped_column(VARCHAR(255), default="Multimodal AI Execution Gateway", nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(TEXT)
+    favicon_url: Mapped[Optional[str]] = mapped_column(TEXT, default="/favicon.ico")
+    disable_landing_page: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -174,14 +216,25 @@ class Template(Base):
 class CallSpec(Base):
     __tablename__ = "call_specs"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
-    user_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    template_id: Mapped[Optional[str]] = mapped_column(VARCHAR(26), ForeignKey("templates.id", ondelete="SET NULL"))
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    template_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("templates.id", ondelete="SET NULL"))
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     slug: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     active_version_number: Mapped[int] = mapped_column(INT, default=1, nullable=False)
     status: Mapped[str] = mapped_column(VARCHAR(50), default="active", nullable=False)
+    
+    # PDF input support & External API Key flags
+    allow_pdf_input: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
+    use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
+    external_api_key: Mapped[Optional[str]] = mapped_column(TEXT)
+    external_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
+
+    # Marketplace Publication status & link
+    is_published: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
+    published_template_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("templates.id", ondelete="SET NULL"))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -194,14 +247,21 @@ class CallSpec(Base):
 class CallSpecVersion(Base):
     __tablename__ = "call_spec_versions"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
-    call_spec_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("call_specs.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    call_spec_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("call_specs.id", ondelete="CASCADE"), nullable=False)
     version_number: Mapped[int] = mapped_column(INT, nullable=False)
     request_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     response_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     system_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
     extraction_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
-    preferred_model_id: Mapped[Optional[str]] = mapped_column(VARCHAR(26), ForeignKey("ai_models.id"))
+    preferred_model_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("ai_models.id"))
+
+    # Version-level flags
+    allow_pdf_input: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
+    use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
+    external_api_key: Mapped[Optional[str]] = mapped_column(TEXT)
+    external_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (UniqueConstraint("call_spec_id", "version_number", name="uq_spec_version"),)
@@ -212,7 +272,7 @@ class CallSpecVersion(Base):
 class SystemPrompt(Base):
     __tablename__ = "system_prompts"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     code: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(VARCHAR(150), nullable=False)
     content: Mapped[str] = mapped_column(TEXT, nullable=False)
@@ -224,14 +284,14 @@ class SystemPrompt(Base):
 class ApiRequest(Base):
     __tablename__ = "api_requests"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     request_id: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False)
-    user_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    call_spec_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("call_specs.id", ondelete="CASCADE"), nullable=False, index=True)
-    call_spec_version_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("call_spec_versions.id", ondelete="CASCADE"), nullable=False)
-    credential_id: Mapped[Optional[str]] = mapped_column(VARCHAR(26), ForeignKey("api_credentials.id", ondelete="SET NULL"))
-    provider_id: Mapped[Optional[str]] = mapped_column(VARCHAR(26), ForeignKey("ai_providers.id", ondelete="SET NULL"))
-    model_id: Mapped[Optional[str]] = mapped_column(VARCHAR(26), ForeignKey("ai_models.id", ondelete="SET NULL"))
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    call_spec_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("call_specs.id", ondelete="CASCADE"), nullable=False, index=True)
+    call_spec_version_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("call_spec_versions.id", ondelete="CASCADE"), nullable=False)
+    credential_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("api_credentials.id", ondelete="SET NULL"))
+    provider_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("ai_providers.id", ondelete="SET NULL"))
+    model_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("ai_models.id", ondelete="SET NULL"))
 
     status: Mapped[str] = mapped_column(VARCHAR(50), nullable=False, index=True)
     http_status: Mapped[int] = mapped_column(INT, nullable=False)
@@ -257,8 +317,8 @@ class ApiRequest(Base):
 class UserUsageDaily(Base):
     __tablename__ = "user_usage_daily"
 
-    id: Mapped[str] = mapped_column(VARCHAR(26), primary_key=True)
-    user_id: Mapped[str] = mapped_column(VARCHAR(26), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     usage_date: Mapped[date] = mapped_column(DATE, nullable=False)
     total_requests: Mapped[int] = mapped_column(INT, default=0, nullable=False)
     successful_requests: Mapped[int] = mapped_column(INT, default=0, nullable=False)

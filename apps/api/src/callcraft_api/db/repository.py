@@ -189,6 +189,21 @@ class Repository:
             ver_res = await db.execute(ver_stmt)
             ver = ver_res.scalar_one_or_none()
 
+            likes_count = 0
+            fork_count = 0
+            rating_avg = 5.0
+            reviews_count = 0
+
+            if spec.published_template_id:
+                t_stmt = select(Template).where(Template.id == spec.published_template_id)
+                t_res = await db.execute(t_stmt)
+                tmpl = t_res.scalar_one_or_none()
+                if tmpl:
+                    likes_count = tmpl.likes_count
+                    fork_count = tmpl.fork_count
+                    rating_avg = float(tmpl.rating_avg) if tmpl.rating_avg is not None else 5.0
+                    reviews_count = tmpl.reviews_count
+
             output.append({
                 "id": spec.id,
                 "user_id": spec.user_id,
@@ -197,6 +212,14 @@ class Repository:
                 "description": spec.description,
                 "activeVersionNumber": spec.active_version_number,
                 "status": spec.status,
+                "allowPdfInput": spec.allow_pdf_input,
+                "useExternalApiKey": spec.use_external_api_key,
+                "isPublished": spec.is_published,
+                "publishedTemplateId": spec.published_template_id,
+                "likesCount": likes_count,
+                "forkCount": fork_count,
+                "ratingAvg": rating_avg,
+                "reviewsCount": reviews_count,
                 "updatedAt": spec.updated_at.isoformat() if spec.updated_at else datetime.now(timezone.utc).isoformat(),
                 "responseSchema": ver.response_schema if ver else {},
             })

@@ -38,15 +38,22 @@ _use_fallback = False
 _fallback_initialized = False
 
 
+_postgres_initialized = False
+
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Yields active PostgreSQL session, or falls back to initialized in-memory database session."""
-    global _use_fallback, _fallback_initialized
+    global _use_fallback, _fallback_initialized, _postgres_initialized
 
     if not _use_fallback:
         session = AsyncSessionLocal()
         try:
-            # Test connection
-            await session.connection()
+            # Test connection & initialize schema
+            if not _postgres_initialized:
+                from callcraft_api.db.init_db import init_db
+                await init_db(session)
+                _postgres_initialized = True
+
             try:
                 yield session
                 return
