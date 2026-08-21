@@ -1,6 +1,7 @@
 import logging
 from typing import AsyncGenerator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from callcraft_api.config import settings
 
 logger = logging.getLogger("callcraft.db")
@@ -15,8 +16,7 @@ elif db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
 engine = create_async_engine(
     db_url,
     echo=settings.app_env == "development",
-    pool_size=10,
-    max_overflow=20,
+    poolclass=NullPool,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -45,24 +45,20 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Yields active PostgreSQL session, or falls back to initialized in-memory database session."""
     global _use_fallback, _fallback_initialized, _postgres_initialized
 
-    if not _use_fallback:
-        session = AsyncSessionLocal()
+    if not _use_fallback and not _postgres_initialized:
+        _postgres_initialized = True
         try:
-            # Test connection & initialize schema
-            if not _postgres_initialized:
+            async with AsyncSessionLocal() as init_sess:
                 from callcraft_api.db.init_db import init_db
-                await init_db(session)
-                _postgres_initialized = True
-
-            try:
-                yield session
-                return
-            finally:
-                await session.close()
+                await init_db(init_sess)
         except Exception as conn_err:
-            await session.close()
             logger.warning(f"PostgreSQL connection offline ({conn_err}), switching to in-memory DB fallback.")
             _use_fallback = True
+
+    if not _use_fallback:
+        async with AsyncSessionLocal() as session:
+            yield session
+        return
 
     # Fallback to in-memory SQLite session
     if not _fallback_initialized:

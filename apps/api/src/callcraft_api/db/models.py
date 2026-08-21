@@ -98,6 +98,7 @@ class ApiCredential(Base):
     public_key: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False, index=True)
     secret_key_hash: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     environment: Mapped[str] = mapped_column(VARCHAR(20), default="production", nullable=False)
+    ip_whitelist: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

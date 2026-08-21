@@ -8,235 +8,15 @@ import {
   Sparkles,
   Plus,
   Code,
-  Trash2,
-  Sliders,
-  Layers,
-  Bot,
   FileCode2,
-  ExternalLink,
-  ShieldCheck,
-  AlertTriangle,
+  Sliders,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
-
-export interface SchemaField {
-  id: string;
-  name: string;
-  type: "string" | "number" | "integer" | "boolean" | "date" | "enum" | "object" | "array";
-  required: boolean;
-  description?: string;
-  enumValues?: string;
-  arrayItemType?: "string" | "number" | "object";
-  properties?: SchemaField[];
-}
-
-// Standalone Component to Render Field Rows & Child Properties without focus loss
-function FieldListRenderer({
-  fields,
-  onChange,
-  onDelete,
-  depth = 0,
-}: {
-  fields: SchemaField[];
-  onChange: (updated: SchemaField[]) => void;
-  onDelete: (id: string) => void;
-  depth?: number;
-}) {
-  return (
-    <div className={`space-y-3 ${depth > 0 ? "pl-4 border-l-2 border-indigo-500/30 my-2" : ""}`}>
-      {fields.map((field, idx) => (
-        <div
-          key={field.id}
-          className="p-4 rounded-xl glass-panel border border-slate-800 space-y-3 bg-slate-900/60 transition-all hover:border-slate-700"
-        >
-          {/* Top Bar: Name, Type Selector, Required, and Delete Button */}
-          <div className="grid grid-cols-12 gap-3 items-center">
-            <div className="col-span-4">
-              <input
-                type="text"
-                value={field.name}
-                onChange={(e) => {
-                  const next = [...fields];
-                  next[idx] = { ...next[idx], name: e.target.value };
-                  onChange(next);
-                }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none focus:border-indigo-500"
-                placeholder="field_name"
-              />
-            </div>
-
-            <div className="col-span-4">
-              <select
-                value={field.type}
-                onChange={(e) => {
-                  const next = [...fields];
-                  const newType = e.target.value as any;
-                  const updated = { ...next[idx], type: newType };
-                  if (newType === "object" && !updated.properties) {
-                    updated.properties = [];
-                  }
-                  if (newType === "array" && !updated.arrayItemType) {
-                    updated.arrayItemType = "string";
-                  }
-                  next[idx] = updated;
-                  onChange(next);
-                }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-semibold"
-              >
-                <option value="string">string (Text)</option>
-                <option value="number">number (Float)</option>
-                <option value="integer">integer (Whole Num)</option>
-                <option value="boolean">boolean (True/False)</option>
-                <option value="date">date (YYYY-MM-DD)</option>
-                <option value="enum">enum (Options)</option>
-                <option value="object">object (Nested Properties)</option>
-                <option value="array">array (List Items)</option>
-              </select>
-            </div>
-
-            <div className="col-span-3 flex items-center gap-2">
-              <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={field.required}
-                  onChange={(e) => {
-                    const next = [...fields];
-                    next[idx] = { ...next[idx], required: e.target.checked };
-                    onChange(next);
-                  }}
-                  className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0"
-                />
-                <span>Required</span>
-              </label>
-            </div>
-
-            <div className="col-span-1 flex justify-end">
-              <button
-                type="button"
-                onClick={() => onDelete(field.id)}
-                title="Delete field"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Description Input */}
-          <div>
-            <input
-              type="text"
-              value={field.description || ""}
-              onChange={(e) => {
-                const next = [...fields];
-                next[idx] = { ...next[idx], description: e.target.value };
-                onChange(next);
-              }}
-              className="w-full bg-slate-950/60 border border-slate-800/80 rounded-lg px-2.5 py-1 text-[11px] text-slate-400 focus:outline-none focus:border-slate-700"
-              placeholder="Field description/instructions for AI model..."
-            />
-          </div>
-
-          {/* Enum Value Options */}
-          {field.type === "enum" && (
-            <div className="pt-1">
-              <label className="text-[10px] font-semibold text-purple-300">Allowed Enum Values (comma-separated):</label>
-              <input
-                type="text"
-                value={field.enumValues || ""}
-                onChange={(e) => {
-                  const next = [...fields];
-                  next[idx] = { ...next[idx], enumValues: e.target.value };
-                  onChange(next);
-                }}
-                className="w-full mt-1 bg-slate-950 border border-purple-500/30 rounded-lg px-2.5 py-1 text-xs text-purple-200 font-mono focus:outline-none"
-                placeholder="LAKI-LAKI, PEREMPUAN"
-              />
-            </div>
-          )}
-
-          {/* Array Options */}
-          {field.type === "array" && (
-            <div className="pt-1 space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] font-medium text-slate-400">Array Item Element Type:</span>
-                <select
-                  value={field.arrayItemType || "string"}
-                  onChange={(e) => {
-                    const next = [...fields];
-                    const updated = { ...next[idx], arrayItemType: e.target.value as any };
-                    if (e.target.value === "object" && !updated.properties) {
-                      updated.properties = [];
-                    }
-                    next[idx] = updated;
-                    onChange(next);
-                  }}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-indigo-300 font-semibold"
-                >
-                  <option value="string">string</option>
-                  <option value="number">number</option>
-                  <option value="object">object (Array of Nested Objects)</option>
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* Child Properties for Objects or Array of Objects */}
-          {(field.type === "object" || (field.type === "array" && field.arrayItemType === "object")) && (
-            <div className="pt-2 border-t border-slate-800/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Sub-Properties ({field.properties?.length || 0})</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = [...fields];
-                    const childList = [...(next[idx].properties || [])];
-                    childList.push({
-                      id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                      name: "",
-                      type: "string",
-                      required: true,
-                    });
-                    next[idx] = { ...next[idx], properties: childList };
-                    onChange(next);
-                  }}
-                  className="px-2.5 py-1 rounded-md bg-indigo-600/20 text-indigo-300 text-[11px] font-medium hover:bg-indigo-600/30 flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Add Sub-Property</span>
-                </button>
-              </div>
-
-              {field.properties && field.properties.length > 0 ? (
-                <FieldListRenderer
-                  fields={field.properties}
-                  onChange={(updatedChildren) => {
-                    const next = [...fields];
-                    next[idx] = { ...next[idx], properties: updatedChildren };
-                    onChange(next);
-                  }}
-                  onDelete={(childId) => {
-                    const next = [...fields];
-                    next[idx] = {
-                      ...next[idx],
-                      properties: (next[idx].properties || []).filter((c) => c.id !== childId),
-                    };
-                    onChange(next);
-                  }}
-                  depth={depth + 1}
-                />
-              ) : (
-                <p className="text-[11px] text-slate-500 italic pl-2">No child properties added yet.</p>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
+import { SchemaField } from "@/components/schema-builder/types";
+import { FieldListRenderer } from "@/components/schema-builder/field-list-renderer";
+import { SchemaPreview } from "@/components/schema-builder/schema-preview";
+import { ExecutionSettings } from "@/components/schema-builder/execution-settings";
 
 export default function VisualSchemaBuilderPage({ params }: { params: { id: string } }) {
   const [activeTab, setActiveTab] = useState<"response" | "request" | "settings">("response");
@@ -250,11 +30,12 @@ export default function VisualSchemaBuilderPage({ params }: { params: { id: stri
     "Verify NIK structure against 16-digit standard. Ensure all text fields are uppercase."
   );
 
-  // Status mapping for AI Provider Key configured status (queried from /keys)
+  // Provider configured status (queried from /keys)
   const providerKeyStatus: Record<string, { active: boolean; label: string }> = {
     gemini: { active: true, label: "Google Gemini Key Configured & Active" },
     openai: { active: true, label: "OpenAI Key Configured & Active" },
     anthropic: { active: false, label: "Anthropic Key Required (Inactive)" },
+    mistral: { active: false, label: "Mistral Key Required (Inactive)" },
     deepseek: { active: false, label: "DeepSeek Key Required (Inactive)" },
   };
 
@@ -262,6 +43,7 @@ export default function VisualSchemaBuilderPage({ params }: { params: { id: stri
     if (model.startsWith("gemini")) return "gemini";
     if (model.startsWith("gpt")) return "openai";
     if (model.startsWith("claude")) return "anthropic";
+    if (model.startsWith("mistral") || model.startsWith("pixtral")) return "mistral";
     if (model.startsWith("deepseek") || model.startsWith("ocr")) return "deepseek";
     return "gemini";
   };
@@ -314,58 +96,13 @@ export default function VisualSchemaBuilderPage({ params }: { params: { id: stri
   ]);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
-
-  // Helper function to build standard JSON schema from field list recursively
-  const buildJsonSchema = (fieldList: SchemaField[]): Record<string, any> => {
-    const properties: Record<string, any> = {};
-    const requiredFields: string[] = [];
-
-    fieldList.forEach((f) => {
-      if (!f.name.trim()) return;
-      if (f.required) requiredFields.push(f.name);
-
-      if (f.type === "enum") {
-        properties[f.name] = {
-          type: "string",
-          enum: f.enumValues ? f.enumValues.split(",").map((s) => s.trim()).filter(Boolean) : [],
-          description: f.description || undefined,
-        };
-      } else if (f.type === "array") {
-        if (f.arrayItemType === "object" && f.properties && f.properties.length > 0) {
-          properties[f.name] = {
-            type: "array",
-            items: buildJsonSchema(f.properties),
-            description: f.description || undefined,
-          };
-        } else {
-          properties[f.name] = {
-            type: "array",
-            items: { type: f.arrayItemType || "string" },
-            description: f.description || undefined,
-          };
-        }
-      } else if (f.type === "object") {
-        properties[f.name] = buildJsonSchema(f.properties || []);
-        if (f.description) properties[f.name].description = f.description;
-      } else {
-        properties[f.name] = {
-          type: f.type,
-          description: f.description || undefined,
-        };
-      }
-    });
-
-    return {
-      type: "object",
-      properties,
-      ...(requiredFields.length > 0 ? { required: requiredFields } : {}),
-    };
-  };
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [expandedPanel, setExpandedPanel] = useState<"editor" | "preview" | null>(null);
 
   const currentFieldList = activeTab === "request" ? requestFields : responseFields;
   const setCurrentFieldList = activeTab === "request" ? setRequestFields : setResponseFields;
 
-  const handleAddField = (parentProperties?: SchemaField[], setParentProperties?: (p: SchemaField[]) => void) => {
+  const handleAddField = () => {
     const newField: SchemaField = {
       id: `field_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: "",
@@ -373,15 +110,10 @@ export default function VisualSchemaBuilderPage({ params }: { params: { id: stri
       required: true,
       description: "",
     };
-
-    if (parentProperties && setParentProperties) {
-      setParentProperties([...parentProperties, newField]);
-    } else {
-      setCurrentFieldList([...currentFieldList, newField]);
-    }
+    setCurrentFieldList([...currentFieldList, newField]);
   };
 
-  const handleDeleteField = (id: string, list: SchemaField[], setList: (l: SchemaField[]) => void) => {
+  const handleDeleteField = (id: string) => {
     const filterRecursive = (items: SchemaField[]): SchemaField[] => {
       return items
         .filter((item) => item.id !== id)
@@ -390,7 +122,7 @@ export default function VisualSchemaBuilderPage({ params }: { params: { id: stri
           properties: item.properties ? filterRecursive(item.properties) : undefined,
         }));
     };
-    setList(filterRecursive(list));
+    setCurrentFieldList(filterRecursive(currentFieldList));
   };
 
   const handleSave = () => {
@@ -399,30 +131,37 @@ export default function VisualSchemaBuilderPage({ params }: { params: { id: stri
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 max-w-7xl mx-auto pb-6 lg:h-[calc(100vh-100px)] flex flex-col">
       {/* Top Action Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#edd6bb]/25 gap-4 shrink-0">
         <div className="flex items-center gap-4">
-          <Link href="/specs" className="p-2 rounded-xl glass-panel text-slate-400 hover:text-slate-200">
+          <Link
+            href="/specs"
+            className="p-2 rounded-xl glass-panel text-[#8a715e] dark:text-[#edd6bb] hover:bg-[#e1b329]/15 border border-[#edd6bb]/25 transition-all"
+            title="Back to API Specs list"
+          >
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-              <Code className="w-5 h-5 text-indigo-400" />
+            <h1 className="text-xl font-extrabold flex items-center gap-2">
+              <Code className="w-5 h-5 text-[#e1b329]" />
               <span>Visual API Schema Builder</span>
             </h1>
-            <p className="text-xs text-slate-400">Spec ID: {params.id}</p>
+            <p className="text-xs opacity-75 font-mono">Spec ID: {params.id}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           {savedSuccess && (
-            <span className="text-xs text-emerald-400 font-semibold animate-pulse">✓ Saved Successfully</span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">
+              ✓ Saved Successfully
+            </span>
           )}
           <button
             type="button"
             onClick={handleSave}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all"
+            title="Save changes and publish schema version"
+            className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-xs font-extrabold shadow-lg shadow-[#e1b329]/20 flex items-center gap-2 transition-all"
           >
             <Save className="w-4 h-4" />
             <span>Save & Publish Version</span>
@@ -430,222 +169,168 @@ export default function VisualSchemaBuilderPage({ params }: { params: { id: stri
         </div>
       </div>
 
-      {/* Navigation Tabs (Request, Response, Settings) */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("response")}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-            activeTab === "response"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-              : "text-slate-400 hover:text-slate-200 glass-panel"
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>Response Schema (AI Output)</span>
-        </button>
+      {/* Redesigned Navigation Tabs with Crisp Grid Borders & Visual Separators */}
+      <div className="shrink-0 overflow-x-auto max-w-full pb-1">
+        <div className="inline-flex items-center whitespace-nowrap rounded-2xl bg-[#0d0907]/60 dark:bg-black/60 p-1.5 border border-[#edd6bb]/30 dark:border-[#edd6bb]/20 shadow-md">
+          <button
+            type="button"
+            onClick={() => setActiveTab("response")}
+            title="Define target structured output fields for AI responses"
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border-r border-[#edd6bb]/20 last:border-r-0 ${
+              activeTab === "response"
+                ? "bg-[#e1b329] text-slate-950 shadow-md shadow-[#e1b329]/20 font-extrabold ring-1 ring-[#e1b329]"
+                : "text-[#edd6bb]/80 hover:text-[#edd6bb] hover:bg-[#edd6bb]/10"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-inherit" />
+            <span>Response Schema (AI Output)</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("request")}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-            activeTab === "request"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-              : "text-slate-400 hover:text-slate-200 glass-panel"
-          }`}
-        >
-          <FileCode2 className="w-4 h-4" />
-          <span>Request Schema (Input Payload)</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("request")}
+            title="Define input payload parameters sent by client applications"
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border-r border-[#edd6bb]/20 last:border-r-0 ${
+              activeTab === "request"
+                ? "bg-[#e1b329] text-slate-950 shadow-md shadow-[#e1b329]/20 font-extrabold ring-1 ring-[#e1b329]"
+                : "text-[#edd6bb]/80 hover:text-[#edd6bb] hover:bg-[#edd6bb]/10"
+            }`}
+          >
+            <FileCode2 className="w-4 h-4 text-inherit" />
+            <span>Request Schema (Input Payload)</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("settings")}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-            activeTab === "settings"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-              : "text-slate-400 hover:text-slate-200 glass-panel"
-          }`}
-        >
-          <Sliders className="w-4 h-4" />
-          <span>Prompt & Execution Settings</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("settings")}
+            title="Configure system prompt, instructions, and target AI models"
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              activeTab === "settings"
+                ? "bg-[#e1b329] text-slate-950 shadow-md shadow-[#e1b329]/20 font-extrabold ring-1 ring-[#e1b329]"
+                : "text-[#edd6bb]/80 hover:text-[#edd6bb] hover:bg-[#edd6bb]/10"
+            }`}
+          >
+            <Sliders className="w-4 h-4 text-inherit" />
+            <span>Prompt & Execution Settings</span>
+          </button>
+        </div>
       </div>
 
-      {/* Main Split Screen */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Main Split Screen with Independent Expandable Panels */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 flex-1 min-h-[480px] h-[520px] lg:h-full overflow-hidden relative">
+        {/* Fullscreen Backdrop Overlay when a panel is expanded */}
+        {expandedPanel !== null && (
+          <div
+            onClick={() => setExpandedPanel(null)}
+            className="fixed inset-0 z-[998] bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+          />
+        )}
+
         {/* Left Panel: Schema Editor Nodes */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-5">
+        <div
+          className={`glass-panel p-4 sm:p-5 rounded-2xl border border-[#edd6bb]/25 flex flex-col overflow-hidden shadow-xl transition-all ${
+            expandedPanel === "editor"
+              ? "fixed inset-3 sm:inset-5 z-[999] bg-[#fdfaf5] dark:bg-[#120e0b] h-[calc(100vh-2.5rem)] w-[calc(100vw-2.5rem)] border-[#e1b329]/50 shadow-2xl"
+              : expandedPanel === "preview"
+              ? "hidden"
+              : "h-full"
+          }`}
+        >
           {activeTab === "settings" ? (
-            <div className="space-y-5">
-              <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-indigo-400" />
-                <span>API & Model Configurations</span>
-              </h3>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300">Spec Name</label>
-                    <input
-                      type="text"
-                      value={specName}
-                      onChange={(e) => setSpecName(e.target.value)}
-                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300">API Slug</label>
-                    <input
-                      type="text"
-                      value={specSlug}
-                      onChange={(e) => setSpecSlug(e.target.value)}
-                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                {/* AI Model Selector */}
-                <div className="space-y-3 p-4 rounded-xl glass-panel border border-slate-800 bg-slate-900/40">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                      <Bot className="w-4 h-4 text-purple-400" />
-                      <span>Preferred Execution AI Model</span>
-                    </label>
-
-                    {/* Simple Provider Key Status Badge */}
-                    {currentProviderStatus.active ? (
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                        <span>Key Configured</span>
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 text-[10px] font-semibold border border-amber-500/20 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3 text-amber-400" />
-                        <span>Key Setup Required</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-semibold focus:outline-none focus:border-indigo-500"
-                  >
-                    <optgroup label="Google Gemini (Key Configured)">
-                      <option value="gemini-3.6-flash">Gemini 3.6 Flash (Default - Fast Vision & Tools)</option>
-                      <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-                      <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
-                    </optgroup>
-                    <optgroup label="OpenAI (Key Configured)">
-                      <option value="gpt-5.6-luna">GPT-5.6 Luna (High Accuracy Reasoning)</option>
-                      <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
-                      <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
-                    </optgroup>
-                    <optgroup label="Anthropic Claude (Setup Required in API Keys menu)">
-                      <option value="claude-sonnet-5">Claude Sonnet 5</option>
-                      <option value="claude-opus-5">Claude Opus 5</option>
-                      <option value="claude-haiku-4.5">Claude Haiku 4.5</option>
-                    </optgroup>
-                    <optgroup label="DeepSeek & OCR (Setup Required in API Keys menu)">
-                      <option value="deepseek-vl2">DeepSeek VL2 (Multimodal Vision)</option>
-                      <option value="deepseek-ocr">DeepSeek OCR Engine</option>
-                      <option value="ocr-4.1">OCR 4.1 Precision Engine</option>
-                    </optgroup>
-                  </select>
-
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">Manage, test, or update AI Provider API keys:</span>
-                    <Link
-                      href="/keys"
-                      className="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 transition-colors"
-                    >
-                      <span>API Credentials Menu</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </Link>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300">System Extraction Prompt (System Role)</label>
-                  <textarea
-                    rows={3}
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    className="w-full mt-1.5 bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 leading-relaxed font-sans"
-                    placeholder="Base system prompt given to the AI model..."
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                    <span>Preset Extraction Directives (Additional Spec Prompt)</span>
-                    <span className="text-[10px] text-indigo-400 font-normal">Appended to extraction instructions</span>
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={extractionPrompt}
-                    onChange={(e) => setExtractionPrompt(e.target.value)}
-                    className="w-full mt-1.5 bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-indigo-200 focus:outline-none focus:border-indigo-500 leading-relaxed font-sans"
-                    placeholder="Specific directives for this API spec (e.g. Ensure NIK is 16 digits, format all text to uppercase)..."
-                  />
-                </div>
-              </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <ExecutionSettings
+                specName={specName}
+                setSpecName={setSpecName}
+                specSlug={specSlug}
+                setSpecSlug={setSpecSlug}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                systemPrompt={systemPrompt}
+                setSystemPrompt={setSystemPrompt}
+                extractionPrompt={extractionPrompt}
+                setExtractionPrompt={setExtractionPrompt}
+                currentProviderStatus={currentProviderStatus}
+              />
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+            <div className="flex flex-col h-full overflow-hidden space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#edd6bb]/20 shrink-0">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-200">
+                  <h3 className="text-sm font-extrabold">
                     {activeTab === "response" ? "Response Schema Fields (Target AI Output)" : "Request Schema Fields (Input API Payload)"}
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] opacity-75">
                     {activeTab === "response"
-                      ? "Define structured output fields, nested objects, and item arrays."
+                      ? "Define structured output fields, nested objects, item arrays, and drag-and-drop hierarchy."
                       : "Define input fields sent by client applications (e.g. image, prompt, metadata)."}
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleAddField()}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Property</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleAddField}
+                    title="Add a new root-level property to the schema"
+                    className="px-3 py-1.5 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-xs font-extrabold shadow-md shadow-[#e1b329]/20 flex items-center gap-1.5 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Property</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExpandedPanel(expandedPanel === "editor" ? null : "editor")}
+                    title={expandedPanel === "editor" ? "Restore split screen view" : "Maximize editor panel to full screen vertical overlay"}
+                    className="p-2 rounded-xl glass-panel text-[#8a715e] dark:text-[#edd6bb] hover:bg-[#e1b329]/20 border border-[#edd6bb]/25 transition-all"
+                  >
+                    {expandedPanel === "editor" ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
-              {currentFieldList.length > 0 ? (
-                <FieldListRenderer
-                  fields={currentFieldList}
-                  onChange={(updated) => setCurrentFieldList(updated)}
-                  onDelete={(id) => handleDeleteField(id, currentFieldList, setCurrentFieldList)}
-                />
-              ) : (
-                <div className="text-center py-8 text-slate-500 text-xs italic">
-                  No properties added yet. Click &quot;Add Property&quot; to define fields.
-                </div>
-              )}
+              {/* Scrollable Container for Field Cards */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar px-2 py-1 space-y-3">
+                {currentFieldList.length > 0 ? (
+                  <FieldListRenderer
+                    fields={currentFieldList}
+                    allRootFields={currentFieldList}
+                    onChange={(updated) => setCurrentFieldList(updated)}
+                    onDelete={(id) => handleDeleteField(id)}
+                    selectedFieldId={selectedFieldId}
+                    onSelectFieldId={setSelectedFieldId}
+                  />
+                ) : (
+                  <div className="text-center py-12 opacity-60 text-xs italic">
+                    No properties added yet. Click &quot;Add Property&quot; to define fields.
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
 
         {/* Right Panel: Real-Time JSON Schema Preview */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 flex flex-col">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <span>Real-Time JSON Schema Preview ({activeTab.toUpperCase()})</span>
-            </h3>
-            <span className="text-[11px] text-slate-400 font-mono">Pydantic v2 & OpenAPI 3.0 Compatible</span>
-          </div>
-
-          <div className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-400 overflow-x-auto min-h-[380px]">
-            <pre>{JSON.stringify(buildJsonSchema(currentFieldList), null, 2)}</pre>
-          </div>
+        <div
+          className={`overflow-hidden flex flex-col transition-all ${
+            expandedPanel === "preview"
+              ? "fixed inset-3 sm:inset-5 z-[999] bg-[#fdfaf5] dark:bg-[#120e0b] h-[calc(100vh-2.5rem)] w-[calc(100vw-2.5rem)] rounded-2xl border border-[#e1b329]/50 shadow-2xl p-1"
+              : expandedPanel === "editor"
+              ? "hidden"
+              : "h-full"
+          }`}
+        >
+          <SchemaPreview
+            fields={currentFieldList}
+            activeTabName={activeTab}
+            selectedFieldId={selectedFieldId}
+            onSelectFieldId={setSelectedFieldId}
+            isExpanded={expandedPanel === "preview"}
+            onToggleExpand={() => setExpandedPanel(expandedPanel === "preview" ? null : "preview")}
+          />
         </div>
       </div>
     </div>
   );
 }
+
+

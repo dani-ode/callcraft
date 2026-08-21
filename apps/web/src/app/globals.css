@@ -143,7 +143,7 @@ html.light body {
 }
 
 html.light p,
-html.light span:not([class*="bg-"]):not([class*="text-"]):not(.gradient-text),
+html.light span:not([class*="bg-"]):not([class*="text-"]):not(.gradient-text):not([class*="mtk"]):not(.monaco-editor *),
 html.light label,
 html.light td,
 html.light th {

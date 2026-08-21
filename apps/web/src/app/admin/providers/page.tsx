@@ -48,6 +48,15 @@ export default function AdminProvidersPage() {
       testStatus: "idle",
       saved: false,
     },
+    mistral: {
+      code: "mistral",
+      name: "Mistral AI",
+      key: "",
+      getKeyUrl: "https://console.mistral.ai/api-keys",
+      isActive: false,
+      testStatus: "idle",
+      saved: false,
+    },
     deepseek: {
       code: "deepseek",
       name: "DeepSeek AI",
@@ -239,14 +248,14 @@ export default function AdminProvidersPage() {
                   <button
                     onClick={() => handleTestConnection(prov.code)}
                     disabled={!prov.key.trim() || prov.testStatus === "testing"}
-                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-semibold shadow-md shadow-purple-600/20 flex items-center gap-1.5 transition-all"
+                    className="px-4 py-2 rounded-xl bg-[#edd6bb]/60 hover:bg-[#e1b329]/25 text-[#2c1d11] dark:bg-[#e1b329]/20 dark:hover:bg-[#e1b329]/30 dark:text-[#ffb443] border border-[#e1b329]/60 dark:border-[#e1b329]/50 font-extrabold text-xs shadow-sm disabled:opacity-40 flex items-center justify-center gap-1.5 transition-all shrink-0"
                   >
                     {prov.testStatus === "testing" ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#e1b329]" />
                     ) : (
-                      <Zap className="w-3.5 h-3.5" />
+                      <Zap className="w-3.5 h-3.5 text-[#e1b329] fill-[#e1b329]/20" />
                     )}
-                    <span>{prov.testStatus === "testing" ? "Testing..." : "Test Connection"}</span>
+                    <span className="font-extrabold">{prov.testStatus === "testing" ? "Testing..." : "Test Connection"}</span>
                   </button>
 
                   <button

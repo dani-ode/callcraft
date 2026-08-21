@@ -57,6 +57,7 @@ class Repository:
                     "name": cred.name,
                     "public_key": cred.public_key,
                     "environment": cred.environment,
+                    "ip_whitelist": cred.ip_whitelist or [],
                 }
 
         return None
@@ -133,6 +134,46 @@ class Repository:
         return True
 
     @staticmethod
+    async def list_user_ai_providers(
+        db: Optional[AsyncSession], user_id: str
+    ) -> List[Dict[str, Any]]:
+        """Lists active decrypted user AI provider API keys."""
+        if db is None:
+            return []
+
+        stmt = select(UserAiProvider, AiProvider).join(
+            AiProvider, UserAiProvider.provider_id == AiProvider.id
+        ).where(
+            UserAiProvider.user_id == user_id,
+            UserAiProvider.is_active.is_(True),
+        )
+        res = await db.execute(stmt)
+        rows = res.all()
+
+        results = []
+        for user_prov, prov in rows:
+            decrypted = None
+            try:
+                decrypted = decrypt_aes_256_gcm(
+                    user_prov.encrypted_api_key,
+                    user_prov.key_nonce,
+                    settings.master_encryption_key,
+                )
+            except Exception as e:
+                logger.error(f"Failed to decrypt provider key for '{prov.code}': {e}")
+                decrypted = None
+
+            results.append({
+                "id": user_prov.id,
+                "providerCode": prov.code,
+                "providerName": prov.name,
+                "key": decrypted or "",
+                "isActive": user_prov.is_active,
+                "updatedAt": user_prov.updated_at.isoformat() if user_prov.updated_at else None,
+            })
+        return results
+
+    @staticmethod
     async def get_call_spec(
         db: Optional[AsyncSession], user_id: str, spec_id_or_slug: str
     ) -> Optional[Dict[str, Any]]:
@@ -201,7 +242,7 @@ class Repository:
                 if tmpl:
                     likes_count = tmpl.likes_count
                     fork_count = tmpl.fork_count
-                    rating_avg = float(tmpl.rating_avg) if tmpl.rating_avg is not None else 5.0
+                    rating_avg = tmpl.rating_avg if tmpl.rating_avg is not None else 5.0
                     reviews_count = tmpl.reviews_count
 
             output.append({
@@ -313,6 +354,7 @@ class Repository:
                 "name": c.name,
                 "publicKey": c.public_key,
                 "environment": c.environment,
+                "ipWhitelist": c.ip_whitelist or [],
                 "createdAt": c.created_at.isoformat() if c.created_at else datetime.now(timezone.utc).isoformat(),
                 "lastUsedAt": c.last_used_at.isoformat() if c.last_used_at else None,
             }
@@ -321,13 +363,15 @@ class Repository:
 
     @staticmethod
     async def create_api_credential(
-        db: AsyncSession, user_id: str, name: str, environment: str = "production"
+        db: AsyncSession, user_id: str, name: str, environment: str = "production", ip_whitelist: Optional[List[str]] = None
     ) -> Tuple[Dict[str, Any], str]:
         """Creates new API credential pair. Returns (credential_dict, secret_key)."""
         cred_id = f"crd_{str(ulid.new())}"
         public_key = f"pk_live_{str(ulid.new())[:16]}"
         secret_key = f"call_sk_live_{str(ulid.new())}"
         secret_hash = hash_secret_argon2(secret_key)
+
+        clean_ip_whitelist = [ip.strip() for ip in (ip_whitelist or []) if ip and ip.strip()]
 
         cred = ApiCredential(
             id=cred_id,
@@ -336,6 +380,7 @@ class Repository:
             public_key=public_key,
             secret_key_hash=secret_hash,
             environment=environment,
+            ip_whitelist=clean_ip_whitelist,
         )
         db.add(cred)
         await db.commit()
@@ -345,8 +390,39 @@ class Repository:
             "name": cred.name,
             "publicKey": cred.public_key,
             "environment": cred.environment,
+            "ipWhitelist": cred.ip_whitelist,
             "createdAt": cred.created_at.isoformat(),
         }, secret_key
+
+    @staticmethod
+    async def update_api_credential_ip_whitelist(
+        db: AsyncSession, key_id: str, user_id: str, ip_whitelist: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """Updates IP whitelist for a given customer API credential."""
+        clean_ip_whitelist = [ip.strip() for ip in ip_whitelist if ip and ip.strip()]
+
+        stmt = select(ApiCredential).where(
+            ApiCredential.id == key_id,
+            ApiCredential.user_id == user_id,
+            ApiCredential.revoked_at.is_(None),
+        )
+        res = await db.execute(stmt)
+        cred = res.scalar_one_or_none()
+        if not cred:
+            return None
+
+        cred.ip_whitelist = clean_ip_whitelist
+        await db.commit()
+
+        return {
+            "id": cred.id,
+            "name": cred.name,
+            "publicKey": cred.public_key,
+            "environment": cred.environment,
+            "ipWhitelist": cred.ip_whitelist,
+            "createdAt": cred.created_at.isoformat() if cred.created_at else datetime.now(timezone.utc).isoformat(),
+            "lastUsedAt": cred.last_used_at.isoformat() if cred.last_used_at else None,
+        }
 
     @staticmethod
     async def list_api_requests(db: Optional[AsyncSession], user_id: str, limit: int = 50) -> List[Dict[str, Any]]:

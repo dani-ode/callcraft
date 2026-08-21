@@ -43,3 +43,4 @@ bun.lockb
 # Docker / Temporary
 *.log
 docker_data/
+*.tsbuildinfo

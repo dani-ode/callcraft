@@ -22,6 +22,7 @@ export interface ApiCredential {
   publicKey: string;
   secretKeyHash?: string;
   environment: string;
+  ipWhitelist?: string[];
   createdAt: string;
   lastUsedAt?: string;
 }

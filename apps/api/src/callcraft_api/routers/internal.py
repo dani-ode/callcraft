@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from callcraft_api.db.models import AppInit, Template, TemplateLike, TemplateComment, CallSpec, CallSpecVersion
 from callcraft_api.db.repository import Repository
 from callcraft_api.db.session import get_db_session
+from callcraft_engine import validate_ip_or_cidr
 
 router = APIRouter(prefix="/internal/v1", tags=["Internal Service Auth"])
 
@@ -28,6 +29,11 @@ class CreateSpecRequest(BaseModel):
 class CreateApiKeyRequest(BaseModel):
     name: str = Field(..., description="Key description name")
     environment: str = Field("production")
+    ip_whitelist: Optional[List[str]] = Field(default=None, description="Optional array of whitelisted IP addresses / CIDRs")
+
+
+class UpdateApiKeyWhitelistRequest(BaseModel):
+    ip_whitelist: List[str] = Field(..., description="Array of whitelisted IP addresses / CIDR subnets")
 
 
 class UpdateAppInitRequest(BaseModel):
@@ -208,7 +214,7 @@ async def list_templates(
             "isPublished": t.is_published,
             "forkCount": t.fork_count,
             "likesCount": t.likes_count,
-            "ratingAvg": float(t.rating_avg) if t.rating_avg is not None else 5.0,
+            "ratingAvg": t.rating_avg if t.rating_avg is not None else 5.0,
             "reviewsCount": t.reviews_count,
             "isLiked": t.id in liked_ids,
             "requestSchema": t.request_schema,
@@ -411,7 +417,7 @@ async def add_template_comment(
         "rating": new_cmt.rating,
         "comment": new_cmt.comment,
         "createdAt": new_cmt.created_at.isoformat() if new_cmt.created_at else None,
-        "ratingAvg": float(tmpl.rating_avg) if tmpl.rating_avg is not None else 5.0,
+        "ratingAvg": tmpl.rating_avg if tmpl.rating_avg is not None else 5.0,
         "reviewsCount": tmpl.reviews_count,
     }
 
@@ -457,7 +463,7 @@ async def get_spec_publication(
                 "category": tmpl_obj.category,
                 "forkCount": tmpl_obj.fork_count,
                 "likesCount": tmpl_obj.likes_count,
-                "ratingAvg": float(tmpl_obj.rating_avg) if tmpl_obj.rating_avg is not None else 5.0,
+                "ratingAvg": tmpl_obj.rating_avg if tmpl_obj.rating_avg is not None else 5.0,
                 "reviewsCount": tmpl_obj.reviews_count,
                 "createdAt": tmpl_obj.created_at.isoformat() if tmpl_obj.created_at else None,
             }
@@ -627,13 +633,47 @@ async def create_key(
     if not db:
         raise HTTPException(status_code=500, detail="Database session unavailable")
     
+    if payload.ip_whitelist:
+        for ip in payload.ip_whitelist:
+            if ip and ip.strip() and not validate_ip_or_cidr(ip.strip()):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid IP address or CIDR subnet format: '{ip}'",
+                )
+
     cred, secret_key = await Repository.create_api_credential(
-        db=db, user_id=user_id, name=payload.name, environment=payload.environment
+        db=db, user_id=user_id, name=payload.name, environment=payload.environment, ip_whitelist=payload.ip_whitelist
     )
     return {
         "credential": cred,
         "secret_key": secret_key,
     }
+
+
+@router.put("/keys/{key_id}/whitelist")
+async def update_key_whitelist(
+    key_id: str,
+    payload: UpdateApiKeyWhitelistRequest,
+    user_id: str = "usr_default_dev_01",
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database session unavailable")
+
+    for ip in payload.ip_whitelist:
+        if ip and ip.strip() and not validate_ip_or_cidr(ip.strip()):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid IP address or CIDR subnet format: '{ip}'",
+            )
+
+    updated_key = await Repository.update_api_credential_ip_whitelist(
+        db=db, key_id=key_id, user_id=user_id, ip_whitelist=payload.ip_whitelist
+    )
+    if not updated_key:
+        raise HTTPException(status_code=404, detail="API Key credential not found")
+
+    return updated_key
 
 
 @router.get("/logs")
@@ -644,6 +684,46 @@ async def list_logs(
 ):
     logs = await Repository.list_api_requests(db, user_id, limit)
     return logs
+
+
+class SaveProviderKeyRequest(BaseModel):
+    provider: str = Field(..., description="Provider code: gemini, openai, anthropic, or deepseek")
+    api_key: str = Field(..., description="Raw AI Provider API key to encrypt and save")
+
+
+@router.post("/providers/save-key")
+async def save_provider_key(
+    payload: SaveProviderKeyRequest,
+    user_id: str = "usr_default_dev_01",
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database session unavailable")
+
+    key = payload.api_key.strip()
+    provider = payload.provider.lower().strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="API Key cannot be empty")
+
+    success = await Repository.save_user_ai_provider_key(
+        db=db, user_id=user_id, provider_code=provider, raw_api_key=key
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Invalid or unsupported AI provider code: '{provider}'")
+
+    return {
+        "success": True,
+        "message": f"API Key for '{provider}' encrypted with AES-256-GCM and saved successfully.",
+    }
+
+
+@router.get("/providers/keys")
+async def list_provider_keys(
+    user_id: str = "usr_default_dev_01",
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    keys = await Repository.list_user_ai_providers(db, user_id)
+    return keys
 
 
 class VerifyProviderKeyRequest(BaseModel):
@@ -730,6 +810,23 @@ async def verify_provider_key(payload: VerifyProviderKeyRequest):
                         "valid": False,
                         "status_code": resp.status_code,
                         "message": f"DeepSeek API Key test failed ({resp.status_code}): {err_msg}",
+                    }
+            elif provider == "mistral":
+                url = "https://api.mistral.ai/v1/models"
+                headers = {"Authorization": f"Bearer {key}"}
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    return {
+                        "valid": True,
+                        "status_code": 200,
+                        "message": "Mistral AI API Key verified successfully! Models endpoint responded 200 OK.",
+                    }
+                else:
+                    err_msg = resp.json().get("error", {}).get("message", resp.text)
+                    return {
+                        "valid": False,
+                        "status_code": resp.status_code,
+                        "message": f"Mistral AI API Key test failed ({resp.status_code}): {err_msg}",
                     }
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")

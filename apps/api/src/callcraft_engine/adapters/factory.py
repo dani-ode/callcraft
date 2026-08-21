@@ -3,14 +3,18 @@ from typing import Dict, Type
 from callcraft_engine.adapters.base import BaseAIAdapter
 from callcraft_engine.adapters.gemini import GeminiAdapter
 from callcraft_engine.adapters.openai import OpenAIAdapter
+from callcraft_engine.adapters.anthropic import AnthropicAdapter
+from callcraft_engine.adapters.mistral import MistralAdapter
+from callcraft_engine.adapters.deepseek import DeepSeekAdapter
 
 logger = logging.getLogger("callcraft.engine.adapters.factory")
 
 _ADAPTER_REGISTRY: Dict[str, Type[BaseAIAdapter]] = {
     "gemini": GeminiAdapter,
     "openai": OpenAIAdapter,
-    "anthropic": OpenAIAdapter,  # Fallback to OpenAI tool spec structure
-    "deepseek": OpenAIAdapter,
+    "anthropic": AnthropicAdapter,
+    "mistral": MistralAdapter,
+    "deepseek": DeepSeekAdapter,
 }
 
 

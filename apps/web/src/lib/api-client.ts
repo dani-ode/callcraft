@@ -275,14 +275,34 @@ export async function fetchApiKeys(): Promise<ApiCredential[]> {
   }
 }
 
-export async function createApiKey(name: string): Promise<{ credential: ApiCredential; secret_key: string }> {
+export async function createApiKey(
+  name: string,
+  environment: string = "production",
+  ipWhitelist: string[] = []
+): Promise<{ credential: ApiCredential; secret_key: string }> {
   const res = await fetch(`${PYTHON_API_URL}/internal/v1/keys`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, environment, ip_whitelist: ipWhitelist }),
   });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({ detail: "Failed to create API Key" }));
+    throw new Error(errData.detail || `HTTP Error ${res.status}`);
+  }
+  return await res.json();
+}
+
+export async function updateApiKeyWhitelist(
+  keyId: string,
+  ipWhitelist: string[]
+): Promise<ApiCredential> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/keys/${keyId}/whitelist`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ip_whitelist: ipWhitelist }),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: "Failed to update IP Whitelist" }));
     throw new Error(errData.detail || `HTTP Error ${res.status}`);
   }
   return await res.json();
@@ -378,5 +398,48 @@ export async function verifyProviderApiKey(payload: {
       status_code: 500,
       message: err.message || "Failed to reach backend API endpoint",
     };
+  }
+}
+
+export async function saveProviderApiKey(payload: {
+  provider: string;
+  apiKey: string;
+}): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/providers/save-key`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider: payload.provider,
+      api_key: payload.apiKey,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: "Save Failed" }));
+    throw new Error(errorData.detail || `HTTP Error ${res.status}: Failed to save provider key`);
+  }
+
+  return await res.json();
+}
+
+export async function fetchUserAiProviders(): Promise<
+  Array<{
+    id: string;
+    providerCode: string;
+    providerName: string;
+    key: string;
+    isActive: boolean;
+    updatedAt: string;
+  }>
+> {
+  try {
+    const res = await fetch(`${PYTHON_API_URL}/internal/v1/providers/keys`, { cache: "no-store" });
+    if (!res.ok) {
+      return [];
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn(`[Callcraft API] Unable to connect to ${PYTHON_API_URL}/internal/v1/providers/keys:`, err);
+    return [];
   }
 }

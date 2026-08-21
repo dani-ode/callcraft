@@ -6,6 +6,10 @@ import { AppInitProvider } from "@/context/app-init-context";
 export const metadata: Metadata = {
   title: "Callcraft — AI-Powered Dynamic Multimodal Execution Engine",
   description: "Dynamic AI Tool Calling, Structured JSON Coercion, and Multimodal API Gateway.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

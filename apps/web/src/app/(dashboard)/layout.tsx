@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
@@ -14,6 +14,7 @@ export default function UserDashboardLayout({
 }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -40,10 +41,10 @@ export default function UserDashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-background text-foreground transition-colors duration-200 antialiased w-full">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
+        <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto w-full">{children}</main>
       </div>
     </div>
   );

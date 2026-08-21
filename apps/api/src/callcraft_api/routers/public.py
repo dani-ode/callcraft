@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import ulid
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from callcraft_engine import (
     ResponseSchema,
     SsrfError,
     generate_ai_tool_schema,
+    is_ip_allowed,
     validate_and_coerce,
 )
 from callcraft_engine.adapters.factory import get_adapter
@@ -27,6 +28,17 @@ from callcraft_engine.buffer_handler import BufferHandlerError, process_image_in
 logger = logging.getLogger("callcraft.api.public")
 
 router = APIRouter(prefix="/v1", tags=["Public Customer Data Plane"])
+
+
+def get_client_ip(request: Request) -> str:
+    """Extracts client IP address considering reverse proxies (X-Forwarded-For, X-Real-IP)."""
+    x_forwarded_for = request.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    x_real_ip = request.headers.get("X-Real-IP")
+    if x_real_ip:
+        return x_real_ip.strip()
+    return request.client.host if request.client and request.client.host else "127.0.0.1"
 
 
 class CallRequestPayload(BaseModel):
@@ -43,6 +55,7 @@ class CallRequestPayload(BaseModel):
 async def execute_callcraft(
     user_id: str,
     payload: CallRequestPayload,
+    request: Request,
     authorization: Optional[str] = Header(None),
     x_call_spec_id: Optional[str] = Header(None, alias="X-CALL-SPEC-ID"),
     x_call_provider: Optional[str] = Header("gemini", alias="X-CALL-PROVIDER"),
@@ -67,6 +80,17 @@ async def execute_callcraft(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid customer API secret key",
         )
+
+    # 1b. Enforce IP Whitelist authorization if configured on credential
+    client_ip = get_client_ip(request)
+    if cred and cred.get("ip_whitelist"):
+        allowed = is_ip_allowed(client_ip, cred.get("ip_whitelist"))
+        if not allowed:
+            logger.warning(f"Rejected API request from IP '{client_ip}' for key ID '{cred.get('id')}' (Not whitelisted)")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: Client IP '{client_ip}' is not authorized for this API key",
+            )
 
     # 2. Fetch Call Spec (Redis Cache -> DB Repo)
     spec_slug = x_call_spec_id or "ktp-parser"
