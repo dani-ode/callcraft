@@ -90,26 +90,7 @@ export default function ApiKeysPage() {
   };
 
   // Customer Keys State
-  const [customerKeys, setCustomerKeys] = useState<ApiCredential[]>([
-    {
-      id: "key_1",
-      name: "Default Dev Key",
-      publicKey: "pk_live_default_key_01",
-      secretKeyHash: "$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$...",
-      environment: "production",
-      ipWhitelist: ["192.168.1.100", "10.0.0.0/24"],
-      createdAt: "Aug 20, 2026",
-    },
-    {
-      id: "key_2",
-      name: "Mobile App Staging Key",
-      publicKey: "pk_test_mobile_stg_9988",
-      secretKeyHash: "$argon2id$v=19$m=65536,t=3,p=4$dGVzdHNhbHQ$...",
-      environment: "staging",
-      ipWhitelist: [],
-      createdAt: "Aug 20, 2026",
-    },
-  ]);
+  const [customerKeys, setCustomerKeys] = useState<ApiCredential[]>([]);
 
   // Generate Key Modal State
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
@@ -187,9 +168,7 @@ export default function ApiKeysPage() {
           fetchUserAiProviders(),
         ]);
 
-        if (liveKeys && liveKeys.length > 0) {
-          setCustomerKeys(liveKeys);
-        }
+        setCustomerKeys(liveKeys || []);
 
         if (liveProviders && liveProviders.length > 0) {
           setProviders((prev) => {
@@ -274,24 +253,8 @@ export default function ApiKeysPage() {
       setNewKeyIpList([]);
       setNewKeyIpInput("");
     } catch (err: any) {
-      // Fallback local key creation if backend unavailable
-      const secret = `call_sk_live_${Math.random().toString(36).substring(2, 15)}_${Math.random().toString(36).substring(2, 15)}`;
-      setCreatedSecret(secret);
-      setShowSecretModal(true);
-      const mockNewKey: ApiCredential = {
-        id: `key_${Date.now()}`,
-        name: newKeyName.trim() || "Generated App Secret Key",
-        publicKey: `pk_live_${Math.random().toString(36).substring(2, 10)}`,
-        secretKeyHash: "$argon2id$v=19$m=65536,t=3,p=4$...",
-        environment: newKeyEnv,
-        ipWhitelist: newKeyIpList,
-        createdAt: "Just now",
-      };
-      setCustomerKeys((prev) => [mockNewKey, ...prev]);
-      setIsGenerateModalOpen(false);
-      setNewKeyName("");
-      setNewKeyIpList([]);
-      setNewKeyIpInput("");
+      console.error("[Keys Page] Create API Key error:", err);
+      setGenerateError(err.message || "Gagal membuat API Key baru di database.");
     } finally {
       setIsGenerating(false);
     }
