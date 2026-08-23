@@ -61,7 +61,7 @@ export default function ApiKeysPage() {
 
   // 3-Dots Menu & Delete State
   const [openMenuKeyId, setOpenMenuKeyId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [keyToDelete, setKeyToDelete] = useState<ApiCredential | null>(null);
   const [isDeletingKey, setIsDeletingKey] = useState(false);
   const [deleteAlertMessage, setDeleteAlertMessage] = useState<string | null>(null);
@@ -74,8 +74,8 @@ export default function ApiKeysPage() {
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
       setMenuPos({
-        top: rect.bottom + 4,
-        right: window.innerWidth - rect.right,
+        top: rect.bottom + 6,
+        left: Math.max(16, rect.right - 176),
       });
       setOpenMenuKeyId(keyId);
     }
@@ -597,7 +597,7 @@ export default function ApiKeysPage() {
                             <div
                               style={{
                                 top: `${menuPos.top}px`,
-                                right: `${menuPos.right}px`,
+                                left: `${menuPos.left}px`,
                               }}
                               className="fixed w-44 z-[9999] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-xs text-left animate-in fade-in duration-100"
                             >
