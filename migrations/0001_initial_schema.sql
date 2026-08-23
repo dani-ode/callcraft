@@ -10,12 +10,21 @@ CREATE TABLE users (
     full_name VARCHAR(255) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'active',
     email_verified_at TIMESTAMPTZ,
+    bio TEXT,
+    avatar_url TEXT,
+    github_url VARCHAR(255),
+    website_url VARCHAR(255),
+    company VARCHAR(255),
+    location VARCHAR(255),
+    phone VARCHAR(50),
+    email_verification_token VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX idx_users_email_verification_token ON users(email_verification_token);
 
 -- 2. ROLES
 CREATE TABLE roles (
@@ -175,6 +184,8 @@ CREATE TABLE app_init (
     description TEXT,
     favicon_url TEXT DEFAULT '/favicon.ico',
     disable_landing_page BOOLEAN NOT NULL DEFAULT false,
+    default_registration_status VARCHAR(50) DEFAULT 'pending_verification',
+    require_email_verification BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

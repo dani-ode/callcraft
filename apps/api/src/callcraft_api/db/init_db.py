@@ -333,38 +333,65 @@ async def init_db(session: AsyncSession) -> None:
             "id": "tmpl_id_ktp",
             "user_id": "usr_demo_engineer_04",
             "code": "government-issued-identity-document",
-            "name": "Government-Issued Identity Document Parser & Verification Suite",
-            "description": "Suite verifikasi dokumen identitas resmi (KTP Republik Indonesia & Surat Izin Mengemudi / SIM). Dilengkapi dengan 2 spesialisasi Tool Calling otomatis.",
+            "name": "Government-Issued Identity & License Document Parser Suite",
+            "description": "Suite verifikasi dokumen identitas resmi negara (e-KTP Indonesia NIK 16-digit, SIM / Driver License, dan Paspor Republik Indonesia). Dilengkapi dengan 3 spesialisasi Tool Calling otomatis.",
             "category": "identity",
-            "categories": ["identity", "ocr", "kyc"],
-            "request_schema": {"properties": {"image": {"type": "string", "description": "Base64 or URL of identity document image"}}, "required": ["image"]},
+            "categories": ["identity", "ocr", "kyc", "government"],
+            "request_schema": {
+                "properties": {
+                    "image": {"type": "string", "description": "Base64 or URL of identity document image"},
+                    "prompt": {"type": "string", "description": "Optional guidelines"}
+                },
+                "required": ["image"]
+            },
             "response_schema": {
                 "properties": {
                     "document_type": {"type": "string", "required": True},
                     "document_number": {"type": "string", "required": True},
                     "full_name": {"type": "string", "required": True},
                     "date_of_birth": {"type": "string", "required": True},
-                    "address": {"type": "string", "required": True}
+                    "gender": {"type": "string", "required": True},
+                    "address": {
+                        "type": "object",
+                        "required": True,
+                        "properties": {
+                            "street": {"type": "string", "required": False},
+                            "rt_rw": {"type": "string", "required": False},
+                            "subdistrict": {"type": "string", "required": False},
+                            "district": {"type": "string", "required": False},
+                            "city": {"type": "string", "required": True},
+                            "province": {"type": "string", "required": True}
+                        }
+                    },
+                    "expiry_date": {"type": "string", "required": False},
+                    "nationality": {"type": "string", "required": True}
                 }
             },
-            "system_prompt": "Analisis dokumen identitas resmi yang diunggah (KTP atau SIM). Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen resmi yang terdeteksi.",
+            "system_prompt": "Analisis dokumen identitas resmi yang diunggah (e-KTP Indonesia, SIM, atau Paspor RI). Tentukan jenis dokumen fisik dan eksekusi Tool Calling yang paling presisi.",
             "tools_config": {
                 "enabled": True,
                 "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen identitas resmi yang terdeteksi (KTP Republik Indonesia vs Surat Izin Mengemudi / SIM).",
+                "instruction": "Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen identitas resmi yang terdeteksi (e-KTP Indonesia vs SIM vs Paspor RI).",
                 "tools": [
                     {
                         "name": "extract_indonesian_ktp_identity",
-                        "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia (NIK 16-digit, Nama Lengkap, Tempat/Tgl Lahir, Jenis Kelamin, Alamat, RT/RW, Kel/Desa, Kecamatan, Agama, Status, Pekerjaan).",
-                        "agentRole": "Indonesian Identity Document Verification Specialist",
+                        "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia (NIK 16-digit, Nama Lengkap, Tempat/Tgl Lahir, Jenis Kelamin, Golongan Darah, Alamat Lengkap, RT/RW, Kel/Desa, Kecamatan, Agama, Status Perkawinan, Pekerjaan, Kewarganegaraan, Masa Berlaku).",
+                        "agentRole": "Indonesian Identity & KYC Verification Specialist",
                         "textContext": "Khusus dokumen e-KTP (Kartu Tanda Penduduk) Republik Indonesia.",
                         "includeImageContext": True,
                     },
                     {
                         "name": "extract_driver_license_permit",
-                        "description": "Ekstraksi data terstruktur Surat Izin Mengemudi (SIM) / Driver's License (Nomor SIM, Golongan A/C, Nama Pemilik, Tempat/Tgl Lahir, Alamat, Masa Berlaku).",
+                        "description": "Ekstraksi data terstruktur Surat Izin Mengemudi (SIM) / Driver License (Nomor SIM, Golongan SIM A/B1/B2/C/D, Nama Pemilik, Tempat/Tgl Lahir, Tinggi Badan, Pekerjaan, Alamat, Kab/Kota, Masa Berlaku).",
                         "agentRole": "Driver License Inspection Specialist",
                         "textContext": "Khusus dokumen SIM (Surat Izin Mengemudi) Republik Indonesia atau International Driver Permit.",
+                        "includeImageContext": True,
+                    },
+                    {
+                        "name": "extract_republic_indonesia_passport",
+                        "description": "Ekstraksi lengkap Paspor Republik Indonesia (Jenis Paspor, Kode Negara IDN, Nomor Paspor, Nama Lengkap, Kewarganegaraan, Tanggal Lahir, Jenis Kelamin, Tempat Dikeluarkan, Tanggal Dikeluarkan, Tanggal Habis Berlaku, Nomor Registrasi, Machine Readable Zone / MRZ Line 1 & Line 2).",
+                        "agentRole": "Immigration & International Travel Document Inspector",
+                        "textContext": "Khusus dokumen Paspor Resmi Republik Indonesia (Elektronik / Non-Elektronik).",
                         "includeImageContext": True,
                     },
                 ],
@@ -374,25 +401,67 @@ async def init_db(session: AsyncSession) -> None:
             "id": "tmpl_retail_receipt",
             "user_id": "usr_demo_analyst_03",
             "code": "financial-receipt-invoice-suite",
-            "name": "Financial Receipt & Corporate Invoice Processing Suite",
-            "description": "Suite pemrosesan bukti transaksi keuangan retail (Struk Kasir/Kwitansi) dan Faktur Pajak/Corporate Tagihan B2B.",
+            "name": "Financial Receipt, B2B Invoice & Bank Statement Suite",
+            "description": "Suite otomatisasi akuntansi dan verifikasi bukti transaksi finansial retail (Struk Kasir/Kwitansi), Faktur Pajak/Corporate Tagihan B2B, dan Laporan Rekening Koran Bank.",
             "category": "finance",
-            "categories": ["finance", "retail", "expenses"],
-            "request_schema": {"properties": {"image": {"type": "string"}}, "required": ["image"]},
+            "categories": ["finance", "retail", "accounting", "expenses"],
+            "request_schema": {
+                "properties": {
+                    "image": {"type": "string"},
+                    "currency_override": {"type": "string"}
+                },
+                "required": ["image"]
+            },
             "response_schema": {
                 "properties": {
-                    "merchant_name": {"type": "string", "required": True},
-                    "transaction_date": {"type": "string", "required": True},
-                    "subtotal": {"type": "number", "required": True},
-                    "tax_amount": {"type": "number", "required": False},
-                    "total_paid": {"type": "number", "required": True}
+                    "transaction_type": {"type": "string", "required": True},
+                    "merchant_or_vendor": {
+                        "type": "object",
+                        "required": True,
+                        "properties": {
+                            "name": {"type": "string", "required": True},
+                            "tax_id_npwp": {"type": "string", "required": False},
+                            "address": {"type": "string", "required": False}
+                        }
+                    },
+                    "transaction_details": {
+                        "type": "object",
+                        "required": True,
+                        "properties": {
+                            "invoice_or_receipt_number": {"type": "string", "required": True},
+                            "date": {"type": "string", "required": True},
+                            "currency": {"type": "string", "required": True}
+                        }
+                    },
+                    "line_items": {
+                        "type": "array",
+                        "required": True,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "item_name": {"type": "string", "required": True},
+                                "quantity": {"type": "number", "required": True},
+                                "unit_price": {"type": "number", "required": True},
+                                "total_price": {"type": "number", "required": True}
+                            }
+                        }
+                    },
+                    "financial_summary": {
+                        "type": "object",
+                        "required": True,
+                        "properties": {
+                            "subtotal": {"type": "number", "required": True},
+                            "tax_ppn_amount": {"type": "number", "required": False},
+                            "grand_total": {"type": "number", "required": True}
+                        }
+                    }
                 }
             },
-            "system_prompt": "Analisis dokumen transaksi keuangan yang diunggah. Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Struk Kasir Retail vs Corporate Invoice).",
+            "system_prompt": "Analisis dokumen transaksi keuangan yang diunggah. Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Struk Kasir Retail vs Corporate Invoice B2B vs Rekening Koran Bank).",
             "tools_config": {
                 "enabled": True,
                 "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call yang paling sesuai dengan tipe transaksi finansial (Struk Kasir Retail vs Faktur Tagihan Corporate Invoice B2B).",
+                "instruction": "Pilih 1 tool_call yang paling sesuai dengan tipe transaksi finansial (Struk Kasir Retail vs Faktur Tagihan Corporate Invoice B2B vs Laporan Mutasi Rekening Koran Bank).",
                 "tools": [
                     {
                         "name": "extract_retail_store_receipt",
@@ -408,44 +477,11 @@ async def init_db(session: AsyncSession) -> None:
                         "textContext": "Untuk dokumen invoice tagihan B2B dan faktur pajak.",
                         "includeImageContext": True,
                     },
-                ],
-            },
-        },
-        {
-            "id": "tmpl_vehicle_stnk",
-            "user_id": "usr_demo_engineer_04",
-            "code": "vehicle-registration-tax-document",
-            "name": "Vehicle Registration & Ownership Certificate Suite (STNK & BPKB)",
-            "description": "Ekstraksi terstruktur dokumen kepemilikan dan pajak kendaraan bermotor (STNK & BPKB).",
-            "category": "automotive",
-            "categories": ["automotive", "identity", "ocr"],
-            "request_schema": {"properties": {"image": {"type": "string"}}, "required": ["image"]},
-            "response_schema": {
-                "properties": {
-                    "license_plate": {"type": "string", "required": True},
-                    "owner_name": {"type": "string", "required": True},
-                    "brand_type": {"type": "string", "required": True},
-                    "chassis_number_vin": {"type": "string", "required": True}
-                }
-            },
-            "system_prompt": "Analisis dokumen kendaraan bermotor yang diunggah. Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen (STNK vs BPKB).",
-            "tools_config": {
-                "enabled": True,
-                "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call yang paling sesuai berdasarkan dokumen kendaraan yang diunggah (STNK vs BPKB).",
-                "tools": [
                     {
-                        "name": "extract_stnk_vehicle_certificate",
-                        "description": "Ekstraksi Surat Tanda Nomor Kendaraan / STNK (Nomor Polisi/Plat, Nama Pemilik, Alamat, Merk/Tipe, Tahun Pembuatan, Nomor Rangka/VIN, Nomor Mesin, Pajak).",
-                        "agentRole": "Vehicle Registration Verification Specialist",
-                        "textContext": "Untuk dokumen STNK dan Surat Pajak Kendaraan Bermotor.",
-                        "includeImageContext": True,
-                    },
-                    {
-                        "name": "extract_bpkb_ownership_document",
-                        "description": "Ekstraksi Buku Pemilik Kendaraan Bermotor / BPKB (Nomor BPKB, Nama Pemilik Pertama, Nomor BPKB Lama, Identifikasi Kendaraan).",
-                        "agentRole": "Vehicle Title & Ownership Inspector",
-                        "textContext": "Untuk lembar dokumen BPKB kepemilikan kendaraan.",
+                        "name": "extract_bank_account_statement",
+                        "description": "Ekstraksi Laporan Mutasi Rekening Koran Bank (Nama Bank, Nama Pemilik Rekening, Nomor Rekening / IBAN, Periode Laporan, Saldo Awal, Total Debet, Total Kredit, Saldo Akhir, Rincian Baris Mutasi [Tanggal, Uraian Keterangan Transaksi, Saldo Debet/Kredit, Running Balance]).",
+                        "agentRole": "Bank Statement Reconciliation & Financial Audit Specialist",
+                        "textContext": "Khusus dokumen rekening koran bank (BCA, Mandiri, BRI, BNI, CIMB, atau Internasional).",
                         "includeImageContext": True,
                     },
                 ],
@@ -455,23 +491,70 @@ async def init_db(session: AsyncSession) -> None:
             "id": "tmpl_medical_prescription",
             "user_id": "usr_demo_health_05",
             "code": "medical-prescription-lab-report",
-            "name": "Medical Diagnostics & Clinical Prescription Suite",
-            "description": "Analisis medis terstruktur untuk Resep Obat Dokter dan Laporan Laboratorium Medis/Hasil Tes Darah.",
+            "name": "Medical Diagnostics, Doctor Prescription & Clinical Lab Suite",
+            "description": "Analisis medis terstruktur untuk Resep Obat Dokter, Laporan Laboratorium Medis/Hasil Tes Darah, dan Resume Medis Pasien Rawat Inap.",
             "category": "medical",
-            "categories": ["medical", "diagnostics", "healthcare"],
-            "request_schema": {"properties": {"image": {"type": "string"}}, "required": ["image"]},
+            "categories": ["medical", "diagnostics", "healthcare", "pharma"],
+            "request_schema": {
+                "properties": {
+                    "image": {"type": "string"},
+                    "patient_id_override": {"type": "string"}
+                },
+                "required": ["image"]
+            },
             "response_schema": {
                 "properties": {
-                    "patient_name": {"type": "string", "required": True},
-                    "doctor_name": {"type": "string", "required": True},
-                    "prescription_date": {"type": "string", "required": True}
+                    "medical_document_type": {"type": "string", "required": True},
+                    "patient_info": {
+                        "type": "object",
+                        "required": True,
+                        "properties": {
+                            "full_name": {"type": "string", "required": True},
+                            "medical_record_number": {"type": "string", "required": False}
+                        }
+                    },
+                    "healthcare_facility": {
+                        "type": "object",
+                        "required": True,
+                        "properties": {
+                            "facility_name": {"type": "string", "required": True},
+                            "practitioner_doctor_name": {"type": "string", "required": True},
+                            "date": {"type": "string", "required": True}
+                        }
+                    },
+                    "prescribed_medications": {
+                        "type": "array",
+                        "required": False,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "drug_name": {"type": "string", "required": True},
+                                "dosage": {"type": "string", "required": True},
+                                "instructions_signa": {"type": "string", "required": True}
+                            }
+                        }
+                    },
+                    "lab_test_results": {
+                        "type": "array",
+                        "required": False,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "test_parameter": {"type": "string", "required": True},
+                                "result_value": {"type": "string", "required": True},
+                                "unit": {"type": "string", "required": False},
+                                "reference_range": {"type": "string", "required": False},
+                                "flag": {"type": "string", "required": False}
+                            }
+                        }
+                    }
                 }
             },
-            "system_prompt": "Analisis dokumen medis/kesehatan yang diunggah. Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Resep Obat Dokter vs Laporan Lab Medis).",
+            "system_prompt": "Analisis dokumen medis/kesehatan yang diunggah. Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Resep Obat Dokter vs Laporan Lab Medis vs Resume Medis Rawat Inap).",
             "tools_config": {
                 "enabled": True,
                 "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call yang paling sesuai dengan dokumen kesehatan (Resep Dokter vs Laporan Hasil Lab Medis).",
+                "instruction": "Pilih 1 tool_call yang paling sesuai dengan dokumen kesehatan (Resep Dokter vs Laporan Hasil Lab Medis vs Resume Medis Pasien Rawat Inap).",
                 "tools": [
                     {
                         "name": "extract_doctor_prescription",
@@ -487,153 +570,11 @@ async def init_db(session: AsyncSession) -> None:
                         "textContext": "Untuk hasil pemeriksaan laboratorium darah, tes urine, dan diagnostik medis.",
                         "includeImageContext": True,
                     },
-                ],
-            },
-        },
-        {
-            "id": "tmpl_b2b_po",
-            "user_id": "usr_demo_developer_02",
-            "code": "b2b-contract-purchase-order",
-            "name": "B2B Purchase Order & Commercial Contract Procurement Suite",
-            "description": "Ekstraksi dokumen transaksi pengadaan B2B (Purchase Order / PO) dan Surat Perjanjian Kontrak Komersial.",
-            "category": "procurement",
-            "categories": ["procurement", "finance", "legal"],
-            "request_schema": {"properties": {"pdf": {"type": "string"}}, "required": ["pdf"]},
-            "response_schema": {
-                "properties": {
-                    "po_number": {"type": "string", "required": True},
-                    "vendor_name": {"type": "string", "required": True},
-                    "grand_total": {"type": "number", "required": True}
-                }
-            },
-            "system_prompt": "Analisis dokumen pengadaan B2B yang diunggah. Pilih maksimal 1 tool_call yang paling sesuai (Purchase Order vs Kontrak Komersial).",
-            "tools_config": {
-                "enabled": True,
-                "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call yang paling sesuai untuk dokumen pengadaan B2B (Purchase Order vs Kontrak Komersial).",
-                "tools": [
                     {
-                        "name": "extract_b2b_purchase_order",
-                        "description": "Ekstraksi Purchase Order (PO Number, PO Date, Buyer Company, Vendor Name, Payment Terms Net 30/60, Subtotal, Grand Total).",
-                        "agentRole": "Procurement Operations Auditor",
-                        "textContext": "Untuk dokumen resmi Purchase Order B2B.",
-                        "includeImageContext": True,
-                    },
-                    {
-                        "name": "extract_commercial_contract_terms",
-                        "description": "Ekstraksi pasal kontrak komersial (Judul Kontrak, Para Pihak, Tanggal Efektif, Tanggal Berakhir, Nilai Kontrak, Syarat Pembatalan).",
-                        "agentRole": "Legal & Commercial Contract Auditor",
-                        "textContext": "Untuk dokumen naskah kontrak kerja sama B2B.",
-                        "includeImageContext": True,
-                    },
-                ],
-            },
-        },
-        {
-            "id": "tmpl_passport",
-            "user_id": "usr_demo_engineer_04",
-            "code": "passport-travel-visa-suite",
-            "name": "International Passport & Travel Visa Suite",
-            "description": "Ekstraksi terstruktur Paspor Internasional (MRZ & Identity) dan Stiker Travel Visa.",
-            "category": "travel",
-            "categories": ["travel", "identity", "immigration"],
-            "request_schema": {"properties": {"image": {"type": "string"}}, "required": ["image"]},
-            "response_schema": {
-                "properties": {
-                    "passport_number": {"type": "string", "required": True},
-                    "surname": {"type": "string", "required": True},
-                    "expiry_date": {"type": "string", "required": True}
-                }
-            },
-            "system_prompt": "Analisis dokumen perjalanan internasional. Pilih maksimal 1 tool_call yang paling sesuai (Paspor Internasional vs Stiker Visa).",
-            "tools_config": {
-                "enabled": True,
-                "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call yang paling sesuai dengan dokumen perjalanan internasional (Paspor Internasional vs Stiker Visa).",
-                "tools": [
-                    {
-                        "name": "extract_international_passport_mrz",
-                        "description": "Ekstraksi halaman biodata paspor internasional (Passport Number, Surname, Given Names, Nationality, Date of Birth, Expiry Date, MRZ Zone).",
-                        "agentRole": "Immigration & Border Passport Verifier",
-                        "textContext": "Untuk halaman biodata paspor internasional.",
-                        "includeImageContext": True,
-                    },
-                    {
-                        "name": "extract_entry_visa_document",
-                        "description": "Ekstraksi dokumen visa travel (Visa Number, Issuing Country, Entries Allowed, Valid From, Valid Until, Duration of Stay).",
-                        "agentRole": "Consular & Travel Visa Verifier",
-                        "textContext": "Untuk stiker visa atau dokumen eVisa resmi.",
-                        "includeImageContext": True,
-                    },
-                ],
-            },
-        },
-        {
-            "id": "tmpl_candidate_cv",
-            "user_id": "usr_default_dev_01",
-            "code": "hr-recruitment-cv-portfolio",
-            "name": "Candidate CV Resume & Professional Business Card Suite",
-            "description": "Suite analisis dokumen rekrutmen SDM (Curriculum Vitae / CV Pelamar Kerja) dan Kartu Nama Bisnis.",
-            "category": "hr",
-            "categories": ["hr", "recruitment", "contact"],
-            "request_schema": {"properties": {"pdf": {"type": "string"}}, "required": ["pdf"]},
-            "response_schema": {
-                "properties": {
-                    "candidate_name": {"type": "string", "required": True},
-                    "email": {"type": "string", "required": True},
-                    "years_of_experience": {"type": "integer", "required": True}
-                }
-            },
-            "system_prompt": "Analisis dokumen profil pelamar atau kartu nama. Pilih maksimal 1 tool_call yang paling sesuai (CV Pelamar vs Kartu Nama Bisnis).",
-            "tools_config": {
-                "enabled": True,
-                "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call yang paling sesuai untuk profil pelamar kerja (CV) atau kartu nama profesional.",
-                "tools": [
-                    {
-                        "name": "extract_candidate_cv_resume",
-                        "description": "Ekstraksi CV/Resume pelamar (Nama, Email, Telepon, Ringkasan Pengalaman, Total Pengalaman Kerja Tahun, Skill Utama, Pendidikan).",
-                        "agentRole": "Talent Acquisition Recruitment Agent",
-                        "textContext": "Untuk berkas CV / Resume pelamar kerja.",
-                        "includeImageContext": True,
-                    },
-                    {
-                        "name": "extract_business_card_contact",
-                        "description": "Ekstraksi kartu nama bisnis (Nama Kontak, Jabatan, Perusahaan, Email, HP/Telepon, Alamat Kantor, Website).",
-                        "agentRole": "CRM Lead Extraction Agent",
-                        "textContext": "Untuk foto kartu nama bisnis profesional.",
-                        "includeImageContext": True,
-                    },
-                ],
-            },
-        },
-        {
-            "id": "tmpl_bank_statement",
-            "user_id": "usr_default_dev_01",
-            "code": "bank-account-reconciliation-suite",
-            "name": "Bank Account Statement & Mutasi Rekening Audit Suite",
-            "description": "Analisis laporan mutasi rekening bank korporasi dan bukti rekonsiliasi keuangan.",
-            "category": "finance",
-            "categories": ["finance", "banking", "audit"],
-            "request_schema": {"properties": {"pdf": {"type": "string"}}, "required": ["pdf"]},
-            "response_schema": {
-                "properties": {
-                    "bank_name": {"type": "string", "required": True},
-                    "account_number": {"type": "string", "required": True},
-                    "closing_balance": {"type": "number", "required": True}
-                }
-            },
-            "system_prompt": "Analisis laporan mutasi rekening bank. Pilih maksimal 1 tool_call untuk ekstraksi data mutasi.",
-            "tools_config": {
-                "enabled": True,
-                "toolChoice": "auto",
-                "instruction": "Pilih maksimal 1 tool_call untuk ekstraksi laporan mutasi rekening bank.",
-                "tools": [
-                    {
-                        "name": "extract_bank_statement_summary",
-                        "description": "Ekstraksi ringkasan mutasi koran bank (Nama Bank, Nomor Rekening, Pemilik Rekening, Periode, Saldo Awal, Saldo Akhir, Total Kredit, Total Debit).",
-                        "agentRole": "Bank Reconciliation Audit Agent",
-                        "textContext": "Untuk dokumen mutasi koran rekening bank.",
+                        "name": "extract_clinical_discharge_resume",
+                        "description": "Ekstraksi resume medis / Ringkasan Pasien Pulang (Nama Pasien, Tanggal Masuk RS, Tanggal Keluar RS, Diagnosa Utama ICD-10, Diagnosa Sekunder, Prosedur Medis, Kondisi Pulang).",
+                        "agentRole": "Hospital Medical Record Auditor & Clinical Summary Specialist",
+                        "textContext": "Khusus lembar resume medis dan ringkasan perawatan rawat inap rumah sakit.",
                         "includeImageContext": True,
                     },
                 ],
@@ -714,20 +655,20 @@ async def init_db(session: AsyncSession) -> None:
             "spc_01HZX01SPEC0000000001",
             "usr_default_dev_01",
             "tmpl_id_ktp",
-            "Indonesian KTP National ID Extractor",
+            "Government Identity Document Verification",
             "ktp-parser",
-            "High-accuracy Indonesian NIK and e-KTP identity extraction spec",
-            {"properties": {"nik": {"type": "string", "required": True}, "full_name": {"type": "string", "required": True}}},
+            "Suite verifikasi KTP, SIM, dan Paspor resmi Republik Indonesia",
+            {"properties": {"document_type": {"type": "string", "required": True}, "full_name": {"type": "string", "required": True}}},
             "gemini-3.6-flash",
         ),
         (
             "spc_01HZX01SPEC0000000002",
             "usr_default_dev_01",
             "tmpl_retail_receipt",
-            "Retail Receipt & Invoice Line Extractor",
+            "Financial Receipt & Invoice Suite",
             "receipt-extractor",
-            "Multi-currency corporate receipt and invoice scanning spec",
-            {"properties": {"merchant_name": {"type": "string", "required": True}, "total_paid": {"type": "number", "required": True}}},
+            "Multi-currency corporate receipt, invoice & bank statement scanner spec",
+            {"properties": {"merchant_name": {"type": "string", "required": True}, "grand_total": {"type": "number", "required": True}}},
             "gemini-3.6-flash",
         ),
         (
@@ -736,58 +677,8 @@ async def init_db(session: AsyncSession) -> None:
             "tmpl_medical_prescription",
             "Medical Prescription Scanner",
             "prescription-parser",
-            "Clinical prescription and lab test diagnostic extractor spec",
+            "Clinical prescription, lab test diagnostic & discharge resume extractor spec",
             {"properties": {"patient_name": {"type": "string", "required": True}, "doctor_name": {"type": "string", "required": True}}},
-            "gpt-5.6-luna",
-        ),
-        (
-            "spc_01HZX01SPEC0000000004",
-            "usr_default_dev_01",
-            "tmpl_b2b_po",
-            "B2B Purchase Order Contract Parser",
-            "po-contract-parser",
-            "Corporate Purchase Order (PO) procurement extraction spec",
-            {"properties": {"po_number": {"type": "string", "required": True}, "grand_total": {"type": "number", "required": True}}},
-            "claude-sonnet-5",
-        ),
-        (
-            "spc_01HZX01SPEC0000000005",
-            "usr_demo_developer_02",
-            "tmpl_vehicle_stnk",
-            "Indonesian STNK Vehicle Registration Scanner",
-            "stnk-vehicle-scanner",
-            "Indonesian STNK vehicle document extraction spec",
-            {"properties": {"license_plate": {"type": "string", "required": True}, "owner_name": {"type": "string", "required": True}}},
-            "gpt-5.6-luna",
-        ),
-        (
-            "spc_01HZX01SPEC0000000006",
-            "usr_demo_developer_02",
-            "tmpl_retail_receipt",
-            "Logistics Shipping Air Waybill Scanner",
-            "waybill-resi-scanner",
-            "Expedition resi and shipping label extraction spec",
-            {"properties": {"airwaybill_number": {"type": "string", "required": True}, "courier_name": {"type": "string", "required": True}}},
-            "gemini-3.6-flash",
-        ),
-        (
-            "spc_01HZX01SPEC0000000007",
-            "usr_default_dev_01",
-            "tmpl_candidate_cv",
-            "Tech Developer Resume & CV Skill Parser",
-            "developer-cv-parser",
-            "Candidate IT resume PDF skill analyzer spec",
-            {"properties": {"candidate_name": {"type": "string", "required": True}, "email": {"type": "string", "required": True}}},
-            "gemini-3.6-flash",
-        ),
-        (
-            "spc_01HZX01SPEC0000000008",
-            "usr_default_dev_01",
-            "tmpl_bank_statement",
-            "Bank Account Statement Mutasi Parser",
-            "bank-statement-parser",
-            "Corporate bank statement transaction reconciliation spec",
-            {"properties": {"bank_name": {"type": "string", "required": True}, "account_number": {"type": "string", "required": True}}},
             "gemini-3.6-flash",
         ),
     ]

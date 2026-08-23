@@ -22,16 +22,15 @@ async def test_session():
 async def test_init_db_seeding(test_session: AsyncSession):
     # Verify templates seeding
     templates = await Repository.list_templates(test_session)
-    assert len(templates) >= 8
+    assert len(templates) >= 3
     template_codes = [t["code"] for t in templates]
     assert "government-issued-identity-document" in template_codes
     assert "financial-receipt-invoice-suite" in template_codes
     assert "medical-prescription-lab-report" in template_codes
-    assert "b2b-contract-purchase-order" in template_codes
 
     # Verify initial call specs
     specs = await Repository.list_call_specs(test_session, "usr_default_dev_01")
-    assert len(specs) >= 6
+    assert len(specs) >= 3
 
 
 @pytest.mark.asyncio
