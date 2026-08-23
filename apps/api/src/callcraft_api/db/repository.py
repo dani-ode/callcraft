@@ -242,7 +242,21 @@ class Repository:
         tmpl: Optional[Template] = None,
     ) -> Dict[str, Any]:
         """Serializes CallSpec model instance into a standardized clean camelCase JSON dictionary."""
-        req_schema = ver.request_schema if (ver and ver.request_schema) else {"type": "object", "properties": {}}
+        default_req_schema = {
+            "properties": {
+                "image": {"type": "string", "description": "Base64 string or URL of input document/image"}
+            },
+            "required": ["image"],
+        }
+        req_schema = (
+            ver.request_schema
+            if (ver and ver.request_schema and ver.request_schema.get("properties"))
+            else (
+                tmpl.request_schema
+                if (tmpl and tmpl.request_schema and tmpl.request_schema.get("properties"))
+                else default_req_schema
+            )
+        )
         res_schema = ver.response_schema if (ver and ver.response_schema) else {"type": "object", "properties": {}}
         sys_prompt = ver.system_prompt if ver else getattr(spec, "system_prompt", None)
         ext_prompt = ver.extraction_prompt if ver else getattr(spec, "extraction_prompt", None)

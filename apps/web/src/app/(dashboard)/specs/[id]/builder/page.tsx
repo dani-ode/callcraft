@@ -81,6 +81,15 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
     if (params.id === "new") {
       setSpecName("New Custom Spec");
       setSpecSlug("my-custom-spec");
+      setRequestFields([
+        {
+          id: `field_req_image_${Date.now()}`,
+          name: "image",
+          type: "string",
+          required: true,
+          description: "Base64 string or URL of document image",
+        },
+      ]);
       setIsLoading(false);
       return;
     }
@@ -114,12 +123,22 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
         }
 
         const reqSchema = specObj.requestSchema;
+        let parsedRequestFields: SchemaField[] = [];
         if (reqSchema && typeof reqSchema === "object") {
-          const parsedRequestFields = jsonSchemaToSchemaFields(reqSchema);
-          if (parsedRequestFields.length > 0) {
-            setRequestFields(parsedRequestFields);
-          }
+          parsedRequestFields = jsonSchemaToSchemaFields(reqSchema);
         }
+        if (parsedRequestFields.length === 0) {
+          parsedRequestFields = [
+            {
+              id: `field_req_image_${Date.now()}`,
+              name: "image",
+              type: "string",
+              required: true,
+              description: "Base64 string or URL of document image",
+            },
+          ];
+        }
+        setRequestFields(parsedRequestFields);
       })
       .catch((err) => {
         console.warn("[Callcraft Builder] Spec load notice:", err);
