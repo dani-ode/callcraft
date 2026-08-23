@@ -127,13 +127,49 @@ export function DynamicSpecForm({
         setKeysError("Gagal memuat API Key dari server.");
       });
   }, []);
-
   // Save State UI Feedback
   const [savingState, setSavingState] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [credentialDeletedWarning, setCredentialDeletedWarning] = useState<boolean>(false);
 
-  // Load saved playground state for this specId from DB on mount / spec change
+  // Sync selected credential & public key with availableKeys
+  useEffect(() => {
+    if (selectedKeyId && availableKeys.length > 0) {
+      const match = availableKeys.find((k) => k.id === selectedKeyId);
+      if (match) {
+        setPublicKey(match.publicKey);
+        if ((match as any).secret_key) {
+          setApiKey((match as any).secret_key);
+        } else {
+          setApiKey(`call_sk_live_${match.publicKey.replace("pk_live_", "")}`);
+        }
+      }
+    } else if (!selectedKeyId) {
+      setPublicKey("");
+      setApiKey("");
+    }
+  }, [availableKeys, selectedKeyId]);
+
+  const handleSelectCredential = (keyId: string) => {
+    setSelectedKeyId(keyId);
+    if (!keyId) {
+      setPublicKey("");
+      setApiKey("");
+      return;
+    }
+    const found = availableKeys.find((k) => k.id === keyId);
+    if (found) {
+      setPublicKey(found.publicKey);
+      if ((found as any).secret_key) {
+        setApiKey((found as any).secret_key);
+      } else {
+        setApiKey(`call_sk_live_${found.publicKey.replace("pk_live_", "")}`);
+      }
+    } else {
+      setPublicKey("");
+      setApiKey("");
+    }
+  };// Load saved playground state for this specId from DB on mount / spec change
   useEffect(() => {
     if (!specId) return;
     setCredentialDeletedWarning(false);
@@ -196,18 +232,6 @@ export function DynamicSpecForm({
     }
   };
 
-  const handleSelectCredential = (keyId: string) => {
-    setSelectedKeyId(keyId);
-    const found = availableKeys.find((k) => k.id === keyId);
-    if (found) {
-      setPublicKey(found.publicKey);
-      if ((found as any).secret_key) {
-        setApiKey((found as any).secret_key);
-      } else {
-        setApiKey(`call_sk_live_${found.publicKey.replace("pk_live_", "")}`);
-      }
-    }
-  };
 
   // Postman Checkbox state for optional fields (Default X-AI-MODEL-NAME & X-AI-API-KEY unchecked when useExternalApiKey is true)
   const [checkedState, setCheckedState] = useState<Record<string, boolean>>({});
@@ -278,9 +302,13 @@ export function DynamicSpecForm({
   // Compute dynamic masked cURL command string
   const maskedPublicKey = publicKey
     ? `${publicKey.substring(0, 12)}••••••••••••`
-    : "pk_live_••••••••••••••••";
+    : "(Kosong / Belum dipilih)";
 
-  const maskedBearerToken = "call_sk_live_••••••••••••••••••••••••";
+  const maskedBearerToken = apiKey
+    ? apiKey.length > 16
+      ? `${apiKey.substring(0, 16)}••••••••••••`
+      : apiKey
+    : "(Kosong / Belum dipilih)";
   const maskedAiApiKey = "••••••••••••••••••••••••••••••••••••";
 
   const curlHeaderLines = [
@@ -775,22 +803,19 @@ export function DynamicSpecForm({
                     readOnly
                     value={publicKey}
                     className="w-full bg-slate-100 dark:bg-slate-900/60 border border-slate-300 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-indigo-700 dark:text-indigo-300 font-mono font-bold cursor-not-allowed select-all"
-                    placeholder="pk_live_..."
+                    placeholder="Kosong / Belum dipilih"
                   />
                   <select
                     value={selectedKeyId}
                     onChange={(e) => handleSelectCredential(e.target.value)}
                     className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:border-[#e1b329] shrink-0"
                   >
-                    {availableKeys.length > 0 ? (
-                      availableKeys.map((keyObj) => (
-                        <option key={keyObj.id} value={keyObj.id}>
-                          {keyObj.name}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">{keysError || "-- Belum Ada API Key --"}</option>
-                    )}
+                    <option value="">-- Pilih API Key --</option>
+                    {availableKeys.map((keyObj) => (
+                      <option key={keyObj.id} value={keyObj.id}>
+                        {keyObj.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
