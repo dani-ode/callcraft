@@ -296,3 +296,24 @@ CREATE TABLE user_usage_daily (
 
 CREATE INDEX idx_user_usage_daily_date ON user_usage_daily(user_id, usage_date DESC);
 
+-- 17. PLAYGROUND_STATES
+CREATE TABLE playground_states (
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    call_spec_id VARCHAR(50) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
+    selected_credential_id VARCHAR(50) REFERENCES api_credentials(id) ON DELETE SET NULL,
+    checked_states JSONB NOT NULL DEFAULT '{}'::jsonb,
+    extra_inputs JSONB NOT NULL DEFAULT '{}'::jsonb,
+    prompt TEXT,
+    image_url TEXT,
+    ai_model_name VARCHAR(100),
+    ai_api_key TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_spec_playground_state UNIQUE (user_id, call_spec_id)
+);
+
+CREATE INDEX idx_playground_states_user_id ON playground_states(user_id);
+CREATE INDEX idx_playground_states_call_spec_id ON playground_states(call_spec_id);
+
+
