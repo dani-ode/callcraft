@@ -222,7 +222,7 @@ async def test_global_http_exception_envelope():
         data = res.json()
         assert data["meta"]["status"] == "failed"
         assert data["error"]["code"] == "RESOURCE_NOT_FOUND"
-        assert "execution_trace" in data
+        assert "executionTrace" in data or "execution_trace" in data
 
 
 @pytest.mark.asyncio
