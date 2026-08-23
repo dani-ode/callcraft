@@ -404,6 +404,33 @@ async def execute_callcraft(
     }
     await redis_service.push_outbox(outbox_payload)
 
+    # Construct dynamic execution trace steps list (qna-6.md)
+    execution_steps = []
+    if tools_list:
+        step_duration = int(processing_time_ms / len(tools_list)) if tools_list else processing_time_ms
+        for idx, t in enumerate(tools_list, start=1):
+            if isinstance(t, dict) and t.get("name"):
+                execution_steps.append({
+                    "step_id": f"step_{idx}",
+                    "agent": (t.get("agentRole") or configured_agent_name or "vision_parser").strip(),
+                    "action_type": "tool_call",
+                    "tool_name": t.get("name").strip(),
+                    "status": "success",
+                    "duration_ms": step_duration,
+                })
+
+    if not execution_steps:
+        execution_steps = [
+            {
+                "step_id": "step_1",
+                "agent": configured_agent_name,
+                "action_type": "tool_call",
+                "tool_name": configured_tool_name,
+                "status": "success",
+                "duration_ms": processing_time_ms,
+            }
+        ]
+
     # 10. Return Standardized Enterprise Envelope Response Pattern (qna-6.md)
     return build_success_envelope(
         coerced_data=coerced_data,
@@ -415,7 +442,6 @@ async def execute_callcraft(
         cached_spec=cached_spec,
         tokens=tokens,
         estimated_cost_usd=estimated_cost_usd,
+        execution_steps=execution_steps,
         image_bytes=image_bytes,
-        tool_name=configured_tool_name,
-        agent_name=configured_agent_name,
     )

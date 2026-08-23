@@ -159,28 +159,30 @@ def build_success_envelope(
     cached_spec: Dict[str, Any],
     tokens: Dict[str, int],
     estimated_cost_usd: float,
-    tool_name: str,
-    agent_name: str,
+    execution_steps: Optional[List[Dict[str, Any]]] = None,
+    tool_name: Optional[str] = None,
+    agent_name: Optional[str] = None,
     image_bytes: Optional[bytes] = None,
 ) -> Dict[str, Any]:
     """Constructs a standardized Enterprise Success Envelope dictionary (qna-6.md)."""
-    if not tool_name:
-        raise ValueError("tool_name parameter must be explicitly provided to build_success_envelope")
-    if not agent_name:
-        raise ValueError("agent_name parameter must be explicitly provided to build_success_envelope")
-
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    execution_steps = [
-        {
-            "step_id": "step_1",
-            "agent": agent_name,
-            "action_type": "tool_call",
-            "tool_name": tool_name,
-            "status": "success",
-            "duration_ms": processing_time_ms,
-        }
-    ]
+    steps = execution_steps
+    if not steps:
+        if not tool_name:
+            raise ValueError("Either execution_steps or tool_name parameter must be provided to build_success_envelope")
+        if not agent_name:
+            raise ValueError("Either execution_steps or agent_name parameter must be provided to build_success_envelope")
+        steps = [
+            {
+                "step_id": "step_1",
+                "agent": agent_name,
+                "action_type": "tool_call",
+                "tool_name": tool_name,
+                "status": "success",
+                "duration_ms": processing_time_ms,
+            }
+        ]
 
     prompt_tokens = tokens.get("prompt_tokens", 0)
     completion_tokens = tokens.get("completion_tokens", 0)
@@ -204,7 +206,7 @@ def build_success_envelope(
         },
         "execution_trace": {
             "total_duration_ms": processing_time_ms,
-            "steps": execution_steps,
+            "steps": steps,
             "warnings": [],
         },
         "metrics": {
