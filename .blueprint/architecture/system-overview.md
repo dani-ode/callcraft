@@ -161,11 +161,31 @@ To guarantee that AI output strictly conforms 100% to the user-defined `response
 │ 1. Validate fields against Pydantic schema           │
 │ 2. Coerce types (e.g., String -> Date, Int -> String)│
 │ 3. Apply Enum matching & Default fallbacks           │
+│ 4. Internal Hallucination Auto-Retry (1-2 attempts)  │
 └───────────────────────┬──────────────────────────────┘
                         │
                         ▼
-                 Final Response JSON
+ ┌────────────────────────────────────────────────────┐
+ │         Envelope Packaging & Tracing Engine        │
+ │                                                    │
+ │ Wrap Output into Standardized Envelope:            │
+ │ - Meta (request_id, trace_id, status, mode)        │
+ │ - Data (primary_result + human message) OR Error   │
+ │ - Execution Trace (duration, steps[], warnings[])  │
+ │ - Metrics (token usage & estimated cost)           │
+ └──────────────────────┬─────────────────────────────┘
+                        │
+                        ▼
+           Final Response JSON Envelope
 ```
+
+### 4.1. Envelope Pattern & Distributed Tracing (Q&A 6 & Q&A 7)
+
+Callcraft standardizes all API communication via the **Envelope Pattern**:
+1. **Separation of Metadata & Payload**: The `"meta"` block isolates infrastructure headers (`request_id`, `trace_id`, `execution_mode`) from business payloads (`"data"` or `"error"`).
+2. **Execution Steps Tracing**: The `"execution_trace"` block logs every internal step duration and status. The `"steps"` field is **guaranteed to be a JSON Array (`[]`)**, even if only a single step was executed.
+3. **Internal Hallucination Auto-Retry**: When an AI provider returns structural hallucinations or missing key parameters, the Engine triggers an internal auto-retry (up to 2 times) with feedback prompts before escalating to an `AI_HALLUCINATION_DETECTED` error envelope.
+4. **Graceful Degradation (`partial_success`)**: In complex multi-tool workflows, if non-fatal tools fail while primary extractions succeed, the Engine returns HTTP 200/207 with `meta.status = "partial_success"`, embedding both the extracted `"data"` and partial `"error"` details.
 
 ---
 
@@ -177,8 +197,9 @@ To guarantee that AI output strictly conforms 100% to the user-defined `response
 Client Application             Apache Proxy               Python API Gateway             Redis Cache               AI Provider (Gemini/OpenAI)     PostgreSQL
        │                            │                             │                           │                                 │                    │
        │─── POST /v1/call/{user_id}►│                             │                           │                                 │                    │
-       │    Header: X-CALL-SPEC-ID  │                             │                           │                                 │                    │
+       │    Header: X-Request-ID    │                             │                           │                                 │                    │
        │    Header: Authorization   │─── Proxy Pass :8080 ───────►│                           │                                 │                    │
+       │                            │                             │─── Assign/Propagate Request ID & Trace ID                   │                    │
        │                            │                             │─── Check Rate Limit ─────►│                                 │                    │
        │                            │                             │◄── Rate Limit OK ─────────│                                 │                    │
        │                            │                             │                           │                                 │                    │
@@ -194,11 +215,13 @@ Client Application             Apache Proxy               Python API Gateway    
        │                            │                             │─── POST Vision/LLM Request (Bytes + Tool Schema) ──────────►│                    │
        │                            │                             │◄── Return Tool Call Argument JSON ──────────────────────────│                    │
        │                            │                             │                                                             │                    │
+       │                            │                             │   (If Hallucination Detected: Retry 1-2x internally)         │                    │
        │                            │                             │─── Release File RAM Buffer                                  │                    │
        │                            │                             │─── Validate & Coerce JSON Output                            │                    │
+       │                            │                             │─── Package into Envelope (meta, data/error, trace, metrics) │                    │
        │                            │                             │                                                             │                    │
-       │                            │                             │─── Async Outbox Audit Log (Metadata only, no payload) ────────────────────────────►│ Insert api_requests
-       │◄── 200 OK (JSON Data) ─────│◄── 200 OK ──────────────────│                                                                                  │
+       │                            │                             │─── Async Outbox Audit Log (request_id, trace_id, metadata) ───────────────────────►│ Insert api_requests
+       │◄── 200 OK (JSON Envelope)──│◄── 200 OK ──────────────────│                                                                                  │
 ```
 
 ---

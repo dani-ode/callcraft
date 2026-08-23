@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Search,
   Sparkles,
@@ -20,7 +22,12 @@ import {
   X,
   Filter,
   Layers,
+  Eye,
+  Copy,
+  User as UserIcon,
+  Settings,
 } from "lucide-react";
+import { extractPlainTextFromMarkdown, MarkdownRenderer } from "@/components/markdown-editor";
 import {
   fetchTemplates,
   forkTemplate,
@@ -29,8 +36,10 @@ import {
   addTemplateComment,
   fetchCallSpecs,
   publishTemplate,
+  getActiveUserId,
 } from "@/lib/api-client";
 import { Template, TemplateComment, CallSpec } from "@/lib/types";
+import { useAuth } from "@/context/auth-context";
 
 const CATEGORIES = [
   { id: "all", label: "All Templates" },
@@ -41,7 +50,8 @@ const CATEGORIES = [
   { id: "custom", label: "Community Custom" },
 ];
 
-export default function TemplateMarketplacePage() {
+export default function TemplatesPage() {
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,11 +61,13 @@ export default function TemplateMarketplacePage() {
 
   // Selected Template for Comments Drawer
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"overview" | "request" | "response" | "reviews">("overview");
   const [comments, setComments] = useState<TemplateComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [newCommentText, setNewCommentText] = useState("");
   const [newRating, setNewRating] = useState(5);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [copiedSchema, setCopiedSchema] = useState(false);
 
   // Publish Spec Modal State
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -71,6 +83,7 @@ export default function TemplateMarketplacePage() {
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     loadTemplates();
   }, [activeCategory, sortBy]);
 
@@ -101,24 +114,39 @@ export default function TemplateMarketplacePage() {
     }
   }
 
+  const { user } = useAuth();
+  const currentUserId = user?.id || getActiveUserId();
+
   async function handleForkTemplate(tmpl: Template) {
+    if (tmpl.userId === currentUserId) {
+      setNotification({ message: "Anda tidak dapat meng-clone template milik Anda sendiri.", type: "error" });
+      return;
+    }
+
     try {
       const res = await forkTemplate(tmpl.id);
-      setNotification({ message: `Successfully forked '${tmpl.name}'! Redirecting to Specs...`, type: "success" });
+      setNotification({ message: `Successfully cloned '${tmpl.name}'! Redirecting to Specs...`, type: "success" });
       setTimeout(() => {
         router.push("/specs");
       }, 1500);
     } catch (err: any) {
-      setNotification({ message: err.message || "Failed to fork template", type: "error" });
+      setNotification({ message: err.message || "Failed to clone template", type: "error" });
     }
   }
 
   async function openCommentsDrawer(tmpl: Template) {
     setSelectedTemplate(tmpl);
+    setDrawerTab("overview");
     setLoadingComments(true);
     const data = await fetchTemplateComments(tmpl.id);
     setComments(data);
     setLoadingComments(false);
+  }
+
+  function handleCopyJson(obj: any) {
+    navigator.clipboard.writeText(JSON.stringify(obj, null, 2));
+    setCopiedSchema(true);
+    setTimeout(() => setCopiedSchema(false), 2000);
   }
 
   async function handleAddComment(e: React.FormEvent) {
@@ -131,7 +159,7 @@ export default function TemplateMarketplacePage() {
         templateId: selectedTemplate.id,
         rating: newRating,
         comment: newCommentText.trim(),
-        authorName: "Active Developer",
+        authorName: user?.name || user?.email || "",
       });
 
       setComments((prev) => [res, ...prev]);
@@ -217,7 +245,7 @@ export default function TemplateMarketplacePage() {
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-[#edd6bb]">Pasar Template Callcraft</h1>
           <p className="text-xs text-[#8b7e6d] dark:text-[#edd6bb]/70 mt-1">
-            Jelajahi, sukai (love), ulas, dan fork template JSON schema buatan komunitas developer Callcraft
+            Jelajahi, sukai (love), ulas, dan clone template JSON schema buatan komunitas developer Callcraft
           </p>
         </div>
 
@@ -302,19 +330,23 @@ export default function TemplateMarketplacePage() {
               className="glass-panel glass-panel-hover p-6 rounded-3xl border border-[#edd6bb]/20 flex flex-col justify-between space-y-4 relative group"
             >
               <div className="space-y-3">
-                {/* Header Badge & Author */}
-                <div className="flex items-center justify-between">
-                  {tmpl.isOfficial ? (
-                    <span className="px-2.5 py-1 rounded-full bg-[#e1b329]/20 text-[#e1b329] text-[10px] font-extrabold border border-[#e1b329]/30 flex items-center gap-1">
-                      <Feather className="w-3 h-3 text-[#e1b329]" />
-                      <span>Official Callcraft</span>
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 text-[10px] font-bold border border-indigo-500/30">
-                      Community Spec
-                    </span>
-                  )}
-                  <span className="text-[10px] font-mono text-[#8b7e6d] font-semibold">{tmpl.category.toUpperCase()}</span>
+                {/* Author Link & Category Badges (Up to 3) */}
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/users/${tmpl.userId || "usr_default_dev_01"}`}
+                    className="text-xs font-bold text-[#e1b329] hover:underline flex items-center gap-1.5 shrink-0"
+                  >
+                    <UserIcon className="w-3.5 h-3.5 text-[#e1b329]" />
+                    <span>by {tmpl.authorName || "Callcraft Developer"}</span>
+                  </Link>
+
+                  <div className="flex flex-wrap items-center justify-end gap-1 overflow-hidden">
+                    {(tmpl.categories && tmpl.categories.length > 0 ? tmpl.categories : [tmpl.category]).slice(0, 3).map((cat, idx) => (
+                      <span key={idx} className="text-[9px] font-mono font-bold text-[#e1b329] bg-[#e1b329]/15 px-2 py-0.5 rounded-md border border-[#e1b329]/30 uppercase">
+                        {cat}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Title & Description */}
@@ -323,151 +355,85 @@ export default function TemplateMarketplacePage() {
                     {tmpl.name}
                   </h3>
                   <p className="text-xs text-[#8b7e6d] dark:text-[#edd6bb]/70 mt-1 line-clamp-2 leading-relaxed">
-                    {tmpl.description || "Indonesian multimodal extraction specification template."}
+                    {extractPlainTextFromMarkdown(tmpl.description) || "Indonesian multimodal extraction specification template."}
                   </p>
                 </div>
 
-                {/* Stats Bar (Rating, Likes, Forks) */}
-                <div className="flex items-center gap-4 py-2 border-y border-[#edd6bb]/15 text-xs text-[#8b7e6d]">
-                  <div className="flex items-center gap-1 font-bold text-amber-400">
+                {/* Stats Bar (Rating Score, Comments Count, Likes, Clone) */}
+                <div className="flex items-center justify-between py-2 border-y border-[#edd6bb]/15 text-xs text-[#8b7e6d]">
+                  <div className="flex items-center gap-1 font-extrabold text-amber-400" title="Rating Average">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                     <span>{tmpl.ratingAvg?.toFixed(1) || "5.0"}</span>
                   </div>
 
-                  <button
-                    onClick={() => handleLikeToggle(tmpl)}
-                    className={`flex items-center gap-1 font-bold transition-all ${
-                      tmpl.isLiked ? "text-rose-500" : "hover:text-rose-400"
-                    }`}
-                  >
-                    <Heart className={`w-3.5 h-3.5 ${tmpl.isLiked ? "fill-rose-500" : ""}`} />
-                    <span>{tmpl.likesCount || 0}</span>
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 font-extrabold text-sky-400" title="Total Komentar & Ulasan">
+                      <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
+                      <span>{tmpl.reviewsCount || 0}</span>
+                    </div>
 
-                  <div className="flex items-center gap-1 font-bold text-emerald-400">
-                    <GitFork className="w-3.5 h-3.5" />
-                    <span>{tmpl.forkCount || 0} Forks</span>
+                    <button
+                      onClick={() => handleLikeToggle(tmpl)}
+                      className={`flex items-center gap-1 font-extrabold transition-all ${
+                        tmpl.isLiked ? "text-rose-500" : "hover:text-rose-400"
+                      }`}
+                      title="Total Suka"
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${tmpl.isLiked ? "fill-rose-500" : ""}`} />
+                      <span>{tmpl.likesCount || 0}</span>
+                    </button>
+
+                    <div className="flex items-center gap-1 font-extrabold text-emerald-400" title="Total Clone">
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{tmpl.forkCount || 0}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="pt-2 flex items-center justify-between gap-3">
-                <button
-                  onClick={() => openCommentsDrawer(tmpl)}
-                  className="px-3 py-2 rounded-xl glass-panel hover:bg-[#edd6bb]/10 text-xs font-semibold text-[#edd6bb]/80 flex items-center gap-1.5 border border-[#edd6bb]/20"
+                <Link
+                  href={`/templates/${tmpl.id}`}
+                  className="px-3.5 py-2.5 rounded-xl glass-panel hover:bg-[#edd6bb]/15 text-xs font-extrabold text-[#edd6bb] flex items-center justify-center gap-1.5 border border-[#edd6bb]/25 transition-all hover:border-[#e1b329]/40"
                 >
-                  <MessageSquare className="w-3.5 h-3.5 text-[#e1b329]" />
-                  <span>Ulasan ({tmpl.reviewsCount || 0})</span>
-                </button>
+                  <Eye className="w-3.5 h-3.5 text-[#e1b329]" />
+                  <span>Detail</span>
+                </Link>
 
-                <button
-                  onClick={() => handleForkTemplate(tmpl)}
-                  className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 font-extrabold text-xs shadow-md shadow-[#e1b329]/20 flex items-center gap-1.5 transition-all transform active:scale-95"
-                >
-                  <GitFork className="w-3.5 h-3.5" />
-                  <span>Use / Fork</span>
-                </button>
+                {tmpl.userId === currentUserId ? (
+                  <Link
+                    href={`/specs/${tmpl.specId || tmpl.id}/publish`}
+                    className="flex-1 py-2.5 rounded-xl bg-[#e1b329]/20 hover:bg-[#e1b329]/35 text-[#614600] dark:text-[#ffb443] font-extrabold text-xs flex items-center justify-center gap-1.5 border border-[#e1b329]/50 transition-all shadow-sm"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>Configure</span>
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => handleForkTemplate(tmpl)}
+                    className="flex-1 py-2.5 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 font-extrabold text-xs shadow-md shadow-[#e1b329]/20 flex items-center justify-center gap-1.5 transition-all transform active:scale-95"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Clone</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Comments & Review Drawer Modal */}
-      {selectedTemplate && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-end">
-          <div className="w-full max-w-lg bg-[#191410] border-l border-[#edd6bb]/20 h-full p-6 flex flex-col justify-between overflow-y-auto space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-[#edd6bb]/15 pb-4">
-                <div>
-                  <span className="text-[10px] font-bold text-[#e1b329] uppercase tracking-wider">Pasar Template Ulasan</span>
-                  <h3 className="text-lg font-extrabold text-[#edd6bb]">{selectedTemplate.name}</h3>
-                </div>
-                <button
-                  onClick={() => setSelectedTemplate(null)}
-                  className="p-1 rounded-lg glass-panel hover:bg-[#edd6bb]/10 text-[#8b7e6d]"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Write Review Form */}
-              <form onSubmit={handleAddComment} className="glass-panel p-4 rounded-2xl border border-[#edd6bb]/20 space-y-3">
-                <span className="text-xs font-bold text-[#edd6bb]">Tulis Ulasan & Rating</span>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      type="button"
-                      key={star}
-                      onClick={() => setNewRating(star)}
-                      className="p-1 hover:scale-110 transition-all"
-                    >
-                      <Star
-                        className={`w-5 h-5 ${
-                          star <= newRating ? "fill-amber-400 text-amber-400" : "text-[#8b7e6d]"
-                        }`}
-                      />
-                    </button>
-                  ))}
-                  <span className="text-xs font-bold text-amber-400 ml-2">{newRating} Bintang</span>
-                </div>
-
-                <textarea
-                  rows={3}
-                  placeholder="Tulis ulasan Anda mengenai kepresisian template schema ini..."
-                  value={newCommentText}
-                  onChange={(e) => setNewCommentText(e.target.value)}
-                  className="w-full p-3 rounded-xl bg-[#120e0b]/60 border border-[#edd6bb]/20 text-xs text-[#edd6bb] placeholder-[#8b7e6d] focus:outline-none focus:border-[#e1b329]"
-                />
-
-                <button
-                  type="submit"
-                  disabled={submittingComment || !newCommentText.trim()}
-                  className="w-full py-2.5 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] disabled:opacity-50 text-slate-950 font-extrabold text-xs shadow-md shadow-[#e1b329]/20 flex items-center justify-center gap-2"
-                >
-                  {submittingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  <span>Kirim Ulasan</span>
-                </button>
-              </form>
-
-              {/* Existing Comments List */}
-              <div className="space-y-3 pt-2">
-                <h4 className="text-xs font-bold text-[#8b7e6d] uppercase tracking-wider">
-                  Daftar Diskusi Komunitas ({comments.length})
-                </h4>
-
-                {loadingComments ? (
-                  <div className="py-8 text-center text-slate-400">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#e1b329]" />
-                  </div>
-                ) : comments.length === 0 ? (
-                  <p className="text-xs text-[#8b7e6d] italic py-4 text-center">Belum ada ulasan untuk template ini.</p>
-                ) : (
-                  comments.map((cmt) => (
-                    <div key={cmt.id} className="glass-panel p-4 rounded-2xl border border-[#edd6bb]/15 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#edd6bb]">{cmt.authorName}</span>
-                        <div className="flex items-center gap-1 text-amber-400 font-bold text-xs">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span>{cmt.rating}</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-[#8b7e6d] dark:text-[#edd6bb]/80 leading-relaxed">{cmt.comment}</p>
-                      <p className="text-[10px] text-[#8b7e6d] font-mono">{cmt.createdAt ? new Date(cmt.createdAt).toLocaleDateString() : "Just now"}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Publish Spec Modal */}
-      {isPublishModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#191410] border border-[#edd6bb]/25 rounded-3xl p-6 space-y-6 shadow-2xl">
+      {isPublishModalOpen && mounted && createPortal(
+        <div
+          onClick={() => setIsPublishModalOpen(false)}
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#191410] border border-[#edd6bb]/25 rounded-3xl p-6 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+          >
             <div className="flex items-center justify-between border-b border-[#edd6bb]/15 pb-4">
               <div>
                 <h3 className="text-lg font-extrabold text-[#edd6bb]">Publikasikan Spec ke Pasar</h3>
@@ -568,7 +534,8 @@ export default function TemplateMarketplacePage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

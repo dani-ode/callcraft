@@ -228,3 +228,35 @@ html.light pre,
 html.light code {
   color: #8a715e !important;
 }
+
+/* HARDCODED CUSTOM HEX OVERRIDES FOR LIGHT MODE */
+html.light .text-\[\#edd6bb\],
+html.light .text-\[\#edd6bb\]\/90,
+html.light .text-\[\#edd6bb\]\/80,
+html.light .text-\[\#edd6bb\]\/70 {
+  color: #3a2e25 !important;
+}
+
+html.light .text-\[\#8b7e6d\] {
+  color: #6e5e50 !important;
+}
+
+html.light .bg-\[\#120e0b\],
+html.light .bg-\[\#120e0b\]\/50,
+html.light .bg-\[\#120e0b\]\/60,
+html.light .bg-\[\#120e0b\]\/70,
+html.light .bg-\[\#120e0b\]\/80 {
+  background-color: #f2e7dc !important;
+}
+
+html.light .bg-\[\#191410\],
+html.light .bg-\[\#1c1713\] {
+  background-color: #fdf8f2 !important;
+}
+
+html.light .border-\[\#edd6bb\]\/15,
+html.light .border-\[\#edd6bb\]\/20,
+html.light .border-\[\#edd6bb\]\/25 {
+  border-color: rgba(138, 113, 94, 0.25) !important;
+}
+

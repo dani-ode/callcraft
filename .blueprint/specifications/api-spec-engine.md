@@ -275,3 +275,111 @@ class ResponseSchema(BaseModel):
         """Validates and coerces raw AI output JSON against field definition constraints."""
         pass
 ```
+
+---
+
+## 6. Envelope Builder Engine & Hallucination Auto-Retry (Q&A 6 & Q&A 7)
+
+### A. Internal Auto-Retry Algorithm for AI Hallucinations
+When raw AI Tool Calling output violates mandatory constraints (e.g., missing required fields, completely invalid JSON structures, or hallucinated property names), the Engine executes an internal auto-retry loop before producing an error response:
+
+```text
+       Raw AI Model Tool Output
+                  │
+                  ▼
+   Validate Schema & Required Fields
+                  │
+        ┌─────────┴─────────┐
+        │ Valid?            │
+       YES                  NO
+        │                   │
+        ▼                   ▼
+ Return Output      Retry Count < 2 ?
+                    ├── YES ──► Re-prompt AI with error feedback prompt
+                    └── NO  ──► Emit HTTP 422 with `AI_HALLUCINATION_DETECTED` Error Envelope
+```
+
+### B. Python Envelope Pydantic Schemas (`apps/api/src/callcraft_api/utils/envelope.py`)
+
+```python
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
+
+
+class ExecutionMode(str, Enum):
+    SYNC = "sync"
+    ASYNC_WEBHOOK = "async_webhook"
+
+
+class ExecutionStatus(str, Enum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PARTIAL_SUCCESS = "partial_success"
+
+
+class MetaBlock(BaseModel):
+    request_id: str
+    trace_id: str
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    status: ExecutionStatus
+    api_version: str = "v2.1"
+    execution_mode: ExecutionMode = ExecutionMode.SYNC
+
+
+class DetailItem(BaseModel):
+    field: Optional[str] = None
+    issue: str
+
+
+class ErrorBlock(BaseModel):
+    code: str
+    message: str
+    details: List[DetailItem] = Field(default_factory=list)
+    actionable_step: Optional[str] = None
+
+
+class ExecutionStep(BaseModel):
+    step_id: str
+    agent: str
+    action_type: str  # e.g., 'tool_call', 'api_call', 'schema_coercion'
+    tool_name: str
+    status: str       # 'success', 'failed', 'retried'
+    duration_ms: int
+
+
+class ExecutionTraceBlock(BaseModel):
+    total_duration_ms: int
+    steps: List[ExecutionStep] = Field(default_factory=list)  # MUST ALWAYS BE ARRAY []
+    warnings: List[str] = Field(default_factory=list)
+
+
+class TokenUsage(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+class MetricsBlock(BaseModel):
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    estimated_cost_usd: float = 0.0
+
+
+class DataPrimaryResult(BaseModel):
+    type: str = "structured_json"
+    content: Dict[str, Any]
+
+
+class DataBlock(BaseModel):
+    primary_result: DataPrimaryResult
+    human_readable_message: Optional[str] = None
+
+
+class ResponseEnvelope(BaseModel):
+    meta: MetaBlock
+    data: Optional[DataBlock] = None
+    error: Optional[ErrorBlock] = None
+    execution_trace: ExecutionTraceBlock
+    metrics: Optional[MetricsBlock] = None
+```
+

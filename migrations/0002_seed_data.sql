@@ -87,14 +87,18 @@ ON CONFLICT DO NOTHING;
 INSERT INTO users (id, email, password_hash, full_name, status, email_verified_at) VALUES
 ('usr_default_dev_01', 'dev@callcraft.io', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Callcraft Admin', 'active', CURRENT_TIMESTAMP),
 ('usr_demo_developer_02', 'developer@acme.corp', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Alex Rivera', 'active', CURRENT_TIMESTAMP),
-('usr_demo_analyst_03', 'analyst@fintech.io', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Sarah Chen', 'active', CURRENT_TIMESTAMP)
+('usr_demo_analyst_03', 'analyst@fintech.io', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Sarah Chen', 'active', CURRENT_TIMESTAMP),
+('usr_demo_engineer_04', 'budi.santoso@idcheck.co.id', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Budi Santoso', 'active', CURRENT_TIMESTAMP),
+('usr_demo_health_05', 'm.vance@medtech.org', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Dr. Michael Vance', 'active', CURRENT_TIMESTAMP)
 ON CONFLICT (email) DO NOTHING;
 
 -- Map User Roles
 INSERT INTO user_roles (user_id, role_id) VALUES
 ('usr_default_dev_01', '01HZX01ROLE000000000000001'),
 ('usr_demo_developer_02', '01HZX01ROLE000000000000005'),
-('usr_demo_analyst_03', '01HZX01ROLE000000000000004')
+('usr_demo_analyst_03', '01HZX01ROLE000000000000004'),
+('usr_demo_engineer_04', '01HZX01ROLE000000000000005'),
+('usr_demo_health_05', '01HZX01ROLE000000000000005')
 ON CONFLICT DO NOTHING;
 
 -- 5. SEED SERVICE CLIENTS
@@ -123,57 +127,39 @@ INSERT INTO system_prompts (id, code, name, content, is_active) VALUES
 ('01HZX01SYSPRM0000000000003', 'financial_receipt_system_prompt', 'Financial Statement & Receipt Prompt', 'Analyze financial documents including invoices, receipts, and bank statements. Extract all line items, tax components, currency codes, vendor identity, and grand total.', true)
 ON CONFLICT (code) DO NOTHING;
 
--- 9. SEED OFFICIAL MASTER TEMPLATES
-INSERT INTO templates (id, code, name, description, category, request_schema, response_schema, system_prompt, is_official) VALUES
-('tmpl_01HZX01TMPL0000000001', 'invoice-parser', 'Invoice Data Extractor', 'Extracts invoice metadata including invoice number, vendor, line items, and total amount.', 'Financial', 
-'{"properties": {"image": {"type": "string", "description": "Base64 or URL of invoice image/pdf"}}, "required": ["image"]}'::jsonb,
-'{"properties": {"invoice_number": {"type": "string", "required": true}, "vendor_name": {"type": "string", "required": true}, "invoice_date": {"type": "date", "required": true}, "total_amount": {"type": "number", "required": true}, "currency": {"type": "string", "required": true}, "tax_amount": {"type": "number", "required": false}, "line_items": {"type": "array", "required": false}}}'::jsonb,
-'Extract all structured financial invoice metadata accurately from the document image.', true),
+-- 9. SEED OFFICIAL MASTER TEMPLATES (WITH MANDATORY PUBLISHER & RICH TOOL CALLING SUITES)
+INSERT INTO templates (id, user_id, code, name, description, category, categories, request_schema, response_schema, system_prompt, tools_config, is_official) VALUES
+('tmpl_01HZX01TMPL0000000001', 'usr_demo_engineer_04', 'government-issued-identity-document', 'Government-Issued Identity Document Parser & Verification Suite', 'Suite verifikasi dokumen identitas resmi (KTP Republik Indonesia & Surat Izin Mengemudi / SIM). Dilengkapi dengan 2 spesialisasi Tool Calling otomatis.', 'identity', '["identity", "ocr", "kyc"]'::jsonb, 
+'{"properties": {"image": {"type": "string", "description": "Base64 or URL of identity document image"}}, "required": ["image"]}'::jsonb,
+'{"properties": {"document_type": {"type": "string", "required": true}, "document_number": {"type": "string", "required": true}, "full_name": {"type": "string", "required": true}, "date_of_birth": {"type": "string", "required": true}, "address": {"type": "string", "required": true}}}'::jsonb,
+'Analisis dokumen identitas resmi yang diunggah (KTP atau SIM). Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen resmi yang terdeteksi.',
+'{"enabled": true, "toolChoice": "auto", "instruction": "Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen identitas resmi yang terdeteksi (KTP Republik Indonesia vs Surat Izin Mengemudi / SIM).", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia (NIK 16-digit, Nama Lengkap, Tempat/Tgl Lahir, Jenis Kelamin, Alamat, RT/RW, Kel/Desa, Kecamatan, Agama, Status, Pekerjaan).", "agentRole": "Indonesian Identity Document Verification Specialist", "textContext": "Khusus dokumen e-KTP (Kartu Tanda Penduduk) Republik Indonesia.", "includeImageContext": true}, {"name": "extract_driver_license_permit", "description": "Ekstraksi data terstruktur Surat Izin Mengemudi (SIM) / Driver License (Nomor SIM, Golongan A/C, Nama Pemilik, Tempat/Tgl Lahir, Alamat, Masa Berlaku).", "agentRole": "Driver License Inspection Specialist", "textContext": "Khusus dokumen SIM (Surat Izin Mengemudi) Republik Indonesia atau International Driver Permit.", "includeImageContext": true}]}'::jsonb, true),
 
-('tmpl_01HZX01TMPL0000000002', 'ktp-id-parser', 'Indonesian KTP / National ID Parser', 'Extracts NIK, Full Name, Gender, DOB, and Address details from KTP document.', 'Document',
-'{"properties": {"image": {"type": "string", "description": "Base64 or URL of KTP image"}}, "required": ["image"]}'::jsonb,
-'{"properties": {"nik": {"type": "string", "required": true}, "full_name": {"type": "string", "required": true}, "gender": {"type": "enum", "enum_values": ["LAKI-LAKI", "PEREMPUAN"], "required": true}, "place_of_birth": {"type": "string", "required": false}, "date_of_birth": {"type": "date", "required": false}, "address": {"type": "string", "required": false}, "rt_rw": {"type": "string", "required": false}, "kel_desa": {"type": "string", "required": false}, "kecamatan": {"type": "string", "required": false}, "agama": {"type": "string", "required": false}, "status_perkawinan": {"type": "string", "required": false}, "pekerjaan": {"type": "string", "required": false}, "kewarganegaraan": {"type": "string", "required": false}}}'::jsonb,
-'Extract clear, exact text fields from the Indonesian KTP National Identity card image.', true),
+('tmpl_01HZX01TMPL0000000002', 'usr_demo_analyst_03', 'financial-receipt-invoice-suite', 'Financial Receipt & Corporate Invoice Processing Suite', 'Suite pemrosesan bukti transaksi keuangan retail (Struk Kasir/Kwitansi) dan Faktur Pajak/Corporate Tagihan B2B.', 'finance', '["finance", "retail", "expenses"]'::jsonb,
+'{"properties": {"image": {"type": "string"}}, "required": ["image"]}'::jsonb,
+'{"properties": {"merchant_name": {"type": "string", "required": true}, "transaction_date": {"type": "string", "required": true}, "subtotal": {"type": "number", "required": true}, "tax_amount": {"type": "number", "required": false}, "total_paid": {"type": "number", "required": true}}}'::jsonb,
+'Analisis dokumen transaksi keuangan yang diunggah. Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Struk Kasir Retail vs Corporate Invoice).',
+'{"enabled": true, "toolChoice": "auto", "instruction": "Pilih maksimal 1 tool_call yang paling sesuai dengan tipe transaksi finansial (Struk Kasir Retail vs Faktur Tagihan Corporate Invoice B2B).", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk kasir toko/restoran (Nama Merchant, Tanggal Transaksi, Line Items Rincian Barang, Subtotal, Tax/PPN, Service Charge, Total Bayar, Metode Pembayaran).", "agentRole": "Retail Expense Audit Agent", "textContext": "Untuk struk kasir toko, minimarket, kwitansi, dan resto.", "includeImageContext": true}, {"name": "extract_corporate_tax_invoice", "description": "Ekstraksi faktur pajak dan tagihan B2B corporate (Invoice Number, Vendor Name, Buyer Company, NPWP, Invoice Date, Due Date, Tax Amount, Line Items, Total Amount).", "agentRole": "Corporate Accounts Payable Auditor", "textContext": "Untuk dokumen invoice tagihan B2B dan faktur pajak.", "includeImageContext": true}]}'::jsonb, true),
 
-('tmpl_01HZX01TMPL0000000003', 'receipt-parser', 'Retail Receipt Parser', 'Extracts merchant name, purchase date, line items, tax, and total paid.', 'Financial',
-'{"properties": {"image": {"type": "string", "description": "Base64 or URL of receipt image"}}, "required": ["image"]}'::jsonb,
-'{"properties": {"merchant_name": {"type": "string", "required": true}, "transaction_date": {"type": "date", "required": true}, "transaction_time": {"type": "string", "required": false}, "subtotal": {"type": "number", "required": false}, "tax_amount": {"type": "number", "required": false}, "tip_amount": {"type": "number", "required": false}, "total_paid": {"type": "number", "required": true}, "payment_method": {"type": "string", "required": false}}}'::jsonb,
-'Extract retail receipt fields accurately from receipt image.', true),
-
-('tmpl_01HZX01TMPL0000000004', 'passport-parser', 'International Passport Parser', 'Extracts passport number, full name, nationality, date of birth, and expiry date.', 'Document',
-'{"properties": {"image": {"type": "string", "description": "Base64 or URL of passport scan"}}, "required": ["image"]}'::jsonb,
-'{"properties": {"passport_number": {"type": "string", "required": true}, "surname": {"type": "string", "required": true}, "given_names": {"type": "string", "required": true}, "nationality": {"type": "string", "required": true}, "date_of_birth": {"type": "date", "required": true}, "gender": {"type": "enum", "enum_values": ["M", "F"], "required": true}, "issue_date": {"type": "date", "required": false}, "expiry_date": {"type": "date", "required": true}, "issuing_authority": {"type": "string", "required": false}}}'::jsonb,
-'Extract international passport MRZ and identity fields accurately.', true),
-
-('tmpl_01HZX01TMPL0000000005', 'business-card-parser', 'Business Card Reader', 'Extracts contact name, title, company, phone, email, and website from business card.', 'Utility',
-'{"properties": {"image": {"type": "string", "description": "Base64 or URL of business card photo"}}, "required": ["image"]}'::jsonb,
-'{"properties": {"contact_name": {"type": "string", "required": true}, "job_title": {"type": "string", "required": false}, "company_name": {"type": "string", "required": false}, "email": {"type": "string", "required": false}, "phone_number": {"type": "string", "required": false}, "address": {"type": "string", "required": false}, "website_url": {"type": "string", "required": false}}}'::jsonb,
-'Extract professional contact details from business card photo.', true),
-
-('tmpl_01HZX01TMPL0000000006', 'lab-report-parser', 'Medical Lab Test Report Parser', 'Extracts patient info, lab test parameters, numerical results, and reference ranges.', 'Healthcare',
-'{"properties": {"image": {"type": "string", "description": "Base64 or URL of medical test report"}}, "required": ["image"]}'::jsonb,
-'{"properties": {"patient_name": {"type": "string", "required": true}, "patient_id": {"type": "string", "required": false}, "lab_test_date": {"type": "date", "required": true}, "medical_facility": {"type": "string", "required": false}, "test_results": {"type": "array", "required": true}}}'::jsonb,
-'Extract medical lab diagnostic parameters and numerical test values accurately.', true)
+('tmpl_01HZX01TMPL0000000003', 'usr_demo_health_05', 'medical-prescription-lab-report', 'Medical Diagnostics & Clinical Prescription Suite', 'Analisis medis terstruktur untuk Resep Obat Dokter dan Laporan Laboratorium Medis/Hasil Tes Darah.', 'medical', '["medical", "diagnostics", "healthcare"]'::jsonb,
+'{"properties": {"image": {"type": "string"}}, "required": ["image"]}'::jsonb,
+'{"properties": {"patient_name": {"type": "string", "required": true}, "doctor_name": {"type": "string", "required": true}, "prescription_date": {"type": "string", "required": true}}}'::jsonb,
+'Analisis dokumen medis/kesehatan yang diunggah. Pilih maksimal 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Resep Obat Dokter vs Laporan Lab Medis).',
+'{"enabled": true, "toolChoice": "auto", "instruction": "Pilih maksimal 1 tool_call yang paling sesuai dengan dokumen kesehatan (Resep Dokter vs Laporan Hasil Lab Medis).", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi lembar resep obat dokter (Nama Pasien, Umur, Nama Dokter, Tanggal Resep, Daftar Obat, Dosis & Signa Aturan Pakai).", "agentRole": "Clinical Pharmacology Specialist", "textContext": "Untuk resep obat dari dokter, klinik, dan apotek.", "includeImageContext": true}, {"name": "extract_medical_lab_result", "description": "Ekstraksi laporan lab medis (Nama Pasien, Tanggal Tes, Nama Fasilitas Medis, Parameter Tes Lab, Nilai Hasil, Nilai Rujukan Normal).", "agentRole": "Clinical Diagnostics Inspector", "textContext": "Untuk hasil pemeriksaan laboratorium darah, tes urine, dan diagnostik medis.", "includeImageContext": true}]}'::jsonb, true)
 ON CONFLICT (code) DO NOTHING;
 
 -- 10. SEED CALL SPECS
-INSERT INTO call_specs (id, user_id, template_id, name, slug, description, active_version_number, status) VALUES
-('spc_01HZX01SPEC0000000001', 'usr_default_dev_01', 'tmpl_01HZX01TMPL0000000002', 'Indonesian KTP Parser', 'ktp-parser', 'High-accuracy Indonesian NIK and ID extraction spec', 1, 'active'),
-('spc_01HZX01SPEC0000000002', 'usr_default_dev_01', 'tmpl_01HZX01TMPL0000000001', 'Invoice Data Extractor', 'invoice-extractor', 'Multi-currency corporate invoice scanning spec', 1, 'active'),
-('spc_01HZX01SPEC0000000003', 'usr_default_dev_01', 'tmpl_01HZX01TMPL0000000003', 'Retail Receipt Parser', 'receipt-parser', 'POS retail receipt and itemized expense extraction spec', 1, 'active'),
-('spc_01HZX01SPEC0000000004', 'usr_default_dev_01', 'tmpl_01HZX01TMPL0000000004', 'International Passport Extractor', 'passport-extractor', 'Global passport MRZ and identity document spec', 1, 'active'),
-('spc_01HZX01SPEC0000000005', 'usr_demo_developer_02', 'tmpl_01HZX01TMPL0000000001', 'Acme Automated Invoice Scanner', 'acme-invoice-scanner', 'Acme Corp automated accounts payable invoice spec', 1, 'active'),
-('spc_01HZX01SPEC0000000006', 'usr_demo_developer_02', 'tmpl_01HZX01TMPL0000000005', 'Acme Business Card Reader', 'acme-card-scanner', 'Acme Corp sales lead contact scanner spec', 1, 'active')
+INSERT INTO call_specs (id, user_id, template_id, name, slug, description, active_version_number, status, use_external_api_key, external_model_name, tools_config) VALUES
+('spc_01HZX01SPEC0000000001', 'usr_default_dev_01', 'tmpl_01HZX01TMPL0000000001', 'Government Identity Document Verification', 'ktp-parser', 'Suite verifikasi KTP dan SIM resmi Indonesia', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur KTP Indonesia"}]}'::jsonb),
+('spc_01HZX01SPEC0000000002', 'usr_default_dev_01', 'tmpl_01HZX01TMPL0000000002', 'Financial Receipt & Invoice Suite', 'receipt-extractor', 'Multi-currency corporate receipt & invoice scanning spec', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk retail"}]}'::jsonb),
+('spc_01HZX01SPEC0000000003', 'usr_default_dev_01', 'tmpl_01HZX01TMPL0000000003', 'Medical Prescription Scanner', 'prescription-parser', 'Clinical prescription and lab test diagnostic extractor spec', 1, 'active', true, 'gpt-5.6-luna', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi resep dokter"}]}'::jsonb)
 ON CONFLICT (user_id, slug) DO NOTHING;
 
 -- 11. SEED CALL SPEC VERSIONS
-INSERT INTO call_spec_versions (id, call_spec_id, version_number, request_schema, response_schema, system_prompt, preferred_model_id) VALUES
-('ver_01HZX01SPEC0000000001', 'spc_01HZX01SPEC0000000001', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"nik": {"type": "string", "required": true}, "full_name": {"type": "string", "required": true}, "gender": {"type": "enum", "enum_values": ["LAKI-LAKI", "PEREMPUAN"], "required": true}}}'::jsonb, 'Extract Indonesian KTP National Identity fields accurately.', '01HZX01MODEL00000000000001'),
-('ver_01HZX01SPEC0000000002', 'spc_01HZX01SPEC0000000002', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"invoice_number": {"type": "string", "required": true}, "vendor_name": {"type": "string", "required": true}, "invoice_date": {"type": "date", "required": true}, "total_amount": {"type": "number", "required": true}}}'::jsonb, 'Extract all structured financial invoice metadata accurately.', '01HZX01MODEL00000000000001'),
-('ver_01HZX01SPEC0000000003', 'spc_01HZX01SPEC0000000003', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"merchant_name": {"type": "string", "required": true}, "transaction_date": {"type": "date", "required": true}, "total_paid": {"type": "number", "required": true}}}'::jsonb, 'Extract retail receipt fields accurately.', '01HZX01MODEL00000000000001'),
-('ver_01HZX01SPEC0000000004', 'spc_01HZX01SPEC0000000004', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"passport_number": {"type": "string", "required": true}, "surname": {"type": "string", "required": true}, "given_names": {"type": "string", "required": true}, "expiry_date": {"type": "date", "required": true}}}'::jsonb, 'Extract international passport MRZ fields accurately.', '01HZX01MODEL00000000000001'),
-('ver_01HZX01SPEC0000000005', 'spc_01HZX01SPEC0000000005', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"invoice_number": {"type": "string", "required": true}, "total_amount": {"type": "number", "required": true}}}'::jsonb, 'Extract accounts payable invoice details.', '01HZX01MODEL00000000000005'),
-('ver_01HZX01SPEC0000000006', 'spc_01HZX01SPEC0000000006', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"contact_name": {"type": "string", "required": true}, "email": {"type": "string", "required": false}}}'::jsonb, 'Extract contact details from business card.', '01HZX01MODEL00000000000005')
+INSERT INTO call_spec_versions (id, call_spec_id, version_number, request_schema, response_schema, system_prompt, preferred_model_id, use_external_api_key, external_model_name, tools_config) VALUES
+('ver_01HZX01SPEC0000000001', 'spc_01HZX01SPEC0000000001', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"document_type": {"type": "string", "required": true}, "full_name": {"type": "string", "required": true}}}'::jsonb, 'Analisis dokumen identitas resmi yang diunggah (KTP atau SIM). Pilih maksimal 1 tool_call yang paling sesuai.', '01HZX01MODEL00000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur KTP Indonesia"}]}'::jsonb),
+('ver_01HZX01SPEC0000000002', 'spc_01HZX01SPEC0000000002', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"merchant_name": {"type": "string", "required": true}, "total_paid": {"type": "number", "required": true}}}'::jsonb, 'Analisis dokumen transaksi keuangan yang diunggah.', '01HZX01MODEL00000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk retail"}]}'::jsonb),
+('ver_01HZX01SPEC0000000003', 'spc_01HZX01SPEC0000000003', 1, '{"properties": {"image": {"type": "string"}}}'::jsonb, '{"properties": {"patient_name": {"type": "string", "required": true}, "doctor_name": {"type": "string", "required": true}}}'::jsonb, 'Analisis dokumen medis/kesehatan yang diunggah.', '01HZX01MODEL00000000000005', true, 'gpt-5.6-luna', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi resep dokter"}]}'::jsonb)
 ON CONFLICT (call_spec_id, version_number) DO NOTHING;
 
 -- 12. SEED API REQUEST AUDIT LOGS

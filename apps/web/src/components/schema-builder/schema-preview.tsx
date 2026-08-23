@@ -3,28 +3,44 @@
 import { useState } from "react";
 import { Sparkles, Copy, Check, Code2, Layers, Maximize2, Minimize2 } from "lucide-react";
 import { SchemaField } from "./types";
-import { buildJsonSchema } from "./schema-helpers";
+import { buildJsonSchema, jsonSchemaToSchemaFields } from "./schema-helpers";
 import { MonacoJsonPreview } from "./monaco-json-preview";
 
 interface SchemaPreviewProps {
-  fields: SchemaField[];
+  fields?: SchemaField[];
+  schema?: any;
   activeTabName: string;
   selectedFieldId?: string | null;
   onSelectFieldId?: (id: string | null) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  /** When true, renders without the outer glass-panel card wrapper.
+   *  Use this when embedding inside an existing card to avoid card-in-card. */
+  noWrapper?: boolean;
 }
 
 export function SchemaPreview({
-  fields,
+  fields = [],
+  schema,
   activeTabName,
   selectedFieldId = null,
   onSelectFieldId,
   isExpanded = false,
   onToggleExpand,
+  noWrapper = false,
 }: SchemaPreviewProps) {
   const [copied, setCopied] = useState(false);
-  const jsonSchema = buildJsonSchema(fields);
+
+  const resolvedFields = fields && fields.length > 0
+    ? fields
+    : schema
+    ? jsonSchemaToSchemaFields(schema)
+    : [];
+
+  const jsonSchema = schema && typeof schema === "object"
+    ? schema
+    : buildJsonSchema(resolvedFields);
+
   const jsonString = JSON.stringify(jsonSchema, null, 2);
 
   const handleCopy = () => {
@@ -52,10 +68,10 @@ export function SchemaPreview({
     return { total, maxDepth };
   };
 
-  const { total: totalProps, maxDepth } = countFieldsRecursive(fields);
+  const { total: totalProps, maxDepth } = countFieldsRecursive(resolvedFields);
 
-  return (
-    <div className="glass-panel p-4 sm:p-5 rounded-2xl border border-[#edd6bb]/25 space-y-3 flex flex-col h-full overflow-hidden shadow-xl">
+  const inner = (
+    <>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#edd6bb]/20 pb-3 shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#e1b329]" />
@@ -107,11 +123,21 @@ export function SchemaPreview({
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <MonacoJsonPreview
           data={jsonSchema}
-          fields={fields}
+          fields={resolvedFields}
           selectedFieldId={selectedFieldId}
           onSelectFieldId={onSelectFieldId}
         />
       </div>
+    </>
+  );
+
+  if (noWrapper) {
+    return <div className="flex flex-col h-full overflow-hidden space-y-3">{inner}</div>;
+  }
+
+  return (
+    <div className="glass-panel p-4 sm:p-5 rounded-2xl border border-[#edd6bb]/25 space-y-3 flex flex-col h-full overflow-hidden shadow-xl">
+      {inner}
     </div>
   );
 }

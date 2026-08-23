@@ -57,7 +57,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
     if not _use_fallback:
         async with AsyncSessionLocal() as session:
-            yield session
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
         return
 
     # Fallback to in-memory SQLite session

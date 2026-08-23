@@ -51,6 +51,90 @@ export function buildJsonSchema(fieldList: SchemaField[]): Record<string, any> {
 }
 
 /**
+ * Converts a standard JSON Schema object back into SchemaField[] visual tree
+ */
+export function jsonSchemaToSchemaFields(schema: any): SchemaField[] {
+  if (!schema) return [];
+
+  let targetSchema = schema;
+  if (typeof schema === "string") {
+    try {
+      targetSchema = JSON.parse(schema);
+    } catch {
+      return [];
+    }
+  }
+
+  if (typeof targetSchema !== "object" || targetSchema === null) return [];
+
+  // Determine properties map
+  let props = targetSchema.properties;
+  
+  // Fallback: If properties is not explicitly wrapped under targetSchema.properties
+  if (!props && typeof targetSchema === "object") {
+    const keys = Object.keys(targetSchema);
+    const isDirectProperties = keys.some(
+      (k) => typeof targetSchema[k] === "object" && targetSchema[k] !== null && (targetSchema[k].type || targetSchema[k].description || targetSchema[k].enum || targetSchema[k].properties)
+    );
+    if (isDirectProperties) {
+      props = targetSchema;
+    }
+  }
+
+  if (!props || typeof props !== "object") return [];
+
+  const requiredList: string[] = Array.isArray(targetSchema.required) ? targetSchema.required : [];
+
+  const fields: SchemaField[] = [];
+
+  Object.keys(props).forEach((key) => {
+    const propObj = props[key] || {};
+    const isRequired = requiredList.includes(key) || Boolean(propObj.required);
+    const fieldId = `field_${Math.random().toString(36).substring(2, 9)}`;
+
+    let type: SchemaField["type"] = "string";
+    let enumValues: string | undefined = undefined;
+    let arrayItemType: "string" | "number" | "object" | undefined = undefined;
+    let childProperties: SchemaField[] | undefined = undefined;
+
+    if (propObj.enum && Array.isArray(propObj.enum)) {
+      type = "enum";
+      enumValues = propObj.enum.join(", ");
+    } else if (propObj.enum_values) {
+      type = "enum";
+      enumValues = Array.isArray(propObj.enum_values) ? propObj.enum_values.join(", ") : String(propObj.enum_values);
+    } else if (propObj.type === "array") {
+      type = "array";
+      const itemsObj = propObj.items || {};
+      if (itemsObj.type === "object" || itemsObj.properties) {
+        arrayItemType = "object";
+        childProperties = jsonSchemaToSchemaFields(itemsObj);
+      } else {
+        arrayItemType = itemsObj.type || "string";
+      }
+    } else if (propObj.type === "object" || propObj.properties) {
+      type = "object";
+      childProperties = jsonSchemaToSchemaFields(propObj);
+    } else if (["string", "number", "integer", "boolean", "date"].includes(propObj.type)) {
+      type = propObj.type;
+    }
+
+    fields.push({
+      id: fieldId,
+      name: key,
+      type,
+      required: isRequired,
+      description: propObj.description || "",
+      enumValues,
+      arrayItemType,
+      properties: childProperties,
+    });
+  });
+
+  return fields;
+}
+
+/**
  * Recursively collects all valid parent container fields (object or array of objects)
  * excluding the target field itself and any of its children.
  */

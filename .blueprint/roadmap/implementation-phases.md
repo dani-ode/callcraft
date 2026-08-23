@@ -60,9 +60,15 @@ Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
   - **Gemini Adapter**: Google AI Studio REST API / SDK integration supporting Structured Output Tool Calling.
   - **OpenAI Adapter**: GPT-4o Chat Completions API integration with `tools` function calling specs.
   - **Anthropic / DeepSeek Adapters**: Multi-provider support for structured JSON generation.
-- [x] **3.3. Implement Tool Generator & Post-Processing Validator**:
+- [x] **3.3. Implement Tool Generator, Post-Processing Validator & Auto-Retry Loop**:
   - Build converter transforming user `response_schema` into standard JSON Tool Calling Specs.
   - Implement Pydantic validation & *Type Coercion Engine* (String to Date, Number string to Int, Enum validation).
+  - Implement internal auto-retry loop (1-2 attempts) for AI model hallucination detection before throwing errors.
+- [x] **3.4. Implement Response Envelope & Tracing Engine (Q&A 6 & Q&A 7)**:
+  - Implement `ResponseEnvelope` formatter packaging all responses into standardized `meta`, `data` (or `error`), `execution_trace`, and `metrics` JSON blocks.
+  - Implement execution step tracing, ensuring `execution_trace.steps` is guaranteed to be a JSON Array `[]`.
+  - Implement Actionable Error Envelope builder formatting `code`, `message`, `details`, and `actionable_step`.
+  - Implement Graceful Degradation (`partial_success` status) for multi-tool execution paths.
 
 ---
 
@@ -88,10 +94,11 @@ Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
   - Integrate AES-256-GCM encryption for stored user API keys.
   - Integrate Argon2id hashing for customer secret keys (`call_sk_live_...`).
   - Implement SSRF Security Validator blocking private/loopback/cloud metadata IPs on remote URL downloads.
-- [x] **5.2. Token-Bucket Rate Limiter in Redis**:
+- [x] **5.2. Token-Bucket Rate Limiter & Correlation ID Middleware**:
   - FastAPI middleware checking customer API Key request quotas (default 60 req/min).
+  - Middleware for `X-Request-ID` and `X-Correlation-ID` extraction, assignment, and header propagation.
 - [x] **5.3. Async Outbox Worker**:
-  - Python Data Plane writes execution metadata non-blocking to Redis outbox queues.
+  - Python Data Plane writes execution metadata (`request_id`, `trace_id`, token counts, processing times, error codes) non-blocking to Redis outbox queues.
   - `callcraft-worker` consumes outbox queues and batch-inserts request logs into PostgreSQL `api_requests`.
 
 ---

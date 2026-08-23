@@ -16,6 +16,8 @@ Executes dynamic multimodal AI processing based on the specified `X-CALL-SPEC-ID
 ```http
 Authorization: Bearer call_sk_sample_key_1234567890
 X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
+X-Request-ID: req_882391005_abc
+X-Correlation-ID: trc_5599201
 Content-Type: application/json
 ```
 
@@ -41,93 +43,157 @@ Content-Type: application/json
 }
 ```
 
-#### Response Specifications:
+---
 
-##### Success Response (`200 OK`):
+#### Envelope Response Specifications (Q&A 6 & Q&A 7)
+
+##### 1. Success Response Envelope (`200 OK` - `meta.status = "completed"`):
 ```json
 {
-  "success": true,
-  "request_id": "req_01HZY9998877665544332211AA",
-  "spec": {
-    "id": "01HZX89ABCDEF1234567890XYZ",
-    "name": "Identity Document Extractor",
-    "version": 1
+  "meta": {
+    "request_id": "req_882391005_abc",
+    "trace_id": "trc_5599201",
+    "timestamp": "2026-08-23T20:05:12Z",
+    "status": "completed",
+    "api_version": "v2.1",
+    "execution_mode": "sync"
   },
-  "execution": {
-    "provider": "gemini",
-    "model": "gemini-1.5-flash",
-    "processing_time_ms": 1240,
-    "tokens": {
+  "data": {
+    "primary_result": {
+      "type": "structured_json",
+      "content": {
+        "nik": "3271041508950001",
+        "full_name": "BUDI SANTOSO",
+        "gender": "MALE",
+        "birth": {
+          "place": "BOGOR",
+          "date": "1995-08-15"
+        },
+        "address": {
+          "street": "JL. MERDEKA NO. 45",
+          "rt_rw": "002/005",
+          "district": "PAKUAN",
+          "city": "KOTA BOGOR"
+        }
+      }
+    },
+    "human_readable_message": "Identitas dokumen berhasil diekstrak dan divalidasi."
+  },
+  "execution_trace": {
+    "total_duration_ms": 1240,
+    "steps": [
+      {
+        "step_id": "step_1",
+        "agent": "vision_parser",
+        "action_type": "tool_call",
+        "tool_name": "extract_document_data",
+        "status": "success",
+        "duration_ms": 1200
+      }
+    ],
+    "warnings": []
+  },
+  "metrics": {
+    "usage": {
       "prompt_tokens": 850,
       "completion_tokens": 120,
       "total_tokens": 970
-    }
+    },
+    "estimated_cost_usd": 0.001455
+  }
+}
+```
+
+##### 2. Actionable Error Response Envelope (`400/422/403/429/500/504` - `meta.status = "failed"`):
+```json
+{
+  "meta": {
+    "request_id": "req_882391009_xyz",
+    "trace_id": "trc_5599202",
+    "timestamp": "2026-08-23T20:07:15Z",
+    "status": "failed",
+    "api_version": "v2.1",
+    "execution_mode": "sync"
+  },
+  "error": {
+    "code": "INVALID_IMAGE_FORMAT",
+    "message": "Gambar tidak dapat diproses. Pastikan formatnya adalah JPG atau PNG, dan resolusi tidak melebihi 4K.",
+    "details": [
+      {
+        "field": "image",
+        "issue": "String Base64 corrupt atau bukan format gambar yang dikenali."
+      }
+    ],
+    "actionable_step": "Silakan kompres gambar atau periksa kembali proses encoding Base64 di sisi client."
+  },
+  "execution_trace": {
+    "total_duration_ms": 120,
+    "steps": [],
+    "warnings": []
+  }
+}
+```
+
+##### 3. Partial Success Response Envelope (`200 OK` / `207 Multi-Status` - `meta.status = "partial_success"`):
+```json
+{
+  "meta": {
+    "request_id": "req_882391010_pqr",
+    "trace_id": "trc_5599203",
+    "timestamp": "2026-08-23T20:08:00Z",
+    "status": "partial_success",
+    "api_version": "v2.1",
+    "execution_mode": "sync"
   },
   "data": {
-    "nik": "3271041508950001",
-    "full_name": "BUDI SANTOSO",
-    "gender": "MALE",
-    "birth": {
-      "place": "BOGOR",
-      "date": "1995-08-15"
+    "primary_result": {
+      "type": "structured_json",
+      "content": {
+        "estimasi_biaya": 450000000
+      }
     },
-    "address": {
-      "street": "JL. MERDEKA NO. 45",
-      "rt_rw": "002/005",
-      "district": "PAKUAN",
-      "city": "KOTA BOGOR"
-    }
-  }
-}
-```
-
-##### Error Responses:
-
-###### `400 Bad Request` (Invalid Input / Schema Mismatch)
-```json
-{
-  "success": false,
-  "request_id": "req_01HZY...",
+    "human_readable_message": "Analisis denah dan estimasi biaya berhasil, namun sistem gagal menjadwalkannya di kalender."
+  },
   "error": {
-    "code": "INVALID_FILE_PAYLOAD",
-    "message": "Base64 payload size exceeds maximum 10 MB limit"
+    "code": "PARTIAL_TOOL_FAILURE",
+    "message": "Gagal mengeksekusi tool 'create_calendar_event'.",
+    "details": [
+      {
+        "issue": "Google Calendar API sedang down (HTTP 503)."
+      }
+    ],
+    "actionable_step": "Hasil analisis telah disimpan. Jadwalkan ulang event kalender secara manual."
+  },
+  "execution_trace": {
+    "total_duration_ms": 3200,
+    "steps": [
+      { "step_id": "step_1", "agent": "vision_parser", "action_type": "tool_call", "tool_name": "vision_analysis", "status": "success", "duration_ms": 1500 },
+      { "step_id": "step_2", "agent": "data_retriever", "action_type": "tool_call", "tool_name": "query_milvus_db", "status": "success", "duration_ms": 500 },
+      { "step_id": "step_3", "agent": "integrator", "action_type": "tool_call", "tool_name": "create_calendar_event", "status": "failed", "duration_ms": 1200 }
+    ],
+    "warnings": ["Tool create_calendar_event failed with HTTP 503"]
   }
 }
 ```
 
-###### `401 Unauthorized` (Invalid / Missing API Key)
-```json
-{
-  "success": false,
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Invalid API Secret Key provided in Authorization header"
-  }
-}
-```
+---
 
-###### `429 Too Many Requests` (Rate Limit Exceeded)
-```json
-{
-  "success": false,
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "API Key rate limit of 60 requests/minute exceeded. Try again in 14 seconds."
-  }
-}
-```
+#### Standardized Error Codes Reference Table
 
-###### `502 Bad Gateway` (AI Provider Error)
-```json
-{
-  "success": false,
-  "request_id": "req_01HZY...",
-  "error": {
-    "code": "AI_PROVIDER_ERROR",
-    "message": "Upstream AI Provider returned rate limit error (HTTP 429)"
-  }
-}
-```
+| Category | HTTP Code | Error Code (`error.code`) | Trigger Condition | Recommended Client Action |
+| :--- | :---: | :--- | :--- | :--- |
+| **Client Input** | `400` | `VALIDATION_ERROR` | Malformed JSON, missing prompt/variables | Correct payload syntax; do not auto-retry |
+| **Client Input** | `422` | `UNSUPPORTED_MEDIA_TYPE` | Non-image payload or invalid MIME | Use valid JPEG, PNG, or PDF format |
+| **Client Input** | `422` | `INVALID_IMAGE_FORMAT` | Corrupt Base64 string or image > 4K | Re-encode file or compress image size |
+| **Security** | `401` | `UNAUTHORIZED` | Invalid or missing API Key (`call_sk_...`) | Check Authorization bearer token |
+| **Security** | `403` | `SSRF_BLOCKED` | Remote URL points to internal IP/localhost | Provide public, safe remote file URL |
+| **Rate Limit** | `429` | `RATE_LIMIT_EXCEEDED` | Request frequency exceeds key limit | Apply Exponential Backoff wait |
+| **AI Model** | `403` | `AI_SAFETY_BLOCK` | Image/prompt triggered safety filter | Inspect image content for violations |
+| **AI Model** | `422` | `VISION_EXTRACTION_FAILED` | Image unreadable, blurry, or low quality | Provide clearer high-contrast image |
+| **AI Model** | `422` | `AI_HALLUCINATION_DETECTED` | Model failed tool spec after 2 retries | Adjust prompt instructions or spec |
+| **Tool/Infra** | `500` | `TOOL_EXECUTION_FAILED` | Internal tool execution exception | Inspect step log in `execution_trace` |
+| **Tool/Infra** | `504` | `UPSTREAM_AI_TIMEOUT` | AI Model provider timed out (>60s) | Retry request with exponential backoff |
+| **Partial** | `207` / `200` | `PARTIAL_TOOL_FAILURE` | Primary tool succeeded, sub-tool failed | Process partial `data`; retry failed tool |
 
 ---
 

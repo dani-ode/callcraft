@@ -298,6 +298,7 @@ CREATE TABLE system_prompts (
 CREATE TABLE api_requests (
     id VARCHAR(26) PRIMARY KEY,
     request_id VARCHAR(100) NOT NULL UNIQUE,
+    trace_id VARCHAR(100), -- Correlation trace ID for distributed tracing (Q&A 6)
     user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
     call_spec_version_id VARCHAR(26) NOT NULL REFERENCES call_spec_versions(id) ON DELETE CASCADE,
@@ -305,7 +306,8 @@ CREATE TABLE api_requests (
     provider_id VARCHAR(26) REFERENCES ai_providers(id) ON DELETE SET NULL,
     model_id VARCHAR(26) REFERENCES ai_models(id) ON DELETE SET NULL,
     
-    status VARCHAR(50) NOT NULL, -- 'SUCCESS', 'FAILED', 'TIMED_OUT', 'VALIDATION_ERROR'
+    status VARCHAR(50) NOT NULL, -- 'completed', 'failed', 'partial_success'
+    execution_mode VARCHAR(50) NOT NULL DEFAULT 'sync', -- 'sync', 'async_webhook'
     http_status INT NOT NULL,
     
     input_type VARCHAR(20) NOT NULL, -- 'base64', 'url'
@@ -328,6 +330,8 @@ CREATE TABLE api_requests (
 
 CREATE INDEX idx_api_requests_user_created ON api_requests(user_id, created_at DESC);
 CREATE INDEX idx_api_requests_spec_id ON api_requests(call_spec_id);
+CREATE INDEX idx_api_requests_request_id ON api_requests(request_id);
+CREATE INDEX idx_api_requests_trace_id ON api_requests(trace_id);
 CREATE INDEX idx_api_requests_status ON api_requests(status);
 
 

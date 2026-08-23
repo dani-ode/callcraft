@@ -30,6 +30,7 @@ import {
   deleteTemplateComment,
 } from "@/lib/api-client";
 import { CallSpec, Template, TemplateComment } from "@/lib/types";
+import { MarkdownEditorWithPreview } from "@/components/markdown-editor";
 
 export default function SpecPublicationPage() {
   const params = useParams();
@@ -78,12 +79,39 @@ export default function SpecPublicationPage() {
     }
   }
 
+  async function handleTogglePublication(targetState?: boolean) {
+    const nextState = targetState !== undefined ? targetState : !isPublished;
+    setSaving(true);
+
+    try {
+      await updateSpecPublicationSettings(specId, {
+        isPublished: nextState,
+        name: title.trim(),
+        category,
+        description,
+      });
+
+      setIsPublished(nextState);
+      setNotification({
+        message: nextState
+          ? "Call Spec berhasil dipublikasikan ke Pasar Template!"
+          : "Call Spec ditarik dari Pasar Template (Draft).",
+        type: "success",
+      });
+      loadPublicationData();
+    } catch (err: any) {
+      setNotification({ message: err.message || "Gagal memperbarui status publikasi", type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSavePublication(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
 
     try {
-      const res = await updateSpecPublicationSettings(specId, {
+      await updateSpecPublicationSettings(specId, {
         isPublished,
         name: title.trim(),
         category,
@@ -212,14 +240,22 @@ export default function SpecPublicationPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setIsPublished(!isPublished)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+              disabled={saving}
+              onClick={() => handleTogglePublication()}
+              className={`px-5 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 shadow-md transform active:scale-95 ${
                 isPublished
-                  ? "bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30"
-                  : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30"
+                  ? "bg-rose-600 hover:bg-rose-700 text-white border border-rose-500 shadow-rose-600/20"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-emerald-600/20"
               }`}
             >
-              {isPublished ? "Tarik dari Pasar (Unpublish)" : "Publikasikan Sekarang"}
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isPublished ? (
+                <Lock className="w-4 h-4" />
+              ) : (
+                <Globe className="w-4 h-4" />
+              )}
+              <span>{isPublished ? "Tarik dari Pasar (Unpublish)" : "Publikasikan Sekarang"}</span>
             </button>
           </div>
         </div>
@@ -314,52 +350,17 @@ export default function SpecPublicationPage() {
           </div>
 
           {/* Markdown Content Editor */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-[#edd6bb] flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-[#e1b329]" />
-                <span>Isi Dokumentasi README (File Markdown)</span>
-              </label>
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-[#edd6bb] flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-[#e1b329]" />
+              <span>Isi Dokumentasi README & Spesifikasi (File Markdown)</span>
+            </label>
 
-              <div className="flex items-center gap-1 bg-[#120e0b] p-1 rounded-xl border border-[#edd6bb]/15">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("editor")}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                    activeTab === "editor" ? "bg-[#e1b329] text-slate-950" : "text-[#8b7e6d]"
-                  }`}
-                >
-                  Markdown Editor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("preview")}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                    activeTab === "preview" ? "bg-[#e1b329] text-slate-950" : "text-[#8b7e6d]"
-                  }`}
-                >
-                  Live Preview
-                </button>
-              </div>
-            </div>
-
-            {activeTab === "editor" ? (
-              <textarea
-                rows={12}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full p-4 rounded-2xl bg-[#120e0b]/80 border border-[#edd6bb]/20 font-mono text-xs text-[#edd6bb] placeholder-[#8b7e6d] focus:outline-none focus:border-[#e1b329] leading-relaxed"
-                placeholder="# Call Spec Documentation..."
-              />
-            ) : (
-              <div className="p-6 rounded-2xl bg-[#120e0b]/90 border border-[#edd6bb]/20 min-h-[250px] font-sans text-xs text-[#edd6bb] space-y-4 overflow-x-auto">
-                <div className="prose prose-invert max-w-none text-xs leading-relaxed">
-                  <pre className="whitespace-pre-wrap font-mono text-xs bg-black/40 p-4 rounded-xl text-slate-300 border border-[#edd6bb]/15">
-                    {description}
-                  </pre>
-                </div>
-              </div>
-            )}
+            <MarkdownEditorWithPreview
+              value={description}
+              onChange={(val) => setDescription(val)}
+              minRows={14}
+            />
           </div>
         </div>
       </form>

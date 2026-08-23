@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 1. USERS
 CREATE TABLE users (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
@@ -19,7 +19,7 @@ CREATE INDEX idx_users_status ON users(status);
 
 -- 2. ROLES
 CREATE TABLE roles (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -27,7 +27,7 @@ CREATE TABLE roles (
 
 -- 3. PERMISSIONS
 CREATE TABLE permissions (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     code VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -35,21 +35,21 @@ CREATE TABLE permissions (
 
 -- 4. ROLE_PERMISSIONS
 CREATE TABLE role_permissions (
-    role_id VARCHAR(26) NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    permission_id VARCHAR(26) NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    role_id VARCHAR(50) NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permission_id VARCHAR(50) NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
     PRIMARY KEY (role_id, permission_id)
 );
 
 -- 5. USER_ROLES
 CREATE TABLE user_roles (
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role_id VARCHAR(26) NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id VARCHAR(50) NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, role_id)
 );
 
 -- 6. SERVICE_CLIENTS
 CREATE TABLE service_clients (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     client_id VARCHAR(100) NOT NULL UNIQUE,
     secret_hash VARCHAR(255) NOT NULL,
@@ -62,8 +62,8 @@ CREATE TABLE service_clients (
 
 -- 7. API_CREDENTIALS
 CREATE TABLE api_credentials (
-    id VARCHAR(26) PRIMARY KEY,
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     public_key VARCHAR(100) NOT NULL UNIQUE,
     secret_key_hash VARCHAR(255) NOT NULL,
@@ -79,7 +79,7 @@ CREATE INDEX idx_api_credentials_public_key ON api_credentials(public_key);
 
 -- 8. AI_PROVIDERS
 CREATE TABLE ai_providers (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     code VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -88,8 +88,8 @@ CREATE TABLE ai_providers (
 
 -- 9. AI_MODELS
 CREATE TABLE ai_models (
-    id VARCHAR(26) PRIMARY KEY,
-    provider_id VARCHAR(26) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    provider_id VARCHAR(50) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     model_identifier VARCHAR(100) NOT NULL,
     supports_image BOOLEAN NOT NULL DEFAULT true,
@@ -106,9 +106,9 @@ CREATE INDEX idx_ai_models_provider ON ai_models(provider_id);
 
 -- 10. USER_AI_PROVIDERS
 CREATE TABLE user_ai_providers (
-    id VARCHAR(26) PRIMARY KEY,
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    provider_id VARCHAR(26) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider_id VARCHAR(50) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
     encrypted_api_key TEXT NOT NULL,
     key_nonce VARCHAR(100) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -119,30 +119,83 @@ CREATE TABLE user_ai_providers (
 
 -- 11. TEMPLATES
 CREATE TABLE templates (
-    id VARCHAR(26) PRIMARY KEY,
-    code VARCHAR(50) NOT NULL UNIQUE,
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
+    code VARCHAR(100) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     description TEXT,
     category VARCHAR(50) NOT NULL,
+    categories JSONB NOT NULL DEFAULT '[]'::jsonb,
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
+    tools_config JSONB DEFAULT '{}'::jsonb,
     system_prompt TEXT NOT NULL,
     extraction_prompt TEXT,
     is_official BOOLEAN NOT NULL DEFAULT true,
+    is_published BOOLEAN NOT NULL DEFAULT true,
+    fork_count INT NOT NULL DEFAULT 0,
+    likes_count INT NOT NULL DEFAULT 0,
+    rating_avg NUMERIC(3, 2) NOT NULL DEFAULT 5.00,
+    reviews_count INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_templates_category ON templates(category);
+CREATE INDEX idx_templates_user_id ON templates(user_id);
+
+-- 11a. TEMPLATE_LIKES
+CREATE TABLE template_likes (
+    template_id VARCHAR(50) NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (template_id, user_id)
+);
+
+-- 11b. TEMPLATE_COMMENTS
+CREATE TABLE template_comments (
+    id VARCHAR(50) PRIMARY KEY,
+    template_id VARCHAR(50) NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    author_name VARCHAR(100) NOT NULL DEFAULT 'Developer',
+    rating INT NOT NULL DEFAULT 5,
+    comment TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_template_comments_template_id ON template_comments(template_id);
+CREATE INDEX idx_template_comments_user_id ON template_comments(user_id);
+
+-- 11c. APP_INIT
+CREATE TABLE app_init (
+    id VARCHAR(50) PRIMARY KEY,
+    app_name VARCHAR(100) NOT NULL DEFAULT 'Callcraft',
+    app_icon TEXT NOT NULL DEFAULT 'Feather',
+    tagline VARCHAR(255) NOT NULL DEFAULT 'Multimodal AI Execution Gateway',
+    description TEXT,
+    favicon_url TEXT DEFAULT '/favicon.ico',
+    disable_landing_page BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 12. CALL_SPECS
 CREATE TABLE call_specs (
-    id VARCHAR(26) PRIMARY KEY,
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    template_id VARCHAR(26) REFERENCES templates(id) ON DELETE SET NULL,
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    template_id VARCHAR(50) REFERENCES templates(id) ON DELETE SET NULL,
     name VARCHAR(100) NOT NULL,
     slug VARCHAR(100) NOT NULL,
     description TEXT,
     active_version_number INT NOT NULL DEFAULT 1,
     status VARCHAR(50) NOT NULL DEFAULT 'active',
+    allow_pdf_input BOOLEAN NOT NULL DEFAULT true,
+    use_external_api_key BOOLEAN NOT NULL DEFAULT true,
+    external_api_key TEXT,
+    external_model_name VARCHAR(100),
+    tools_config JSONB DEFAULT '{}'::jsonb,
+    is_published BOOLEAN NOT NULL DEFAULT false,
+    published_template_id VARCHAR(50) REFERENCES templates(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_user_spec_slug UNIQUE (user_id, slug)
@@ -152,21 +205,26 @@ CREATE INDEX idx_call_specs_user_id ON call_specs(user_id);
 
 -- 13. CALL_SPEC_VERSIONS
 CREATE TABLE call_spec_versions (
-    id VARCHAR(26) PRIMARY KEY,
-    call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    call_spec_id VARCHAR(50) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
     version_number INT NOT NULL,
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
     system_prompt TEXT,
     extraction_prompt TEXT,
-    preferred_model_id VARCHAR(26) REFERENCES ai_models(id),
+    preferred_model_id VARCHAR(50) REFERENCES ai_models(id),
+    allow_pdf_input BOOLEAN NOT NULL DEFAULT true,
+    use_external_api_key BOOLEAN NOT NULL DEFAULT true,
+    external_api_key TEXT,
+    external_model_name VARCHAR(100),
+    tools_config JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_spec_version UNIQUE (call_spec_id, version_number)
 );
 
 -- 14. SYSTEM_PROMPTS
 CREATE TABLE system_prompts (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     code VARCHAR(100) NOT NULL UNIQUE,
     name VARCHAR(150) NOT NULL,
     content TEXT NOT NULL,
@@ -177,14 +235,14 @@ CREATE TABLE system_prompts (
 
 -- 15. API_REQUESTS
 CREATE TABLE api_requests (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     request_id VARCHAR(100) NOT NULL UNIQUE,
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
-    call_spec_version_id VARCHAR(26) NOT NULL REFERENCES call_spec_versions(id) ON DELETE CASCADE,
-    credential_id VARCHAR(26) REFERENCES api_credentials(id) ON DELETE SET NULL,
-    provider_id VARCHAR(26) REFERENCES ai_providers(id) ON DELETE SET NULL,
-    model_id VARCHAR(26) REFERENCES ai_models(id) ON DELETE SET NULL,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    call_spec_id VARCHAR(50) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
+    call_spec_version_id VARCHAR(50) NOT NULL REFERENCES call_spec_versions(id) ON DELETE CASCADE,
+    credential_id VARCHAR(50) REFERENCES api_credentials(id) ON DELETE SET NULL,
+    provider_id VARCHAR(50) REFERENCES ai_providers(id) ON DELETE SET NULL,
+    model_id VARCHAR(50) REFERENCES ai_models(id) ON DELETE SET NULL,
     
     status VARCHAR(50) NOT NULL,
     http_status INT NOT NULL,
@@ -213,8 +271,8 @@ CREATE INDEX idx_api_requests_status ON api_requests(status);
 
 -- 16. USER_USAGE_DAILY
 CREATE TABLE user_usage_daily (
-    id VARCHAR(26) PRIMARY KEY,
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     usage_date DATE NOT NULL,
     total_requests INT NOT NULL DEFAULT 0,
     successful_requests INT NOT NULL DEFAULT 0,
@@ -226,3 +284,4 @@ CREATE TABLE user_usage_daily (
 );
 
 CREATE INDEX idx_user_usage_daily_date ON user_usage_daily(user_id, usage_date DESC);
+

@@ -176,3 +176,19 @@ def validate_url_ip(url_str: str) -> str:
 
     return url_str
 ```
+
+---
+
+## 5. Audit Logging Security & Envelope Error Masking (Q&A 5, 6 & 7)
+
+### A. Zero Data Retention (ZDR) Audit Logs
+To balance strict privacy guarantees with operational observability, Callcraft decouples audit metadata logging from payload content:
+- **Recorded Audit Fields (`api_requests` table)**: `request_id`, `trace_id`, `user_id`, `call_spec_id`, `status`, `execution_mode`, `http_status`, `input_type`, `input_size_bytes`, `processing_time_ms`, token usage, estimated cost, client IP, and standardized `error_code`.
+- **Forbidden Audit Fields**: Base64 strings, binary image bytes, raw prompt text, dynamic variables, extracted JSON payloads, or decrypted AI provider API keys.
+
+### B. Envelope Error Response Sanitization
+When security or validation checks fail, the backend returns standardized Actionable Error Envelopes:
+1. **No Internal Leakage**: Error messages (`error.message`) and details (`error.details`) are sanitized to prevent leaking database schemas, internal host paths, stack tracebacks, or secret key hashes.
+2. **Standardized Codes**: Uses predefined uppercase codes (such as `UNAUTHORIZED`, `SSRF_BLOCKED`, `RATE_LIMIT_EXCEEDED`, `VALIDATION_ERROR`).
+3. **Auditability**: Every error envelope retains `meta.request_id` and `meta.trace_id`, enabling customer support engineers to correlate client issues with server log entries without exposing internal details to the client.
+

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sliders, Bot, ShieldCheck, AlertTriangle, ExternalLink } from "lucide-react";
+import { Sliders, Bot, ShieldCheck, AlertTriangle, ExternalLink, Key } from "lucide-react";
 
 interface ExecutionSettingsProps {
   specName: string;
@@ -14,6 +14,8 @@ interface ExecutionSettingsProps {
   setSystemPrompt: (val: string) => void;
   extractionPrompt: string;
   setExtractionPrompt: (val: string) => void;
+  useExternalApiKey?: boolean;
+  setUseExternalApiKey?: (val: boolean) => void;
   currentProviderStatus: { active: boolean; label: string };
 }
 
@@ -28,6 +30,8 @@ export function ExecutionSettings({
   setSystemPrompt,
   extractionPrompt,
   setExtractionPrompt,
+  useExternalApiKey = true,
+  setUseExternalApiKey,
   currentProviderStatus,
 }: ExecutionSettingsProps) {
   return (
@@ -56,6 +60,36 @@ export function ExecutionSettings({
               onChange={(e) => setSpecSlug(e.target.value)}
               className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs font-mono font-bold text-[#e1b329] focus:outline-none focus:border-[#e1b329]"
             />
+          </div>
+        </div>
+
+        {/* External AI API Key Toggle Option */}
+        <div className="p-4 rounded-xl glass-panel border border-[#edd6bb]/20 space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <label className="text-xs font-bold text-[#2c1d11] dark:text-[#edd6bb] flex items-center gap-1.5 cursor-pointer">
+                <Key className="w-4 h-4 text-[#e1b329]" />
+                <span>Izinkan External AI API Key</span>
+              </label>
+              <p className="text-[11px] opacity-75 leading-relaxed">
+                Izinkan pemanggil API mengirimkan header <code className="font-mono text-[#e1b329]">X-AI-API-KEY</code> dan <code className="font-mono text-[#e1b329]">X-AI-MODEL-NAME</code> secara kustom saat memanggil request. Jika header tidak dikirimkan, API akan otomatis menggunakan model yang terhubung dengan Spec ini.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={useExternalApiKey}
+              onClick={() => setUseExternalApiKey?.(!useExternalApiKey)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                useExternalApiKey ? "bg-[#e1b329]" : "bg-slate-700 dark:bg-slate-800"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-950 shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  useExternalApiKey ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
         </div>
 

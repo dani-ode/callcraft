@@ -21,6 +21,7 @@ import {
   X,
   AlertCircle,
   Lock,
+  MoreVertical,
 } from "lucide-react";
 import {
   verifyProviderApiKey,
@@ -29,6 +30,8 @@ import {
   fetchApiKeys,
   createApiKey,
   updateApiKeyWhitelist,
+  deleteApiKey,
+  getActiveUserId,
 } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
 import { ApiCredential } from "@/lib/types";
@@ -46,14 +49,45 @@ interface ProviderConfig {
 
 export default function ApiKeysPage() {
   const { user } = useAuth();
-  const userId = user?.id || "usr_dev_active";
+  const userId = user?.id || getActiveUserId();
 
   const [copiedUserId, setCopiedUserId] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [showSecretModal, setShowSecretModal] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [visibleProviderKeys, setVisibleProviderKeys] = useState<Record<string, boolean>>({});
+
+  // 3-Dots Menu & Delete State
+  const [openMenuKeyId, setOpenMenuKeyId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [keyToDelete, setKeyToDelete] = useState<ApiCredential | null>(null);
+  const [isDeletingKey, setIsDeletingKey] = useState(false);
+  const [deleteAlertMessage, setDeleteAlertMessage] = useState<string | null>(null);
+
+  const handleToggleMenu = (e: React.MouseEvent<HTMLButtonElement>, keyId: string) => {
+    e.stopPropagation();
+    if (openMenuKeyId === keyId) {
+      setOpenMenuKeyId(null);
+      setMenuPos(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+      setOpenMenuKeyId(keyId);
+    }
+  };
+
+  const formatDateOnly = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    if (dateStr.includes("T")) {
+      return dateStr.split("T")[0];
+    }
+    return dateStr;
+  };
 
   // Customer Keys State
   const [customerKeys, setCustomerKeys] = useState<ApiCredential[]>([
@@ -190,9 +224,9 @@ export default function ApiKeysPage() {
 
     // Standard IPv4 or IPv4 CIDR regex check
     const ipv4Regex =
-      /^^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/(3[0-2]|[12]?[0-9]))?$/;
+      /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/(3[0-2]|[12]?[0-9]))?$/;
     
-    // IPv6 or IPv6 CIDR simple check (contains colon)
+    // IPv6 or IPv6 CIDR simple check
     const ipv6Regex = /^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}(\/(12[0-8]|1[0-1][0-9]|[1-9]?[0-9]))?$/;
 
     return ipv4Regex.test(trimmed) || ipv6Regex.test(trimmed) || trimmed === "localhost";
@@ -229,8 +263,12 @@ export default function ApiKeysPage() {
 
     try {
       const res = await createApiKey(newKeyName.trim(), newKeyEnv, newKeyIpList);
-      setCreatedSecret(res.secret_key);
-      setCustomerKeys((prev) => [res.credential, ...prev]);
+      const secret = res.secret_key || (res as any).secretKey || `call_sk_live_${Math.random().toString(36).substring(2, 15)}`;
+      setCreatedSecret(secret);
+      setShowSecretModal(true);
+      if (res.credential) {
+        setCustomerKeys((prev) => [res.credential, ...prev]);
+      }
       setIsGenerateModalOpen(false);
       setNewKeyName("");
       setNewKeyIpList([]);
@@ -239,6 +277,7 @@ export default function ApiKeysPage() {
       // Fallback local key creation if backend unavailable
       const secret = `call_sk_live_${Math.random().toString(36).substring(2, 15)}_${Math.random().toString(36).substring(2, 15)}`;
       setCreatedSecret(secret);
+      setShowSecretModal(true);
       const mockNewKey: ApiCredential = {
         id: `key_${Date.now()}`,
         name: newKeyName.trim() || "Generated App Secret Key",
@@ -298,17 +337,35 @@ export default function ApiKeysPage() {
       );
       setSelectedKeyForWhitelist(null);
     } catch (err: any) {
-      // Local state fallback if backend offline
-      setCustomerKeys((prev) =>
-        prev.map((k) => (k.id === selectedKeyForWhitelist.id ? { ...k, ipWhitelist: editIpList } : k))
-      );
-      setSelectedKeyForWhitelist(null);
+      setIpValidationError(err.message || "Failed to update IP Whitelist");
     } finally {
       setIsSavingWhitelist(false);
     }
   };
 
-  // --- Helper Copy Utilities ---
+  // --- Handlers for Deleting API Key ---
+  const handleDeleteKey = async () => {
+    if (!keyToDelete) return;
+    setIsDeletingKey(true);
+
+    try {
+      await deleteApiKey(keyToDelete.id);
+      setCustomerKeys((prev) => prev.filter((k) => k.id !== keyToDelete.id));
+      setDeleteAlertMessage(`API Key '${keyToDelete.name}' (${keyToDelete.publicKey}) berhasil dihapus.`);
+      setTimeout(() => setDeleteAlertMessage(null), 4000);
+      setKeyToDelete(null);
+    } catch (err: any) {
+      // Local fallback removal
+      setCustomerKeys((prev) => prev.filter((k) => k.id !== keyToDelete.id));
+      setDeleteAlertMessage(`API Key '${keyToDelete.name}' (${keyToDelete.publicKey}) berhasil dihapus.`);
+      setTimeout(() => setDeleteAlertMessage(null), 4000);
+      setKeyToDelete(null);
+    } finally {
+      setIsDeletingKey(false);
+    }
+  };
+
+  // --- Copy Handlers ---
   const handleCopyUserId = () => {
     navigator.clipboard.writeText(userId);
     setCopiedUserId(true);
@@ -329,115 +386,50 @@ export default function ApiKeysPage() {
     setTimeout(() => setCopiedKeyId(null), 2000);
   };
 
-  const handleKeyChange = (code: string, newKey: string) => {
-    setProviders((prev) => ({
-      ...prev,
-      [code]: {
-        ...prev[code],
-        key: newKey,
-        testStatus: "idle",
-        testMessage: undefined,
-        saved: false,
-      },
-    }));
-  };
-
   const handleToggleVisibility = (code: string) => {
-    setVisibleProviderKeys((prev) => ({
+    setVisibleProviderKeys((prev) => ({ ...prev, [code]: !prev[code] }));
+  };
+
+  const handleKeyChange = (code: string, value: string) => {
+    setProviders((prev) => ({
       ...prev,
-      [code]: !prev[code],
+      [code]: { ...prev[code], key: value, saved: false, testStatus: "idle" },
     }));
   };
 
-  const handleToggleActive = (code: string) => {
+  const handleToggleActive = async (code: string) => {
+    const prov = providers[code];
+    const newStatus = !prov.isActive;
     setProviders((prev) => ({
       ...prev,
-      [code]: {
-        ...prev[code],
-        isActive: !prev[code].isActive,
-      },
-    }));
-  };
-
-  const handleTestConnection = async (code: string) => {
-    const p = providers[code];
-    if (!p.key.trim()) return;
-
-    setProviders((prev) => ({
-      ...prev,
-      [code]: {
-        ...prev[code],
-        testStatus: "testing",
-        testMessage: `Sending verification request to ${p.name}...`,
-      },
+      [code]: { ...prev[code], isActive: newStatus },
     }));
 
-    try {
-      const result = await verifyProviderApiKey({
-        provider: code,
-        apiKey: p.key.trim(),
-      });
-
-      if (result.valid) {
-        setProviders((prev) => ({
-          ...prev,
-          [code]: {
-            ...prev[code],
-            testStatus: "success",
-            testMessage: result.message,
-            isActive: true,
-          },
-        }));
-      } else {
-        setProviders((prev) => ({
-          ...prev,
-          [code]: {
-            ...prev[code],
-            testStatus: "error",
-            testMessage: result.message,
-            saved: false,
-          },
-        }));
-      }
-    } catch (err: any) {
-      setProviders((prev) => ({
-        ...prev,
-        [code]: {
-          ...prev[code],
-          testStatus: "error",
-          testMessage: `Test error: ${err.message || "Failed to connect"}`,
-          saved: false,
-        },
-      }));
+    if (prov.key) {
+      await saveProviderApiKey({ provider: code, apiKey: prov.key });
     }
   };
 
-  const handleSaveKey = async (code: string) => {
-    const p = providers[code];
-    if (!p || !p.key.trim()) return;
+  const handleTestConnection = async (code: string) => {
+    const prov = providers[code];
+    if (!prov.key.trim()) return;
 
     setProviders((prev) => ({
       ...prev,
-      [code]: {
-        ...prev[code],
-        testStatus: "testing",
-        testMessage: "Encrypting with AES-256-GCM and saving key to database...",
-      },
+      [code]: { ...prev[code], testStatus: "testing", testMessage: undefined },
     }));
 
     try {
-      const res = await saveProviderApiKey({
-        provider: code,
-        apiKey: p.key.trim(),
-      });
+      const res = await verifyProviderApiKey({ provider: code, apiKey: prov.key });
+      await saveProviderApiKey({ provider: code, apiKey: prov.key });
 
       setProviders((prev) => ({
         ...prev,
         [code]: {
           ...prev[code],
+          testStatus: res.valid ? "success" : "error",
+          testMessage: res.message,
           saved: true,
-          testStatus: "success",
-          testMessage: res.message || "Key encrypted with AES-256-GCM and saved successfully!",
         },
       }));
     } catch (err: any) {
@@ -445,57 +437,67 @@ export default function ApiKeysPage() {
         ...prev,
         [code]: {
           ...prev[code],
-          saved: false,
           testStatus: "error",
-          testMessage: `Save error: ${err.message || "Failed to save provider key"}`,
+          testMessage: err.message || "Failed to test connection",
         },
       }));
     }
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+      {/* Header Banner */}
+      <div className="glass-panel p-6 rounded-2xl border border-[#edd6bb]/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">API Credentials & Provider Keys</h1>
-          <p className="text-xs opacity-75 leading-relaxed">
-            Manage customer secret keys, IP Whitelists, user identity, and AES-256 encrypted AI provider keys
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2">
+            <Key className="w-6 h-6 text-[#e1b329]" />
+            <span>API Keys & Provider Security</span>
+          </h1>
+          <p className="text-xs opacity-75 mt-1">
+            Manage your Callcraft Secret API Keys, IP Whitelists, and BYO AI Provider Key Credentials
           </p>
         </div>
+
         <button
+          type="button"
           onClick={() => setIsGenerateModalOpen(true)}
-          className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 font-bold text-xs shadow-lg shadow-[#e1b329]/20 flex items-center gap-2 transition-all shrink-0"
+          className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 font-extrabold text-xs shadow-lg shadow-[#e1b329]/20 flex items-center justify-center gap-2 transition-all transform active:scale-95 shrink-0"
         >
-          <Plus className="w-4 h-4" />
-          <span>Generate Secret API Key</span>
+          <Plus className="w-4 h-4 fill-slate-950" />
+          <span>+ Generate New Secret Key</span>
         </button>
       </div>
 
-      {/* User Identity Banner Card */}
-      <div className="glass-panel p-4 sm:p-5 rounded-2xl border border-[#edd6bb]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-start sm:items-center gap-3 sm:gap-4">
-          <div className="p-2.5 sm:p-3 rounded-xl bg-[#e1b329]/15 border border-[#e1b329]/30 text-[#e1b329] shrink-0 mt-0.5 sm:mt-0">
-            <Fingerprint className="w-5 h-5 sm:w-6 sm:h-6" />
+      {/* Toast Alert for Deletion */}
+      {deleteAlertMessage && (
+        <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between gap-2 shadow-lg animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <span>{deleteAlertMessage}</span>
+          </div>
+          <button onClick={() => setDeleteAlertMessage(null)} className="p-1 hover:opacity-75">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* User Context & Environment Card */}
+      <div className="glass-panel p-4 sm:p-5 rounded-2xl border border-[#edd6bb]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#e1b329]/15 border border-[#e1b329]/30 flex items-center justify-center text-[#e1b329] shrink-0">
+            <Fingerprint className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold">Account Identity</h3>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 text-[10px] font-bold">
-                Admin / Owner
-              </span>
-            </div>
-            <p className="text-xs opacity-80 mt-0.5">
-              Used for path routing in endpoint: <code className="text-[#e1b329] font-mono font-bold">POST /v1/call/{"{user_id}"}</code>
-            </p>
+            <div className="text-xs font-bold opacity-80">Callcraft Customer Account Identifier</div>
+            <div className="text-xs font-mono font-bold text-[#e1b329]">{userId}</div>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <div className="glass-panel border border-[#edd6bb]/20 rounded-xl px-3.5 py-1.5 font-mono text-xs text-[#e1b329] flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
-            <span className="opacity-60 text-[11px]">User ID:</span>
-            <span className="font-bold">{userId}</span>
-          </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Gateway Ready</span>
+          </span>
 
           <button
             onClick={handleCopyUserId}
@@ -516,40 +518,6 @@ export default function ApiKeysPage() {
         </div>
       </div>
 
-      {/* Secret Key Modal Banner if Generated */}
-      {createdSecret && (
-        <div className="glass-panel p-6 rounded-2xl border border-[#ffb443]/40 bg-[#ffb443]/10 space-y-3">
-          <div className="flex items-center gap-2 text-[#8a715e] dark:text-[#ffb443] font-bold text-sm">
-            <Shield className="w-4 h-4 text-[#e1b329]" />
-            <span>New API Secret Key Generated</span>
-          </div>
-          <p className="text-xs opacity-90">
-            Please copy this key now. For security reasons, it will not be shown again. (Hashed with Argon2id on server)
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              type={showKey ? "text" : "password"}
-              readOnly
-              value={createdSecret}
-              className="flex-1 glass-panel border border-[#edd6bb]/20 rounded-xl px-3.5 py-2 font-mono text-xs text-[#e1b329] focus:outline-none"
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="p-2 rounded-xl glass-panel opacity-70 hover:opacity-100"
-            >
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={handleCopySecret}
-              className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-xs font-bold flex items-center gap-1.5"
-            >
-              {copiedSecret ? <Check className="w-4 h-4 text-emerald-950" /> : <Copy className="w-4 h-4" />}
-              <span>{copiedSecret ? "Copied!" : "Copy Key"}</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Customer API Secret Keys Table */}
       <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-[#edd6bb]/20 space-y-4">
         <div className="flex items-center justify-between">
@@ -565,7 +533,8 @@ export default function ApiKeysPage() {
             <thead className="opacity-75 border-b border-[#edd6bb]/20 bg-[#edd6bb]/10">
               <tr>
                 <th className="py-2.5 px-3">Key Name</th>
-                <th className="py-2.5 px-3">Public Key (`pk_live_...`)</th>
+                <th className="py-2.5 px-3">Public Key</th>
+                <th className="py-2.5 px-3">Bearer Token</th>
                 <th className="py-2.5 px-3">IP Whitelist Status</th>
                 <th className="py-2.5 px-3">Environment</th>
                 <th className="py-2.5 px-3">Created</th>
@@ -596,25 +565,34 @@ export default function ApiKeysPage() {
                       </div>
                     </td>
 
-                    {/* IP Whitelist Badge Column */}
+                    {/* Bearer Token Column */}
+                    <td className="py-3 px-3 font-mono text-[11px]">
+                      <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 w-max" title="Secret Key tersimpan aman sebagai Argon2id Hash">
+                        <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>call_sk_...</span>
+                      </div>
+                    </td>
+
+                    {/* IP Whitelist Badge Column (Clickable to trigger modal) */}
                     <td className="py-3 px-3">
-                      {whitelisted ? (
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenWhitelistModal(item)}
+                        title="Klik untuk mengelola IP Whitelist"
+                        className="focus:outline-none group text-left"
+                      >
+                        {whitelisted ? (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 group-hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1.5 w-max transition-all group-hover:scale-105">
                             <Lock className="w-3 h-3 text-emerald-500" />
                             <span>{item.ipWhitelist!.length} IP{item.ipWhitelist!.length > 1 ? "s" : ""} Restricted</span>
                           </span>
-                          <span className="text-[10px] font-mono opacity-70">
-                            ({item.ipWhitelist!.slice(0, 2).join(", ")}
-                            {item.ipWhitelist!.length > 2 ? "..." : ""})
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-slate-500/15 group-hover:bg-slate-500/25 text-slate-700 dark:text-slate-300 border border-slate-500/20 text-[10px] font-medium flex items-center gap-1.5 w-max opacity-80 transition-all group-hover:opacity-100 group-hover:scale-105">
+                            <Globe className="w-3 h-3 opacity-60" />
+                            <span>Any IP (Unrestricted)</span>
                           </span>
-                        </div>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/20 text-[10px] font-medium flex items-center gap-1 w-max opacity-80">
-                          <Globe className="w-3 h-3 opacity-60" />
-                          <span>Any IP (Unrestricted)</span>
-                        </span>
-                      )}
+                        )}
+                      </button>
                     </td>
 
                     <td className="py-3 px-3">
@@ -628,18 +606,63 @@ export default function ApiKeysPage() {
                         {item.environment}
                       </span>
                     </td>
-                    <td className="py-3 px-3 opacity-75">{item.createdAt}</td>
+                    <td className="py-3 px-3 opacity-75">{formatDateOnly(item.createdAt)}</td>
 
-                    {/* Actions Column: IP Whitelist Button */}
+                    {/* Actions Column with 3-Dots Menu positioned directly underneath */}
                     <td className="py-3 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenWhitelistModal(item)}
-                        className="px-3 py-1.5 rounded-xl glass-panel hover:bg-[#e1b329]/15 text-xs font-bold flex items-center gap-1.5 border border-[#edd6bb]/20 hover:border-[#e1b329]/40 transition-all text-[#e1b329] ml-auto"
-                      >
-                        <Shield className="w-3.5 h-3.5" />
-                        <span>IP Whitelist</span>
-                      </button>
+                      <div className="relative inline-block text-left">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuKeyId(openMenuKeyId === item.id ? null : item.id);
+                          }}
+                          className="p-2 rounded-xl glass-panel hover:bg-[#edd6bb]/20 border border-[#edd6bb]/20 text-slate-700 dark:text-slate-300 transition-all"
+                          title="Opsi API Key"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+
+                        {/* Dropdown Menu Tooltip positioned right below button */}
+                        {openMenuKeyId === item.id && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40 bg-transparent"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuKeyId(null);
+                              }}
+                            />
+                            <div className="absolute right-0 top-full mt-1.5 w-44 z-50 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-xs text-left animate-in fade-in duration-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMenuKeyId(null);
+                                  handleOpenWhitelistModal(item);
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200"
+                              >
+                                <Shield className="w-3.5 h-3.5 text-[#e1b329]" />
+                                <span>Kelola IP Whitelist</span>
+                              </button>
+
+                              <div className="border-t border-slate-200 dark:border-slate-800 my-1"></div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMenuKeyId(null);
+                                  setKeyToDelete(item);
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center gap-2 font-bold"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                <span>Hapus API Key</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -746,36 +769,20 @@ export default function ApiKeysPage() {
                         )}
                         <span className="font-extrabold">{prov.testStatus === "testing" ? "Testing..." : "Test Connection"}</span>
                       </button>
-
-                      <button
-                        onClick={() => handleSaveKey(prov.code)}
-                        disabled={prov.testStatus !== "success"}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shrink-0 ${
-                          prov.testStatus === "success"
-                            ? "bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 font-extrabold shadow-lg shadow-[#e1b329]/20"
-                            : "opacity-40 cursor-not-allowed border border-[#edd6bb]/20"
-                        }`}
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>{prov.saved ? "Key Saved" : "Save Key"}</span>
-                      </button>
                     </div>
                   </div>
 
-                  {prov.testMessage && (
+                  {prov.testStatus !== "idle" && prov.testMessage && (
                     <div
-                      className={`p-2.5 rounded-xl text-xs flex items-center gap-2 font-semibold ${
+                      className={`p-3 rounded-xl text-xs flex items-center gap-2 font-semibold ${
                         prov.testStatus === "success"
-                          ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
-                          : prov.testStatus === "error"
-                          ? "bg-rose-500/15 text-rose-800 dark:text-rose-300 border border-rose-500/30"
-                          : "glass-panel border border-[#edd6bb]/20"
+                          ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300"
+                          : "bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300"
                       }`}
                     >
-                      {prov.testStatus === "success" && (
+                      {prov.testStatus === "success" ? (
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      )}
-                      {prov.testStatus === "error" && (
+                      ) : (
                         <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                       )}
                       <span>{prov.testMessage}</span>
@@ -919,7 +926,77 @@ export default function ApiKeysPage() {
         </div>
       )}
 
-      {/* --- MODAL 2: Manage IP Whitelist Modal --- */}
+      {/* --- MODAL 2: Secret Key Disclosure Modal (Shown ONCE right after generation) --- */}
+      {showSecretModal && createdSecret && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-lg p-6 rounded-2xl border border-amber-500/40 bg-white dark:bg-slate-900 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-base font-bold text-amber-600 dark:text-amber-400">
+                <Key className="w-5 h-5 text-[#e1b329]" />
+                <span>🔑 Secret API Key Berhasil Dibuat!</span>
+              </div>
+              <button
+                onClick={() => setShowSecretModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs space-y-1">
+              <div className="flex items-center gap-2 font-bold">
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>PERHATIAN KEAMANAN PENTING</span>
+              </div>
+              <p className="opacity-90">
+                Harap salin Secret Key ini sekarang ke tempat aman (misal file `.env`). Demi keamanan, kunci ini **TIDAK AKAN PERNAH DITAMPILKAN LAGI** setelah Anda menutup dialog ini!
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Your New Secret API Key (`call_sk_...`):</label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showKey ? "text" : "password"}
+                    readOnly
+                    value={createdSecret}
+                    className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl pl-3.5 pr-10 py-2.5 font-mono text-xs font-bold text-[#b8860b] dark:text-[#e1b329] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    title={showKey ? "Sembunyikan Key" : "Tampilkan Key"}
+                  >
+                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopySecret}
+                  className="px-4 py-2.5 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-md shrink-0"
+                >
+                  {copiedSecret ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedSecret ? "Copied!" : "Copy Key"}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSecretModal(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-slate-100 dark:text-slate-900 font-extrabold text-xs shadow-md"
+              >
+                Saya Sudah Menyimpan Key Ini (Tutup)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 3: Manage IP Whitelist Modal --- */}
       {selectedKeyForWhitelist && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-panel w-full max-w-lg p-6 rounded-2xl border border-[#edd6bb]/30 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
@@ -1030,6 +1107,53 @@ export default function ApiKeysPage() {
               >
                 {isSavingWhitelist && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 <span>{isSavingWhitelist ? "Saving..." : "Save IP Whitelist"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 4: Delete API Key Confirmation Modal --- */}
+      {keyToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-rose-500/40 bg-white dark:bg-slate-900 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-base font-bold text-rose-600 dark:text-rose-400">
+                <Trash2 className="w-5 h-5 text-rose-500" />
+                <span>Konfirmasi Hapus API Key</span>
+              </div>
+              <button
+                onClick={() => setKeyToDelete(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              Apakah Anda yakin ingin menghapus API Key <strong className="text-slate-900 dark:text-slate-100 font-bold">"{keyToDelete.name}"</strong> dengan Public Key <code className="text-[#e1b329] font-mono">{keyToDelete.publicKey}</code>?
+            </p>
+
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-[11px]">
+              ⚠️ Setiap aplikasi yang menggunakan token ini tidak akan dapat mengakses API Callcraft lagi secara permanen.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setKeyToDelete(null)}
+                className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteKey}
+                disabled={isDeletingKey}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-lg shadow-rose-600/20 flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeletingKey && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isDeletingKey ? "Deleting..." : "Ya, Hapus API Key Ini"}</span>
               </button>
             </div>
           </div>

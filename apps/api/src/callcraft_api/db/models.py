@@ -49,6 +49,14 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     status: Mapped[str] = mapped_column(VARCHAR(50), default="active", nullable=False, index=True)
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    bio: Mapped[Optional[str]] = mapped_column(TEXT)
+    avatar_url: Mapped[Optional[str]] = mapped_column(TEXT)
+    github_url: Mapped[Optional[str]] = mapped_column(VARCHAR(255))
+    website_url: Mapped[Optional[str]] = mapped_column(VARCHAR(255))
+    company: Mapped[Optional[str]] = mapped_column(VARCHAR(255))
+    location: Mapped[Optional[str]] = mapped_column(VARCHAR(255))
+    phone: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
+    email_verification_token: Mapped[Optional[str]] = mapped_column(VARCHAR(255), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -164,8 +172,10 @@ class Template(Base):
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     category: Mapped[str] = mapped_column(VARCHAR(50), nullable=False, index=True)
+    categories: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     request_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     response_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+    tools_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
     system_prompt: Mapped[str] = mapped_column(TEXT, nullable=False)
     extraction_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
     is_official: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
@@ -210,6 +220,8 @@ class AppInit(Base):
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     favicon_url: Mapped[Optional[str]] = mapped_column(TEXT, default="/favicon.ico")
     disable_landing_page: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
+    default_registration_status: Mapped[str] = mapped_column(VARCHAR(50), default="pending_verification", nullable=False)
+    require_email_verification: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -228,9 +240,10 @@ class CallSpec(Base):
     
     # PDF input support & External API Key flags
     allow_pdf_input: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
-    use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
+    use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     external_api_key: Mapped[Optional[str]] = mapped_column(TEXT)
     external_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
+    tools_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
 
     # Marketplace Publication status & link
     is_published: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
@@ -259,9 +272,10 @@ class CallSpecVersion(Base):
 
     # Version-level flags
     allow_pdf_input: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
-    use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
+    use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     external_api_key: Mapped[Optional[str]] = mapped_column(TEXT)
     external_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
+    tools_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -329,3 +343,23 @@ class UserUsageDaily(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (UniqueConstraint("user_id", "usage_date", name="uq_user_daily_usage"),)
+
+
+class PlaygroundState(Base):
+    __tablename__ = "playground_states"
+
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    call_spec_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("call_specs.id", ondelete="CASCADE"), nullable=False, index=True)
+    selected_credential_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("api_credentials.id", ondelete="SET NULL"), nullable=True)
+    checked_states: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    extra_inputs: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    prompt: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
+    ai_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100), nullable=True)
+    ai_api_key: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (UniqueConstraint("user_id", "call_spec_id", name="uq_user_spec_playground_state"),)
+

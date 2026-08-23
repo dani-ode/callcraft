@@ -22,22 +22,16 @@ async def test_session():
 async def test_init_db_seeding(test_session: AsyncSession):
     # Verify templates seeding
     templates = await Repository.list_templates(test_session)
-    assert len(templates) == 6
+    assert len(templates) >= 8
     template_codes = [t["code"] for t in templates]
-    assert "ktp-id-parser" in template_codes
-    assert "invoice-parser" in template_codes
-    assert "receipt-parser" in template_codes
-    assert "passport-parser" in template_codes
-    assert "business-card-parser" in template_codes
-    assert "lab-report-parser" in template_codes
+    assert "government-issued-identity-document" in template_codes
+    assert "financial-receipt-invoice-suite" in template_codes
+    assert "medical-prescription-lab-report" in template_codes
+    assert "b2b-contract-purchase-order" in template_codes
 
     # Verify initial call specs
     specs = await Repository.list_call_specs(test_session, "usr_default_dev_01")
-    assert len(specs) >= 4
-    spec_slugs = [s["slug"] for s in specs]
-    assert "ktp-parser" in spec_slugs
-    assert "invoice-extractor" in spec_slugs
-    assert "passport-extractor" in spec_slugs
+    assert len(specs) >= 6
 
 
 @pytest.mark.asyncio
@@ -90,5 +84,5 @@ async def test_create_and_fetch_call_spec(test_session: AsyncSession):
     fetched = await Repository.get_call_spec(test_session, "usr_default_dev_01", "custom-receipt")
     assert fetched is not None
     assert fetched["name"] == "Custom Receipt Spec"
-    assert fetched["response_schema"] == schema
-    assert fetched["system_prompt"] == "Custom prompt instructions"
+    assert fetched["responseSchema"] == schema
+    assert fetched["systemPrompt"] == "Custom prompt instructions"

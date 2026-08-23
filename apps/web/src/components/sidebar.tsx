@@ -148,17 +148,22 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
 
       {/* User Session & Logout Footer */}
       <div className="glass-panel rounded-xl p-2 border border-[#edd6bb]/15 flex items-center justify-between gap-1.5 overflow-hidden">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <div className="w-7 h-7 rounded-lg bg-[#e1b329]/20 text-[#e1b329] font-bold text-xs flex items-center justify-center shrink-0">
+        <Link
+          href="/settings"
+          onClick={onCloseMobile}
+          className="flex items-center gap-2 overflow-hidden hover:opacity-80 transition-opacity cursor-pointer flex-1 group"
+          title="Buka Pengaturan Akun"
+        >
+          <div className="w-7 h-7 rounded-lg bg-[#e1b329]/20 text-[#e1b329] font-bold text-xs flex items-center justify-center shrink-0 border border-[#e1b329]/30 group-hover:border-[#e1b329]">
             {user?.avatar || "U"}
           </div>
           {(!isManuallyCollapsed || isMobileDrawer) && (
             <div className={cn("truncate", !isMobileDrawer && "hidden lg:block")}>
-              <p className="text-xs font-bold truncate">{user?.name || "Developer"}</p>
+              <p className="text-xs font-bold truncate group-hover:text-[#e1b329] transition-colors">{user?.name || "Developer"}</p>
               <p className="text-[10px] opacity-60 truncate">{user?.email || "dev@callcraft.io"}</p>
             </div>
           )}
-        </div>
+        </Link>
 
         <button
           onClick={logout}

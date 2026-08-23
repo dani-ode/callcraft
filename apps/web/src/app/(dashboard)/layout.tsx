@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { useAuth } from "@/context/auth-context";
@@ -14,13 +14,29 @@ export default function UserDashboardLayout({
 }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/login");
+    if (!isLoading) {
+      if (!user) {
+        if (pathname !== "/login") {
+          const search = typeof window !== "undefined" ? window.location.search : "";
+          const targetUrl = pathname + search;
+          router.replace(`/login?redirect=${encodeURIComponent(targetUrl)}`);
+        }
+      } else if (user.status === "pending_verification") {
+        const verifyUrl = `/verify-email?email=${encodeURIComponent(user.email)}`;
+        if (pathname !== "/verify-email") {
+          router.replace(verifyUrl);
+        }
+      } else if (user.status !== "active") {
+        if (pathname !== "/login") {
+          router.replace("/login");
+        }
+      }
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, pathname]);
 
   if (isLoading) {
     return (
@@ -35,7 +51,7 @@ export default function UserDashboardLayout({
     );
   }
 
-  if (!user) {
+  if (!user || user.status !== "active") {
     return null;
   }
 

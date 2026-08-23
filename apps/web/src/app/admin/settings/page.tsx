@@ -45,6 +45,8 @@ export default function AdminSettingsPage() {
   const [description, setDescription] = useState("AI-Powered Dynamic Multimodal Execution Engine & Data Plane Gateway");
   const [faviconUrl, setFaviconUrl] = useState("/favicon.ico");
   const [disableLandingPage, setDisableLandingPage] = useState(false);
+  const [defaultRegistrationStatus, setDefaultRegistrationStatus] = useState("pending_verification");
+  const [requireEmailVerification, setRequireEmailVerification] = useState(true);
 
   // Security Engine Parameters
   const [maxExecutionTimeoutMs, setMaxExecutionTimeoutMs] = useState(30000);
@@ -61,6 +63,8 @@ export default function AdminSettingsPage() {
         setDescription(settings.description || "AI-Powered Dynamic Multimodal Execution Engine & Data Plane Gateway");
         setFaviconUrl(settings.faviconUrl || "/favicon.ico");
         setDisableLandingPage(settings.disableLandingPage || false);
+        if (settings.defaultRegistrationStatus) setDefaultRegistrationStatus(settings.defaultRegistrationStatus);
+        if (settings.requireEmailVerification !== undefined) setRequireEmailVerification(settings.requireEmailVerification);
       }
       setLoading(false);
     });
@@ -79,6 +83,8 @@ export default function AdminSettingsPage() {
         description: description.trim(),
         faviconUrl: faviconUrl.trim(),
         disableLandingPage,
+        defaultRegistrationStatus,
+        requireEmailVerification,
       });
 
       await refetchAppInit();
@@ -358,6 +364,48 @@ export default function AdminSettingsPage() {
             />
             <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
           </label>
+        </div>
+
+        {/* Require Email Verification Toggle */}
+        <div className="p-5 rounded-2xl glass-panel border border-slate-800 bg-slate-950/60 flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <h4 className="text-xs font-bold text-slate-100">Wajibkan Verifikasi Email Sebelum Akses Dashboard</h4>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Setiap user baru yang mendaftar harus mengonfirmasi alamat email mereka via link / OTP SMTP sebelum bisa masuk ke Dashboard.
+            </p>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={requireEmailVerification}
+              onChange={(e) => setRequireEmailVerification(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+        </div>
+
+        {/* Default User Registration Status */}
+        <div className="p-5 rounded-2xl glass-panel border border-slate-800 bg-slate-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h4 className="text-xs font-bold text-slate-100">Status Default User Registrasi Baru</h4>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Tentukan status awal akun yang diberikan secara otomatis begitu user selesai mendaftar.
+            </p>
+          </div>
+
+          <select
+            value={defaultRegistrationStatus}
+            onChange={(e) => setDefaultRegistrationStatus(e.target.value)}
+            className="bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-amber-300 focus:outline-none focus:border-amber-400"
+          >
+            <option value="active">Active (Langsung Aktif)</option>
+            <option value="pending_verification">Pending Verification (Perlu Verifikasi Email)</option>
+          </select>
         </div>
       </div>
 

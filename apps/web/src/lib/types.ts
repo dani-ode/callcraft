@@ -13,6 +13,8 @@ export interface AppInitSettings {
   description?: string;
   faviconUrl?: string;
   disableLandingPage: boolean;
+  defaultRegistrationStatus?: string;
+  requireEmailVerification?: boolean;
 }
 
 export interface ApiCredential {
@@ -35,6 +37,24 @@ export interface UserAiProvider {
   updatedAt: string;
 }
 
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  agentRole?: string;
+  toolChoice?: 'auto' | 'required' | 'none';
+  parameters?: Record<string, any>;
+  context?: {
+    textContext?: string;
+    includeImageContext?: boolean;
+  };
+}
+
+export interface ToolCallingConfig {
+  enabled: boolean;
+  toolChoice: 'auto' | 'required' | 'none';
+  tools: ToolDefinition[];
+}
+
 export interface CallSpec {
   id: string;
   userId?: string;
@@ -47,11 +67,14 @@ export interface CallSpec {
   createdAt?: string;
   requestSchema?: any;
   responseSchema?: any;
+  toolsConfig?: ToolCallingConfig;
   systemPrompt?: string;
+  extractionPrompt?: string;
   allowPdfInput?: boolean;
   useExternalApiKey?: boolean;
   externalApiKey?: string;
   externalModelName?: string;
+  provider?: string;
   isPublished?: boolean;
   publishedTemplateId?: string;
   likesCount?: number;
@@ -62,22 +85,40 @@ export interface CallSpec {
 
 export interface Template {
   id: string;
+  specId?: string;
   userId?: string;
+  authorName?: string;
   code: string;
   name: string;
   description?: string;
   category: string;
+  categories?: string[];
   isOfficial: boolean;
   isPublished?: boolean;
   forkCount?: number;
   likesCount?: number;
   ratingAvg?: number;
   reviewsCount?: number;
+  commentsCount?: number;
   isLiked?: boolean;
   requestSchema?: any;
   responseSchema?: any;
+  toolsConfig?: ToolCallingConfig;
   systemPrompt?: string;
   createdAt?: string;
+}
+
+export interface UserProfileDetail {
+  id: string;
+  fullName: string;
+  email: string;
+  status: string;
+  role: string;
+  avatarUrl?: string;
+  totalPublishedTemplates: number;
+  totalClones: number;
+  totalLikes: number;
+  templates: Template[];
 }
 
 export interface TemplateComment {

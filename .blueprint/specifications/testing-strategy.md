@@ -159,11 +159,17 @@ export default function () {
   const res = http.post(url, payload, params);
   check(res, {
     'status is 200': (r) => r.status === 200,
-    'success field is true': (r) => r.json().success === true,
+    'meta.status is completed': (r) => r.json().meta.status === 'completed',
+    'execution_trace steps is array': (r) => Array.isArray(r.json().execution_trace.steps),
   });
   sleep(0.1);
 }
 ```
+
+### C. Envelope Conformance & Error Actionability Test Suite (Q&A 6 & Q&A 7)
+- **Envelope Conformance**: Validates that all responses strictly contain `meta`, `execution_trace`, `metrics` (or `error`), and that `execution_trace.steps` is **always a JSON Array (`[]`)**.
+- **Error Actionability Verification**: Asserts that every error response includes an uppercase `code` and a non-empty `actionable_step` guiding the user on resolution.
+- **Hallucination Auto-Retry Verification**: Tests using `respx` to simulate an AI provider returning invalid tool arguments on the 1st call and valid arguments on the 2nd retry, asserting that the engine completes successfully with step traces recording the retry attempt.
 
 ### B. Memory Retention Audit (Zero Data Retention Guarantee)
 - **Methodology**: Running Python memory profiling tools (`tracemalloc`, `memory_profiler`) during continuous execution of 10,000+ API requests.

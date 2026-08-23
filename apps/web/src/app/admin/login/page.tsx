@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, Lock, Mail, ArrowLeft, Sparkles, Key } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState("admin@callcraft.io");
-  const [password, setPassword] = useState("••••••••••••");
+  const [email, setEmail] = useState("dev@callcraft.io");
+  const [password, setPassword] = useState("callcraft_admin_secret_123");
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const { adminSession, isLoading, adminLogin } = useAuth();
   const router = useRouter();
 
@@ -26,25 +28,42 @@ export default function AdminLoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await adminLogin(email, password);
-    setLoading(false);
-    router.push("/admin");
+    setErrorMsg("");
+    try {
+      await adminLogin(email, password);
+      router.push("/admin");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Autentikasi admin gagal.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleQuickAdminDemo = async () => {
     setLoading(true);
-    await adminLogin("admin@callcraft.io");
-    setLoading(false);
-    router.push("/admin");
+    setErrorMsg("");
+    try {
+      await adminLogin("dev@callcraft.io", "callcraft_admin_secret_123");
+      router.push("/admin");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Autentikasi quick admin gagal.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-background">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-background relative transition-colors duration-200">
+      {/* Top Right Theme Toggle */}
+      <div className="absolute top-6 right-6 z-10">
+        <ThemeToggle />
+      </div>
+
       <div className="w-full max-w-md space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-3">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#e1b329] via-[#ffb443] to-[#8a715e] p-0.5 shadow-xl shadow-[#e1b329]/20 mx-auto">
-            <div className="w-full h-full bg-[#120e0b] rounded-[14px] flex items-center justify-center">
+            <div className="w-full h-full bg-[#fdfaf5] dark:bg-[#120e0b] rounded-[14px] flex items-center justify-center transition-colors">
               <ShieldCheck className="w-7 h-7 text-[#e1b329]" />
             </div>
           </div>
@@ -54,11 +73,17 @@ export default function AdminLoginPage() {
               SECURITY PORTAL
             </span>
           </div>
-          <p className="text-xs text-[#8b7e6d]">Argon2id Encrypted Admin Authorization Portal</p>
+          <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d]">Argon2id Encrypted Admin Authorization Portal</p>
         </div>
 
         {/* Login Form Card */}
-        <div className="glass-panel p-8 rounded-3xl border border-[#ffb443]/30 shadow-2xl space-y-6">
+        <div className="glass-panel p-8 rounded-3xl border border-[#8a715e]/25 dark:border-[#ffb443]/30 shadow-2xl space-y-6">
+          {errorMsg && (
+            <div className="p-3.5 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/30 text-xs font-bold">
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[#8a715e] dark:text-[#edd6bb] flex items-center gap-1.5">
@@ -71,7 +96,7 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@callcraft.io"
-                className="w-full glass-panel border border-[#edd6bb]/25 rounded-xl px-4 py-2.5 text-xs text-[#8a715e] dark:text-[#edd6bb] font-mono focus:outline-none focus:border-[#e1b329]"
+                className="w-full glass-panel border border-[#8a715e]/30 dark:border-[#edd6bb]/25 rounded-xl px-4 py-2.5 text-xs text-slate-800 dark:text-[#edd6bb] placeholder:text-slate-400 dark:placeholder:text-[#8b7e6d] font-mono focus:outline-none focus:border-[#e1b329]"
               />
             </div>
 
@@ -86,7 +111,7 @@ export default function AdminLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full glass-panel border border-[#edd6bb]/25 rounded-xl px-4 py-2.5 text-xs text-[#8a715e] dark:text-[#edd6bb] font-mono focus:outline-none focus:border-[#e1b329]"
+                className="w-full glass-panel border border-[#8a715e]/30 dark:border-[#edd6bb]/25 rounded-xl px-4 py-2.5 text-xs text-slate-800 dark:text-[#edd6bb] placeholder:text-slate-400 dark:placeholder:text-[#8b7e6d] font-mono focus:outline-none focus:border-[#e1b329]"
               />
             </div>
 
@@ -101,7 +126,7 @@ export default function AdminLoginPage() {
           </form>
 
           {/* Quick Demo Login Option */}
-          <div className="pt-4 border-t border-[#edd6bb]/15 space-y-3">
+          <div className="pt-4 border-t border-[#8a715e]/15 dark:border-[#edd6bb]/15 space-y-3">
             <button
               type="button"
               onClick={handleQuickAdminDemo}
@@ -117,7 +142,7 @@ export default function AdminLoginPage() {
         <div className="text-center">
           <Link
             href="/specs"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8b7e6d] hover:text-[#8a715e] dark:hover:text-[#edd6bb] transition-all"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8a715e] dark:text-[#8b7e6d] hover:text-[#e1b329] transition-all"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Return to User Application</span>

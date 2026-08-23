@@ -183,43 +183,109 @@ export function FieldListRenderer({
   }, [selectedFieldId]);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const currentPointerYRef = useRef<number | null>(null);
 
-  // Auto-scroll loop when dragging a card
+  // Touch Event Handlers State for Mobile & Tablet Touchscreen Drag & Drop
+  const [touchSourceId, setTouchSourceId] = useState<string | null>(null);
+  const [touchTargetId, setTouchTargetId] = useState<string | null>(null);
+  const [touchDropZoneInfo, setTouchDropZoneInfo] = useState<{ parentId: string | null; insertIndex: number } | null>(null);
+  const [touchPos, setTouchPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Continuous 60fps requestAnimationFrame Auto-scroll loop for Mouse, HTML5 Drag & Touch Drag (ROOT LEVEL ONLY)
   useEffect(() => {
-    if (!currentDraggedId) return;
+    // Prevent recursive child instances (depth > 0) from running duplicate scroll loops!
+    if (depth > 0) return;
 
-    let mouseY = -1;
+    const activeId = currentDraggedId || touchSourceId;
+    if (!activeId) {
+      currentPointerYRef.current = null;
+      return;
+    }
+
     let animId: number | null = null;
 
-    const handleDragOver = (e: DragEvent) => {
-      if (e.clientY > 0) {
-        mouseY = e.clientY;
+    const updatePointerY = (clientY: number) => {
+      if (clientY <= 0) {
+        currentPointerYRef.current = null;
+        return;
       }
-    };
 
-    const handleMouseReset = () => {
-      mouseY = -1;
-    };
-
-    const scrollLoop = () => {
-      if (mouseY > 0 && listContainerRef.current) {
+      if (listContainerRef.current) {
         const scrollContainer =
           (listContainerRef.current.closest(".overflow-y-auto") as HTMLElement) ||
           listContainerRef.current;
 
         if (scrollContainer) {
           const rect = scrollContainer.getBoundingClientRect();
-          const topThreshold = rect.top + 60;
-          const bottomThreshold = rect.bottom - 60;
+          const topEdgeThreshold = rect.top + 40;
+          const bottomEdgeThreshold = rect.bottom - 40;
 
-          if (mouseY <= topThreshold && mouseY >= rect.top - 30) {
-            const distance = topThreshold - mouseY;
-            const speed = Math.min(8, Math.max(2, distance * 0.15));
+          // Only set pointerY if the cursor/finger is in the 40px top/bottom edge zone!
+          if (
+            (clientY <= topEdgeThreshold && clientY >= rect.top - 20) ||
+            (clientY >= bottomEdgeThreshold && clientY <= rect.bottom + 20)
+          ) {
+            currentPointerYRef.current = clientY;
+            return;
+          }
+        }
+      }
+
+      // Pointer is in middle/neutral zone: CLEAR pointerY immediately to prevent runaway scrolling!
+      currentPointerYRef.current = null;
+    };
+
+    const handleDragOverCapture = (e: DragEvent) => {
+      if (e.clientY > 0) {
+        updatePointerY(e.clientY);
+      }
+    };
+
+    const handleTouchMoveCapture = (e: TouchEvent) => {
+      if (e.touches && e.touches.length > 0 && e.touches[0].clientY > 0) {
+        updatePointerY(e.touches[0].clientY);
+      }
+    };
+
+    const handlePointerReset = () => {
+      currentPointerYRef.current = null;
+    };
+
+    const scrollLoop = () => {
+      const pointerY = currentPointerYRef.current;
+
+      if (pointerY !== null && pointerY > 0 && listContainerRef.current) {
+        const scrollContainer =
+          (listContainerRef.current.closest(".overflow-y-auto") as HTMLElement) ||
+          listContainerRef.current;
+
+        if (scrollContainer) {
+          const rect = scrollContainer.getBoundingClientRect();
+          const topEdgeThreshold = rect.top + 40;
+          const bottomEdgeThreshold = rect.bottom - 40;
+
+          if (pointerY <= topEdgeThreshold && pointerY >= rect.top - 20) {
+            const distance = topEdgeThreshold - pointerY;
+            const speed = Math.min(5, Math.max(1, distance * 0.12));
+
+            const prevScrollTop = scrollContainer.scrollTop;
             scrollContainer.scrollTop -= speed;
-          } else if (mouseY >= bottomThreshold && mouseY <= rect.bottom + 30) {
-            const distance = mouseY - bottomThreshold;
-            const speed = Math.min(8, Math.max(2, distance * 0.15));
+
+            if (scrollContainer.scrollTop === 0 && prevScrollTop === 0 && document.documentElement.scrollTop > 0) {
+              window.scrollBy(0, -speed);
+            }
+          } else if (pointerY >= bottomEdgeThreshold && pointerY <= rect.bottom + 20) {
+            const distance = pointerY - bottomEdgeThreshold;
+            const speed = Math.min(5, Math.max(1, distance * 0.12));
+
+            const prevScrollTop = scrollContainer.scrollTop;
             scrollContainer.scrollTop += speed;
+
+            if (scrollContainer.scrollTop === prevScrollTop && window.innerHeight < document.body.scrollHeight) {
+              window.scrollBy(0, speed);
+            }
+          } else {
+            currentPointerYRef.current = null;
           }
         }
       }
@@ -227,23 +293,27 @@ export function FieldListRenderer({
       animId = requestAnimationFrame(scrollLoop);
     };
 
-    window.addEventListener("dragover", handleDragOver);
-    window.addEventListener("dragend", handleMouseReset);
-    window.addEventListener("drop", handleMouseReset);
-    window.addEventListener("mouseleave", handleMouseReset);
+    document.addEventListener("dragover", handleDragOverCapture, { capture: true });
+    document.addEventListener("touchmove", handleTouchMoveCapture, { capture: true });
+    window.addEventListener("dragend", handlePointerReset);
+    window.addEventListener("drop", handlePointerReset);
+    window.addEventListener("touchend", handlePointerReset);
+    window.addEventListener("mouseup", handlePointerReset);
 
     animId = requestAnimationFrame(scrollLoop);
 
     return () => {
-      window.removeEventListener("dragover", handleDragOver);
-      window.removeEventListener("dragend", handleMouseReset);
-      window.removeEventListener("drop", handleMouseReset);
-      window.removeEventListener("mouseleave", handleMouseReset);
+      document.removeEventListener("dragover", handleDragOverCapture, { capture: true });
+      document.removeEventListener("touchmove", handleTouchMoveCapture, { capture: true });
+      window.removeEventListener("dragend", handlePointerReset);
+      window.removeEventListener("drop", handlePointerReset);
+      window.removeEventListener("touchend", handlePointerReset);
+      window.removeEventListener("mouseup", handlePointerReset);
       if (animId !== null) {
         cancelAnimationFrame(animId);
       }
     };
-  }, [currentDraggedId]);
+  }, [currentDraggedId, touchSourceId, depth]);
 
   // Modal state when dragging onto a non-container primitive field
   const [pendingDrop, setPendingDrop] = useState<{
@@ -291,17 +361,12 @@ export function FieldListRenderer({
     }
   };
 
-  // Touch Event Handlers for Mobile & Tablet Touchscreen Drag & Drop
-  const [touchSourceId, setTouchSourceId] = useState<string | null>(null);
-  const [touchTargetId, setTouchTargetId] = useState<string | null>(null);
-  const [touchDropZoneInfo, setTouchDropZoneInfo] = useState<{ parentId: string | null; insertIndex: number } | null>(null);
-  const [touchPos, setTouchPos] = useState<{ x: number; y: number } | null>(null);
-
   const handleTouchStart = (e: React.TouchEvent, id: string) => {
     e.stopPropagation();
     const touch = e.touches[0];
     if (touch) {
       setTouchPos({ x: touch.clientX, y: touch.clientY });
+      currentPointerYRef.current = touch.clientY;
     }
     setTouchSourceId(id);
     setDraggedId(id);
@@ -313,32 +378,10 @@ export function FieldListRenderer({
     if (!touch) return;
 
     const touchY = touch.clientY;
-    setTouchPos({ x: touch.clientX, y: touch.clientY });
+    currentPointerYRef.current = touchY;
+    setTouchPos({ x: touch.clientX, y: touchY });
 
-    // Touch Auto-scroll container when dragging near top or bottom
-    if (listContainerRef.current) {
-      const scrollContainer =
-        (listContainerRef.current.closest(".overflow-y-auto") as HTMLElement) ||
-        listContainerRef.current;
-
-      if (scrollContainer) {
-        const rect = scrollContainer.getBoundingClientRect();
-        const topThreshold = rect.top + 65;
-        const bottomThreshold = rect.bottom - 65;
-
-        if (touchY <= topThreshold && touchY >= rect.top - 30) {
-          const distance = topThreshold - touchY;
-          const speed = Math.min(10, Math.max(2, distance * 0.2));
-          scrollContainer.scrollTop -= speed;
-        } else if (touchY >= bottomThreshold && touchY <= rect.bottom + 30) {
-          const distance = touchY - bottomThreshold;
-          const speed = Math.min(10, Math.max(2, distance * 0.2));
-          scrollContainer.scrollTop += speed;
-        }
-      }
-    }
-
-    const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+    const elementUnderTouch = document.elementFromPoint(touch.clientX, touchY);
     if (elementUnderTouch) {
       // 1. Check if touch is over a DropZone (including empty container section drop zones)
       const dropZoneEl = elementUnderTouch.closest("[data-drop-zone]");
@@ -547,15 +590,16 @@ export function FieldListRenderer({
 
   return (
     <div className="space-y-3 relative">
-      {/* Floating Touch Drag Indicator Badge for Mobile/Tablet */}
-      {touchSourceId && touchPos && (
+      {/* Floating Touch Drag Indicator Badge for Mobile/Tablet (Rendered via Portal at document.body level) */}
+      {touchSourceId && touchPos && mounted && createPortal(
         <div
-          className="fixed z-[1000] pointer-events-none -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-xl bg-[#e1b329] text-slate-950 font-extrabold text-xs shadow-2xl border-2 border-slate-950 flex items-center gap-2 animate-bounce"
-          style={{ left: touchPos.x, top: touchPos.y - 35 }}
+          className="fixed z-[10000] pointer-events-none -translate-x-1/2 -translate-y-full px-3 py-1.5 rounded-xl bg-[#e1b329] text-slate-950 font-extrabold text-xs shadow-2xl border-2 border-slate-950 flex items-center gap-2 animate-pulse"
+          style={{ left: `${touchPos.x}px`, top: `${touchPos.y - 12}px` }}
         >
-          <GripVertical className="w-4 h-4 text-slate-950" />
-          <span>Moving: &quot;{findFieldRecursive(allRootFields, touchSourceId)?.name || "Field"}&quot;</span>
-        </div>
+          <GripVertical className="w-4 h-4 text-slate-950 shrink-0" />
+          <span className="truncate max-w-[200px]">Moving: &quot;{findFieldRecursive(allRootFields, touchSourceId)?.name || "Field"}&quot;</span>
+        </div>,
+        document.body
       )}
 
       {/* Global Expand / Collapse Control Toolbar for Root Level */}

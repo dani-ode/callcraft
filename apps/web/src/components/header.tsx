@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Bell, ShieldCheck, BookOpen, ExternalLink, Copy, Check, Fingerprint, LogOut, Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/context/auth-context";
+import { getActiveUserId } from "@/lib/api-client";
 
 interface HeaderProps {
   onOpenMobileSidebar?: () => void;
@@ -12,7 +13,7 @@ interface HeaderProps {
 export function Header({ onOpenMobileSidebar }: HeaderProps) {
   const [copiedUserId, setCopiedUserId] = useState(false);
   const { user, logout } = useAuth();
-  const userId = user?.id || "usr_guest_active";
+  const userId = user?.id || getActiveUserId();
 
   const handleCopyUserId = () => {
     navigator.clipboard.writeText(userId);
