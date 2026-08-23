@@ -128,7 +128,7 @@ async def execute_callcraft(
         or request.headers.get("X-CALL-SHOW-PROMPT")
         or request.headers.get("X-CALL_SHOW_PROMPT")
     )
-    should_show_prompt = bool(show_prompt_hdr and str(show_prompt_hdr).strip().lower() == "true")
+    should_show_prompt = bool(show_prompt_hdr and show_prompt_hdr.strip().lower() == "true")
 
     # 1. Authenticate Bearer API Key dynamically against DB credentials
     if not authorization or not authorization.startswith("Bearer "):
