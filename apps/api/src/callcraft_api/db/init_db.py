@@ -713,7 +713,7 @@ async def init_db(session: AsyncSession) -> None:
                     id=f"ver_{sid[4:]}",
                     call_spec_id=spec_obj.id,
                     version_number=1,
-                    request_schema={"properties": {"image": {"type": "string"}}},
+                    request_schema=matched_tmpl.get("request_schema"),
                     response_schema=sresp,
                     system_prompt=matched_tmpl.get("system_prompt", "Extract document structured fields accurately."),
                     preferred_model_id=model_map.get(mident),

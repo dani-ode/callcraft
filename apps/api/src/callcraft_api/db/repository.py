@@ -242,22 +242,16 @@ class Repository:
         tmpl: Optional[Template] = None,
     ) -> Dict[str, Any]:
         """Serializes CallSpec model instance into a standardized clean camelCase JSON dictionary."""
-        default_req_schema = {
-            "properties": {
-                "image": {"type": "string", "description": "Base64 string or URL of input document/image"}
-            },
-            "required": ["image"],
-        }
         req_schema = (
             ver.request_schema
-            if (ver and ver.request_schema and ver.request_schema.get("properties"))
-            else (
-                tmpl.request_schema
-                if (tmpl and tmpl.request_schema and tmpl.request_schema.get("properties"))
-                else default_req_schema
-            )
+            if (ver and ver.request_schema is not None)
+            else (tmpl.request_schema if (tmpl and tmpl.request_schema) else None)
         )
-        res_schema = ver.response_schema if (ver and ver.response_schema) else {"type": "object", "properties": {}}
+        res_schema = (
+            ver.response_schema
+            if (ver and ver.response_schema is not None)
+            else (tmpl.response_schema if (tmpl and tmpl.response_schema) else None)
+        )
         sys_prompt = ver.system_prompt if ver else getattr(spec, "system_prompt", None)
         ext_prompt = ver.extraction_prompt if ver else getattr(spec, "extraction_prompt", None)
         ext_model = (ver.external_model_name if (ver and ver.external_model_name) else spec.external_model_name)
@@ -478,14 +472,6 @@ class Repository:
     ) -> Dict[str, Any]:
         """Creates a new Call Spec and version in database."""
         spec_id = f"spc_{str(ulid.new())}"
-
-        if not request_schema:
-            request_schema = {
-                "properties": {
-                    "image": {"type": "string", "description": "Base64 or URL of input document/image"}
-                },
-                "required": ["image"],
-            }
 
         spec = CallSpec(
             id=spec_id,
