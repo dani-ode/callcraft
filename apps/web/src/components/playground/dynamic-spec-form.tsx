@@ -415,7 +415,7 @@ export function DynamicSpecForm({
             <FileText className="w-3.5 h-3.5" />
             <span>Body</span>
             <span className="px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] text-slate-700 dark:text-slate-300">
-              {2 + requestFields.length}
+              {2 + requestFields.filter((f) => f.name !== "image" && f.name !== "prompt").length}
             </span>
           </button>
 
@@ -582,8 +582,10 @@ export function DynamicSpecForm({
                     </div>
                   </div>
 
-                  {/* ROW 3+: Dynamic Schema Parameters */}
-                  {requestFields.map((field) => {
+                  {/* ROW 3+: Dynamic Extra Schema Parameters */}
+                  {requestFields
+                    .filter((field) => field.name !== "image" && field.name !== "prompt")
+                    .map((field) => {
                     const active = isChecked(field.name);
                     const isRequired = Boolean(field.required);
 
