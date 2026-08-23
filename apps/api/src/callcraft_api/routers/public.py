@@ -1,3 +1,4 @@
+import re
 import time
 import logging
 from datetime import datetime, timezone
@@ -8,6 +9,18 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+def truncate_base64_in_prompt(text: str) -> str:
+    if not text:
+        return ""
+    # Truncate base64 data URLs: data:image/png;base64,iVBORw0KG... -> data:image/png;base64,[TRUNCATED_BASE64_DATA]
+    pattern_url = r'(data:[a-zA-Z0-9/+\-]+;base64,)[a-zA-Z0-9/+=]{30,}'
+    text = re.sub(pattern_url, r'\1[TRUNCATED_BASE64_DATA]', text)
+
+    # Truncate raw base64 strings in JSON / text e.g. "image": "iVBORw0KG..."
+    pattern_raw = r'("image"|"file"|"pdf"|"data")\s*:\s*"([a-zA-Z0-9/+=]{100,})"'
+    text = re.sub(pattern_raw, r'\1: "[TRUNCATED_BASE64_DATA]"', text)
+    return text
 
 from callcraft_api.config import settings
 from callcraft_api.db.repository import Repository
@@ -101,11 +114,21 @@ async def execute_callcraft(
     x_call_provider: Optional[str] = Header(None, alias="X-CALL-PROVIDER"),
     x_ai_api_key: Optional[str] = Header(None, alias="X-AI-API-KEY"),
     x_ai_model_name: Optional[str] = Header(None, alias="X-AI-MODEL-NAME"),
+    x_call_show_prompt: Optional[str] = Header(None, alias="X-CALL-SHOW-PROMPT"),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
     start_time = time.time()
     request_id = f"req_{str(ulid.new())}"
     trace_id = f"trc_{str(ulid.new())[:12]}"
+
+    show_prompt_hdr = (
+        x_call_show_prompt
+        or request.headers.get("x-call-show-prompt")
+        or request.headers.get("x-call_show_prompt")
+        or request.headers.get("X-CALL-SHOW-PROMPT")
+        or request.headers.get("X-CALL_SHOW_PROMPT")
+    )
+    should_show_prompt = bool(show_prompt_hdr and str(show_prompt_hdr).strip().lower() == "true")
 
     # 1. Authenticate Bearer API Key dynamically against DB credentials
     if not authorization or not authorization.startswith("Bearer "):
@@ -334,6 +357,19 @@ async def execute_callcraft(
 
     user_prompt = payload.prompt or cached_spec.get("extractionPrompt")
 
+    # Construct complete prompt builder text
+    import json
+    prompt_parts = []
+    if system_prompt:
+        prompt_parts.append(f"=== SYSTEM PROMPT ===\n{system_prompt}")
+    if user_prompt:
+        prompt_parts.append(f"=== USER EXTRACTION PROMPT ===\n{user_prompt}")
+    if tool_schema:
+        prompt_parts.append(f"=== AI TOOL SCHEMA ({configured_tool_name}) ===\n{json.dumps(tool_schema, indent=2)}")
+
+    raw_prompt_builder = "\n\n".join(prompt_parts)
+    prompt_builder_res = truncate_base64_in_prompt(raw_prompt_builder) if should_show_prompt else ""
+
     # 6. Dispatch to AI Provider Adapter
     try:
         raw_ai_out, tokens = await adapter.execute_structured_extraction(
@@ -444,4 +480,5 @@ async def execute_callcraft(
         estimated_cost_usd=estimated_cost_usd,
         execution_steps=execution_steps,
         image_bytes=image_bytes,
+        prompt_builder=prompt_builder_res,
     )

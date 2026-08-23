@@ -20,6 +20,7 @@ import {
   AlertCircle,
   FileCode2,
   Plus,
+  Terminal,
 } from "lucide-react";
 import { executeCallcraftApi, fetchCallSpecs, fetchCallSpecById, getActiveUserId } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
@@ -58,8 +59,8 @@ function PlaygroundContent() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Right Panel Tab State ("body" vs "header")
-  const [rightPanelTab, setRightPanelTab] = useState<"body" | "header">("body");
+  // Right Panel Tab State ("body" | "header" | "prompt")
+  const [rightPanelTab, setRightPanelTab] = useState<"body" | "header" | "prompt">("body");
 
   // Load user specs on mount
   useEffect(() => {
@@ -118,6 +119,24 @@ function PlaygroundContent() {
       setProvider(spec.provider || "gemini");
       setAiModelName(spec.externalModelName || "gemini-3.6-flash");
       setAiApiKey(spec.externalApiKey || "");
+
+      // Restore session data for this spec if present in sessionStorage
+      if (typeof window !== "undefined") {
+        const sessRaw = sessionStorage.getItem(`callcraft_playground_session_${spec.id}`);
+        if (sessRaw) {
+          try {
+            const sess = JSON.parse(sessRaw);
+            setResult(sess.result || null);
+            setError(sess.error || null);
+            if (sess.tab) setRightPanelTab(sess.tab);
+          } catch (e) {
+            console.warn("[Playground] Session parse error:", e);
+          }
+        } else {
+          setResult(null);
+          setError(null);
+        }
+      }
     };
 
     // 1. Look in loaded user specs
@@ -170,10 +189,12 @@ function PlaygroundContent() {
     const sendModelHeader = !useExternalKey || (checkedHeaders["X-AI-MODEL-NAME"] === true);
     const sendKeyHeader   = !useExternalKey || (checkedHeaders["X-AI-API-KEY"] === true);
 
+    const currentSpecKey = activeSpec.id || specId;
+
     try {
       const data = await executeCallcraftApi({
         userId: user?.id || getActiveUserId(),
-        specId: activeSpec.id || specId,
+        specId: currentSpecKey,
         provider,
         apiKey,
         image: imageUrl,
@@ -182,12 +203,44 @@ function PlaygroundContent() {
         aiModelName: sendModelHeader ? (aiModelName || undefined) : undefined,
       });
       setResult(data);
-      setRightPanelTab("body");
+
+      if (typeof window !== "undefined" && currentSpecKey) {
+        sessionStorage.setItem(`callcraft_playground_session_${currentSpecKey}`, JSON.stringify({
+          result: data,
+          error: null,
+          tab: rightPanelTab,
+        }));
+      }
     } catch (e: any) {
-      setError(e.message || "Gagal menjalankan eksekusi Callcraft API");
-      setRightPanelTab("body");
+      const errMsg = e.message || "Gagal menjalankan eksekusi Callcraft API";
+      setError(errMsg);
+
+      if (typeof window !== "undefined" && currentSpecKey) {
+        sessionStorage.setItem(`callcraft_playground_session_${currentSpecKey}`, JSON.stringify({
+          result: null,
+          error: errMsg,
+          tab: rightPanelTab,
+        }));
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTabChange = (newTab: "body" | "header" | "prompt") => {
+    setRightPanelTab(newTab);
+    const currentSpecKey = activeSpec?.id || specId;
+    if (typeof window !== "undefined" && currentSpecKey) {
+      const sessRaw = sessionStorage.getItem(`callcraft_playground_session_${currentSpecKey}`);
+      if (sessRaw) {
+        try {
+          const parsed = JSON.parse(sessRaw);
+          sessionStorage.setItem(`callcraft_playground_session_${currentSpecKey}`, JSON.stringify({
+            ...parsed,
+            tab: newTab,
+          }));
+        } catch (e) {}
+      }
     }
   };
 
@@ -331,7 +384,7 @@ function PlaygroundContent() {
               <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
                 <button
                   type="button"
-                  onClick={() => setRightPanelTab("body")}
+                  onClick={() => handleTabChange("body")}
                   className={`py-1.5 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
                     rightPanelTab === "body"
                       ? "bg-[#e1b329] text-slate-950 shadow-sm"
@@ -344,7 +397,7 @@ function PlaygroundContent() {
 
                 <button
                   type="button"
-                  onClick={() => setRightPanelTab("header")}
+                  onClick={() => handleTabChange("header")}
                   className={`py-1.5 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
                     rightPanelTab === "header"
                       ? "bg-[#e1b329] text-slate-950 shadow-sm"
@@ -353,6 +406,19 @@ function PlaygroundContent() {
                 >
                   <Sliders className="w-3.5 h-3.5" />
                   <span>Response Header</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("prompt")}
+                  className={`py-1.5 px-3 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                    rightPanelTab === "prompt"
+                      ? "bg-[#e1b329] text-slate-950 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Prompt Builder</span>
                 </button>
               </div>
 
@@ -424,6 +490,25 @@ function PlaygroundContent() {
                   activeTabName="Response Header"
                   noWrapper={true}
                 />
+              </div>
+            )}
+
+            {/* TAB CONTENT 3: Prompt Builder */}
+            {rightPanelTab === "prompt" && (
+              <div className="flex-1 overflow-auto min-h-[360px] p-4 rounded-xl bg-slate-950 text-emerald-400 font-mono text-xs leading-relaxed border border-slate-800 space-y-3">
+                {result?.execution_trace?.prompt_builder || result?.execution?.prompt_builder || result?.prompt_builder ? (
+                  <pre className="whitespace-pre-wrap break-words font-mono text-xs selection:bg-emerald-900 selection:text-emerald-100">
+                    {result?.execution_trace?.prompt_builder || result?.execution?.prompt_builder || result?.prompt_builder}
+                  </pre>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2 py-12">
+                    <Terminal className="w-8 h-8 opacity-40 text-[#e1b329]" />
+                    <p className="text-xs font-bold text-slate-400">Belum ada data Prompt Builder untuk eksekusi ini.</p>
+                    <p className="text-[11px] text-slate-500 max-w-sm text-center leading-relaxed">
+                      Klik tombol &quot;Kirim Request&quot; untuk menjalankan ekstraksi dan melihat prompt lengkap yang dikirimkan ke provider AI.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

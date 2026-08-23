@@ -161,12 +161,14 @@ def build_success_envelope(
     estimated_cost_usd: float,
     execution_steps: List[Dict[str, Any]],
     image_bytes: Optional[bytes] = None,
+    prompt_builder: Optional[str] = "",
 ) -> Dict[str, Any]:
     """Constructs a standardized Enterprise Success Envelope dictionary (qna-6.md)."""
     if not execution_steps:
         raise ValueError("execution_steps parameter must be a non-empty list of step dictionaries")
 
     now_iso = datetime.now(timezone.utc).isoformat()
+    prompt_b_text = prompt_builder or ""
 
     prompt_tokens = tokens.get("prompt_tokens", 0)
     completion_tokens = tokens.get("completion_tokens", 0)
@@ -191,6 +193,7 @@ def build_success_envelope(
         "execution_trace": {
             "total_duration_ms": processing_time_ms,
             "steps": execution_steps,
+            "prompt_builder": prompt_b_text,
             "warnings": [],
         },
         "metrics": {
@@ -214,6 +217,7 @@ def build_success_envelope(
             "provider": provider_code,
             "model": active_model,
             "processingTimeMs": processing_time_ms,
+            "prompt_builder": prompt_b_text,
             "tokens": tokens,
         },
     }

@@ -574,6 +574,7 @@ export async function executeCallcraftApi(payload: {
     Authorization: `Bearer ${payload.apiKey}`,
     "X-CALL-SPEC-ID": payload.specId,
     "X-CALL-PROVIDER": payload.provider,
+    "X-CALL-SHOW-PROMPT": "true",
   };
 
   if (payload.aiApiKey) {
