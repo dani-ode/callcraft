@@ -226,11 +226,16 @@ async def execute_callcraft(
             )
 
     # 5. Construct Response Schema & Tool Calling JSON Schema
-    raw_resp_schema = cached_spec.get("responseSchema", {})
-    props_dict = raw_resp_schema.get("properties", {})
+    raw_resp_schema = cached_spec.get("responseSchema") or {}
+    props_dict = raw_resp_schema.get("properties") or {}
+    req_list = raw_resp_schema.get("required") or []
+    if not isinstance(req_list, list):
+        req_list = []
     
     field_defs = {}
     for fname, fmeta in props_dict.items():
+        if not isinstance(fmeta, dict):
+            continue
         ftype_str = fmeta.get("type", "string").lower()
         try:
             ptype = PlatformDataType(ftype_str)
@@ -245,10 +250,18 @@ async def execute_callcraft(
                 start_time=start_time,
             )
         
+        raw_req = fmeta.get("required")
+        if isinstance(raw_req, bool):
+            is_req = raw_req
+        elif req_list:
+            is_req = fname in req_list
+        else:
+            is_req = True
+
         field_defs[fname] = FieldDefinition(
             type=ptype,
             description=fmeta.get("description"),
-            required=fmeta.get("required", True),
+            required=is_req,
             enum_values=fmeta.get("enum_values"),
         )
     
