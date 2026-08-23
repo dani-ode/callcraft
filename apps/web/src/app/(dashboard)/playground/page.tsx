@@ -112,47 +112,33 @@ function PlaygroundContent() {
   const resolveAndSetSpec = async (targetId: string) => {
     if (!targetId) return;
 
+    const applySpecToForm = (spec: CallSpec) => {
+      setActiveSpec(spec);
+      setPrompt(spec.extractionPrompt || "");
+      setProvider(spec.provider || "gemini");
+      setAiModelName(spec.externalModelName || "gemini-3.6-flash");
+      setAiApiKey(spec.externalApiKey || "");
+    };
+
     // 1. Look in loaded user specs
     const userSpec = userSpecs.find((s) => s.id === targetId || s.slug === targetId);
     if (userSpec) {
-      setActiveSpec(userSpec);
-      setPrompt(userSpec.extractionPrompt || (userSpec as any).extraction_prompt || "");
-      const prov = userSpec.provider || (userSpec as any).provider_code || (userSpec as any).providerCode || "gemini";
-      const model = userSpec.externalModelName || (userSpec as any).external_model_name || (userSpec as any).aiModelName || "gemini-3.6-flash";
-      const key = userSpec.externalApiKey || (userSpec as any).external_api_key || (userSpec as any).aiApiKey || (userSpec as any).ai_api_key || "";
-      setProvider(prov);
-      setAiModelName(model);
-      setAiApiKey(key);
+      applySpecToForm(userSpec);
       return;
     }
 
     // 2. Fetch single spec directly from backend API
     const singleSpec = await fetchCallSpecById(targetId);
     if (singleSpec) {
-      setActiveSpec(singleSpec);
-      setPrompt(singleSpec.extractionPrompt || (singleSpec as any).extraction_prompt || "");
-      const prov = singleSpec.provider || (singleSpec as any).provider_code || (singleSpec as any).providerCode || "gemini";
-      const model = singleSpec.externalModelName || (singleSpec as any).external_model_name || (singleSpec as any).aiModelName || "gemini-3.6-flash";
-      const key = singleSpec.externalApiKey || (singleSpec as any).external_api_key || (singleSpec as any).aiApiKey || (singleSpec as any).ai_api_key || "";
-      setProvider(prov);
-      setAiModelName(model);
-      setAiApiKey(key);
+      applySpecToForm(singleSpec);
     } else {
       // 404 Not Found: Clean invalid key and fallback to first spec
       if (typeof window !== "undefined") {
         localStorage.removeItem("callcraft_playground_selected_spec");
       }
       if (userSpecs.length > 0) {
-        const fallback = userSpecs[0];
-        setSpecId(fallback.id);
-        setActiveSpec(fallback);
-        setPrompt(fallback.extractionPrompt || (fallback as any).extraction_prompt || "");
-        const prov = fallback.provider || (fallback as any).provider_code || (fallback as any).providerCode || "gemini";
-        const model = fallback.externalModelName || (fallback as any).external_model_name || (fallback as any).aiModelName || "gemini-3.6-flash";
-        const key = fallback.externalApiKey || (fallback as any).external_api_key || (fallback as any).aiApiKey || (fallback as any).ai_api_key || "";
-        setProvider(prov);
-        setAiModelName(model);
-        setAiApiKey(key);
+        setSpecId(userSpecs[0].id);
+        applySpecToForm(userSpecs[0]);
       }
     }
   };
