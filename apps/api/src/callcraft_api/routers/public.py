@@ -355,15 +355,26 @@ async def execute_callcraft(
 
     tool_schema = generate_ai_tool_schema(configured_tool_name, configured_tool_desc, response_schema_obj)
 
-    user_prompt = payload.prompt or cached_spec.get("extractionPrompt")
+    user_prompt = payload.prompt or cached_spec.get("extractionPrompt") or ""
 
-    # Construct complete prompt builder text
+    # Interpolate dynamic template variables {{variable_name}} if payload.variables is provided
+    if payload.variables and isinstance(payload.variables, dict):
+        for k, v in payload.variables.items():
+            placeholder = f"{{{{{k}}}}}"
+            if system_prompt and placeholder in system_prompt:
+                system_prompt = system_prompt.replace(placeholder, str(v))
+            if user_prompt and placeholder in user_prompt:
+                user_prompt = user_prompt.replace(placeholder, str(v))
+
+    # Construct complete prompt builder text matching exact AI input JSON
     import json
     prompt_parts = []
     if system_prompt:
         prompt_parts.append(f"=== SYSTEM PROMPT ===\n{system_prompt}")
     if user_prompt:
         prompt_parts.append(f"=== USER EXTRACTION PROMPT ===\n{user_prompt}")
+    if payload.variables and isinstance(payload.variables, dict) and payload.variables:
+        prompt_parts.append(f"=== INPUT CONTEXT VARIABLES ===\n{json.dumps(payload.variables, indent=2)}")
     if tool_schema:
         prompt_parts.append(f"=== AI TOOL SCHEMA ({configured_tool_name}) ===\n{json.dumps(tool_schema, indent=2)}")
 
