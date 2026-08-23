@@ -496,9 +496,9 @@ function PlaygroundContent() {
             {/* TAB CONTENT 3: Prompt Builder */}
             {rightPanelTab === "prompt" && (
               <div className="flex-1 overflow-auto min-h-[360px] p-4 rounded-xl bg-slate-950 text-emerald-400 font-mono text-xs leading-relaxed border border-slate-800 space-y-3">
-                {result?.execution_trace?.prompt_builder || result?.execution?.prompt_builder || result?.prompt_builder ? (
+                {result?.execution_trace?.promptBuilder || result?.promptBuilder || result?.execution?.promptBuilder || result?.execution_trace?.prompt_builder || result?.execution?.prompt_builder || result?.prompt_builder ? (
                   <pre className="whitespace-pre-wrap break-words font-mono text-xs selection:bg-emerald-900 selection:text-emerald-100">
-                    {result?.execution_trace?.prompt_builder || result?.execution?.prompt_builder || result?.prompt_builder}
+                    {result?.execution_trace?.promptBuilder || result?.promptBuilder || result?.execution?.promptBuilder || result?.execution_trace?.prompt_builder || result?.execution?.prompt_builder || result?.prompt_builder}
                   </pre>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2 py-12">

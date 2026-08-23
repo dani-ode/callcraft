@@ -193,6 +193,7 @@ def build_success_envelope(
         "execution_trace": {
             "total_duration_ms": processing_time_ms,
             "steps": execution_steps,
+            "promptBuilder": prompt_b_text,
             "prompt_builder": prompt_b_text,
             "warnings": [],
         },
@@ -207,6 +208,7 @@ def build_success_envelope(
         # Backward compatibility aliases for existing UI consumers:
         "success": True,
         "requestId": request_id,
+        "promptBuilder": prompt_b_text,
         "spec": {
             "id": cached_spec["id"],
             "name": cached_spec["name"],
@@ -217,6 +219,7 @@ def build_success_envelope(
             "provider": provider_code,
             "model": active_model,
             "processingTimeMs": processing_time_ms,
+            "promptBuilder": prompt_b_text,
             "prompt_builder": prompt_b_text,
             "tokens": tokens,
         },
