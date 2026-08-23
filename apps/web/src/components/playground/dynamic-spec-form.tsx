@@ -19,6 +19,8 @@ import {
   Save,
   AlertTriangle,
   Terminal,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { SchemaField } from "@/components/schema-builder/types";
 import { jsonSchemaToSchemaFields } from "@/components/schema-builder/schema-helpers";
@@ -103,6 +105,7 @@ export function DynamicSpecForm({
   const [selectedKeyId, setSelectedKeyId] = useState<string>("");
   const [publicKey, setPublicKey] = useState<string>("");
   const [keysError, setKeysError] = useState<string | null>(null);
+  const [showBearerToken, setShowBearerToken] = useState(true);
 
   // Fetch Live Credentials from Backend API on mount
   useEffect(() => {
@@ -940,15 +943,23 @@ export function DynamicSpecForm({
                       Bearer Token
                     </span>
                   </div>
-                  {/* Value (Synced Password Input without Eye Toggle) */}
-                  <div className="flex-1">
+                  {/* Value (Editable Input with Eye Toggle) */}
+                  <div className="flex-1 flex items-center gap-1.5">
                     <input
-                      type="password"
+                      type={showBearerToken ? "text" : "password"}
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                       className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-indigo-700 dark:text-indigo-300 font-mono focus:outline-none focus:border-[#e1b329]"
                       placeholder="call_sk_live_..."
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowBearerToken(!showBearerToken)}
+                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 shrink-0"
+                      title={showBearerToken ? "Sembunyikan Token" : "Tampilkan Token"}
+                    >
+                      {showBearerToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
                   </div>
                 </div>
               </div>

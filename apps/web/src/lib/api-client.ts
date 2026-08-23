@@ -21,13 +21,13 @@ export function getActiveUserId(): string {
     if (legacy) {
       try {
         const parsed = JSON.parse(legacy);
-        return typeof parsed === "string" ? parsed : (parsed?.id || "");
+        return typeof parsed === "string" ? parsed : parsed?.id || "usr_default_dev_01";
       } catch {
         return legacy;
       }
     }
   }
-  return "";
+  return "usr_default_dev_01";
 }
 
 export function getActiveUserSession(): { id: string; name: string; email: string } {
