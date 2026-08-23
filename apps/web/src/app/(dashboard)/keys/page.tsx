@@ -571,36 +571,41 @@ export default function ApiKeysPage() {
                     </td>
                     <td className="py-3 px-3 opacity-75">{formatDateOnly(item.createdAt)}</td>
 
-                    {/* Actions Column with 3-Dots Menu positioned directly underneath */}
+                    {/* Actions Column with 3-Dots Menu positioned fixed in viewport */}
                     <td className="py-3 px-3 text-right">
                       <div className="relative inline-block text-left">
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenMenuKeyId(openMenuKeyId === item.id ? null : item.id);
-                          }}
+                          onClick={(e) => handleToggleMenu(e, item.id)}
                           className="p-2 rounded-xl glass-panel hover:bg-[#edd6bb]/20 border border-[#edd6bb]/20 text-slate-700 dark:text-slate-300 transition-all"
                           title="Opsi API Key"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
 
-                        {/* Dropdown Menu Tooltip positioned right below button */}
-                        {openMenuKeyId === item.id && (
+                        {/* Floating Dropdown Menu with fixed positioning to avoid triggering overflow scrollbars */}
+                        {openMenuKeyId === item.id && menuPos && (
                           <>
                             <div
-                              className="fixed inset-0 z-40 bg-transparent"
+                              className="fixed inset-0 z-[9998] bg-transparent"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setOpenMenuKeyId(null);
+                                setMenuPos(null);
                               }}
                             />
-                            <div className="absolute right-0 top-full mt-1.5 w-44 z-50 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-xs text-left animate-in fade-in duration-100">
+                            <div
+                              style={{
+                                top: `${menuPos.top}px`,
+                                right: `${menuPos.right}px`,
+                              }}
+                              className="fixed w-44 z-[9999] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-xs text-left animate-in fade-in duration-100"
+                            >
                               <button
                                 type="button"
                                 onClick={() => {
                                   setOpenMenuKeyId(null);
+                                  setMenuPos(null);
                                   handleOpenWhitelistModal(item);
                                 }}
                                 className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200"
@@ -615,6 +620,7 @@ export default function ApiKeysPage() {
                                 type="button"
                                 onClick={() => {
                                   setOpenMenuKeyId(null);
+                                  setMenuPos(null);
                                   setKeyToDelete(item);
                                 }}
                                 className="w-full text-left px-3 py-2 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center gap-2 font-bold"
