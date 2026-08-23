@@ -21,13 +21,13 @@ export function getActiveUserId(): string {
     if (legacy) {
       try {
         const parsed = JSON.parse(legacy);
-        return typeof parsed === "string" ? parsed : parsed?.id || "usr_default_dev_01";
+        return typeof parsed === "string" ? parsed : parsed?.id || "";
       } catch {
         return legacy;
       }
     }
   }
-  return "usr_default_dev_01";
+  return "";
 }
 
 export function getActiveUserSession(): { id: string; name: string; email: string } {
@@ -464,8 +464,13 @@ export async function deleteTemplateComment(commentId: string): Promise<{ messag
 }
 
 export async function fetchApiKeys(): Promise<ApiCredential[]> {
+  const userId = getActiveUserId();
+  if (!userId) {
+    console.warn("[Callcraft API] getActiveUserId() is empty. No user session active for fetching API keys.");
+    return [];
+  }
   try {
-    const res = await fetch(`${PYTHON_API_URL}/internal/v1/keys?user_id=${getActiveUserId()}`, {
+    const res = await fetch(`${PYTHON_API_URL}/internal/v1/keys?user_id=${encodeURIComponent(userId)}`, {
       headers: getAuthHeaders(),
       cache: "no-store",
     });
@@ -473,7 +478,9 @@ export async function fetchApiKeys(): Promise<ApiCredential[]> {
     if (!res.ok) {
       return [];
     }
-    return await res.json();
+    const data = await res.json();
+    console.log(`[Callcraft API] Loaded ${data.length} API Keys from DB for user ${userId}:`, data);
+    return data;
   } catch (err) {
     console.warn(`[Callcraft API] Unable to connect to ${PYTHON_API_URL}/internal/v1/keys:`, err);
     return [];

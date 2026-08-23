@@ -111,6 +111,7 @@ export function DynamicSpecForm({
   useEffect(() => {
     fetchApiKeys()
       .then((keys) => {
+        console.log("[Playground] API Keys loaded from DB:", keys);
         if (keys && keys.length > 0) {
           setAvailableKeys(keys);
           setSelectedKeyId(keys[0].id);
