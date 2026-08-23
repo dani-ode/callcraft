@@ -37,10 +37,47 @@ def get_client_ip(request: Request) -> str:
     x_forwarded_for = request.headers.get("X-Forwarded-For")
     if x_forwarded_for:
         return x_forwarded_for.split(",")[0].strip()
-    x_real_ip = request.headers.get("X-Real-IP")
-    if x_real_ip:
-        return x_real_ip.strip()
     return request.client.host if request.client and request.client.host else "127.0.0.1"
+
+
+def _parse_dict_to_field_def(fmeta: dict, is_required: bool = True) -> FieldDefinition:
+    ftype_str = fmeta.get("type", "string").lower()
+    try:
+        ptype = PlatformDataType(ftype_str)
+    except ValueError:
+        ptype = PlatformDataType.STRING
+
+    sub_props = None
+    if ptype == PlatformDataType.OBJECT and "properties" in fmeta and isinstance(fmeta["properties"], dict):
+        sub_req_list = fmeta.get("required") or []
+        if not isinstance(sub_req_list, list):
+            sub_req_list = []
+        sub_props = {}
+        for sub_name, sub_meta in fmeta["properties"].items():
+            if isinstance(sub_meta, dict):
+                sub_req = sub_meta.get("required")
+                if isinstance(sub_req, bool):
+                    sub_is_req = sub_req
+                elif sub_req_list:
+                    sub_is_req = sub_name in sub_req_list
+                else:
+                    sub_is_req = True
+                sub_props[sub_name] = _parse_dict_to_field_def(sub_meta, is_required=sub_is_req)
+
+    sub_items = None
+    if ptype == PlatformDataType.ARRAY and "items" in fmeta and isinstance(fmeta["items"], dict):
+        sub_items = _parse_dict_to_field_def(fmeta["items"], is_required=True)
+
+    enum_vals = fmeta.get("enum_values") or fmeta.get("enum")
+
+    return FieldDefinition(
+        type=ptype,
+        description=fmeta.get("description"),
+        required=is_required,
+        enum_values=enum_vals,
+        properties=sub_props,
+        items=sub_items,
+    )
 
 
 class CallRequestPayload(BaseModel):
@@ -225,6 +262,9 @@ async def execute_callcraft(
                 start_time=start_time,
             )
 
+
+
+
     # 5. Construct Response Schema & Tool Calling JSON Schema
     raw_resp_schema = cached_spec.get("responseSchema") or {}
     props_dict = raw_resp_schema.get("properties") or {}
@@ -236,19 +276,6 @@ async def execute_callcraft(
     for fname, fmeta in props_dict.items():
         if not isinstance(fmeta, dict):
             continue
-        ftype_str = fmeta.get("type", "string").lower()
-        try:
-            ptype = PlatformDataType(ftype_str)
-        except ValueError:
-            return create_error_response(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                error_code="INVALID_SCHEMA_DATA_TYPE",
-                message=f"Tipe data '{ftype_str}' pada field '{fname}' tidak didukung oleh platform.",
-                details=[{"field": fname, "issue": f"Unsupported type '{ftype_str}'"}],
-                actionable_step="Gunakan tipe data valid: string, number, integer, boolean, object, array.",
-                request_id=request_id,
-                start_time=start_time,
-            )
         
         raw_req = fmeta.get("required")
         if isinstance(raw_req, bool):
@@ -258,12 +285,7 @@ async def execute_callcraft(
         else:
             is_req = True
 
-        field_defs[fname] = FieldDefinition(
-            type=ptype,
-            description=fmeta.get("description"),
-            required=is_req,
-            enum_values=fmeta.get("enum_values"),
-        )
+        field_defs[fname] = _parse_dict_to_field_def(fmeta, is_required=is_req)
     
     response_schema_obj = ResponseSchema(properties=field_defs)
     tool_schema = generate_ai_tool_schema("extract_structured_data", "Extract structured JSON from document", response_schema_obj)
