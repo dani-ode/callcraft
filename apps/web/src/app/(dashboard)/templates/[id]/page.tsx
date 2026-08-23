@@ -173,6 +173,191 @@ export default function TemplateDetailPage() {
     }
   }
 
+  function parseSchemaObj(schemaRaw: any) {
+    if (!schemaRaw) return { type: "object", properties: {}, required: [] };
+    if (typeof schemaRaw === "string") {
+      try {
+        return JSON.parse(schemaRaw);
+      } catch {
+        return { type: "object", properties: {}, required: [] };
+      }
+    }
+    return schemaRaw;
+  }
+
+  /* TAB 2: INPUT REQUEST SCHEMA */
+  const renderRequestSchemaTab = () => {
+    const reqSchema = parseSchemaObj(template?.requestSchema);
+    const propsMap = reqSchema.properties || {};
+    const requiredList = Array.isArray(reqSchema.required) ? reqSchema.required : [];
+    const entries = Object.entries(propsMap);
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between border-b border-[#edd6bb]/20 pb-4 gap-4">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Input Request Body Schema</h3>
+            <p className="text-xs text-[#8b7e6d]">Format dan spesifikasi properti payload JSON yang dapat dikirim saat memanggil API Call Spec ini</p>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(JSON.stringify(reqSchema, null, 2));
+              setNotification({ message: "Input Request Schema berhasil disalin ke clipboard!", type: "success" });
+            }}
+            className="px-4 py-2 rounded-xl glass-panel border border-[#edd6bb]/30 text-xs font-extrabold text-[#b8860b] dark:text-[#e1b329] flex items-center gap-1.5 hover:bg-[#e1b329]/10 transition-colors"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>Copy Request Schema</span>
+          </button>
+        </div>
+
+        {/* Visual Property Breakdown Cards */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#8b7e6d] font-mono flex items-center gap-2">
+            <FileJson className="w-3.5 h-3.5 text-[#e1b329]" />
+            <span>Parameter Payload Terdaftar ({entries.length})</span>
+          </h4>
+
+          {entries.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 text-center">
+              <p className="text-xs text-[#8b7e6d] italic">Tidak ada properti kustom terdaftar pada Request Schema ini.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {entries.map(([key, val]: [string, any]) => {
+                const isReq = requiredList.includes(key) || val?.required === true;
+                const propType = val?.type || "string";
+                const desc = val?.description || (key === "image" ? "Base64 string or URL of input document/image" : "Standard request field");
+
+                return (
+                  <div
+                    key={key}
+                    className="p-4 rounded-2xl glass-panel border border-[#edd6bb]/40 dark:border-[#edd6bb]/20 bg-[#fcfaf7] dark:bg-[#0d0907] space-y-1.5 shadow-sm hover:border-[#e1b329]/40 transition-all"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 font-mono">
+                        <span className="text-xs font-extrabold text-[#b8860b] dark:text-[#ffb443] bg-[#e1b329]/10 px-2.5 py-0.5 rounded-lg border border-[#e1b329]/20">
+                          {key}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase px-2 py-0.5 rounded-md bg-slate-200/60 dark:bg-slate-800">
+                          {propType}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md font-mono ${
+                          isReq
+                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                            : "bg-slate-500/10 text-slate-500 border border-slate-500/20"
+                        }`}
+                      >
+                        {isReq ? "Required" : "Optional"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700 dark:text-[#edd6bb]/90">{desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Raw JSON Schema Container */}
+        <div className="space-y-2 pt-2 border-t border-[#edd6bb]/20">
+          <span className="text-xs font-bold text-slate-900 dark:text-[#edd6bb] block font-mono">Raw Request JSON Schema Definition:</span>
+          <pre className="p-6 rounded-2xl bg-[#0d0907] border border-[#edd6bb]/20 text-xs font-mono text-emerald-400 leading-relaxed overflow-x-auto">
+            {JSON.stringify(reqSchema, null, 2)}
+          </pre>
+        </div>
+      </div>
+    );
+  };
+
+  /* TAB 3: OUTPUT JSON RESPONSE SCHEMA */
+  const renderResponseSchemaTab = () => {
+    const resSchema = parseSchemaObj(template?.responseSchema);
+    const propsMap = resSchema.properties || {};
+    const entries = Object.entries(propsMap);
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between border-b border-[#edd6bb]/20 pb-4 gap-4">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Output Target JSON Response Schema</h3>
+            <p className="text-xs text-[#8b7e6d]">Skema struktur data JSON yang dihasilkan secara deterministik oleh Call Spec ini</p>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(JSON.stringify(resSchema, null, 2));
+              setNotification({ message: "Response Schema berhasil disalin ke clipboard!", type: "success" });
+            }}
+            className="px-4 py-2 rounded-xl glass-panel border border-[#edd6bb]/30 text-xs font-extrabold text-[#b8860b] dark:text-[#e1b329] flex items-center gap-1.5 hover:bg-[#e1b329]/10 transition-colors"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>Copy Response Schema</span>
+          </button>
+        </div>
+
+        {/* Visual Property Breakdown Cards */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#8b7e6d] font-mono flex items-center gap-2">
+            <Layers className="w-3.5 h-3.5 text-[#e1b329]" />
+            <span>Struktur Field Output Terdaftar ({entries.length})</span>
+          </h4>
+
+          {entries.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 text-center">
+              <p className="text-xs text-[#8b7e6d] italic">Tidak ada properti terdaftar pada Response Schema ini.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {entries.map(([key, val]: [string, any]) => {
+                const isReq = val?.required === true;
+                const propType = val?.type || "string";
+                const desc = val?.description || (isReq ? "Field wajib diekstraksi" : "Field opsional");
+
+                return (
+                  <div
+                    key={key}
+                    className="p-4 rounded-2xl glass-panel border border-[#edd6bb]/40 dark:border-[#edd6bb]/20 bg-[#fcfaf7] dark:bg-[#0d0907] space-y-1.5 shadow-sm hover:border-[#e1b329]/40 transition-all"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 font-mono">
+                        <span className="text-xs font-extrabold text-[#b8860b] dark:text-[#ffb443] bg-[#e1b329]/10 px-2.5 py-0.5 rounded-lg border border-[#e1b329]/20">
+                          {key}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase px-2 py-0.5 rounded-md bg-slate-200/60 dark:bg-slate-800">
+                          {propType}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md font-mono ${
+                          isReq
+                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                            : "bg-slate-500/10 text-slate-500 border border-slate-500/20"
+                        }`}
+                      >
+                        {isReq ? "Required" : "Optional"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700 dark:text-[#edd6bb]/90">{desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Raw JSON Schema Container */}
+        <div className="space-y-2 pt-2 border-t border-[#edd6bb]/20">
+          <span className="text-xs font-bold text-slate-900 dark:text-[#edd6bb] block font-mono">Raw Response JSON Schema Definition:</span>
+          <pre className="p-6 rounded-2xl bg-[#0d0907] border border-[#edd6bb]/20 text-xs font-mono text-emerald-400 leading-relaxed overflow-x-auto">
+            {JSON.stringify(resSchema, null, 2)}
+          </pre>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="py-24 text-center text-slate-400 max-w-4xl mx-auto space-y-3">
@@ -435,56 +620,10 @@ export default function TemplateDetailPage() {
         )}
 
         {/* TAB 2: INPUT REQUEST SCHEMA */}
-        {activeTab === "request_schema" && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-[#edd6bb]/20 pb-4">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Input Request Body Schema</h3>
-                <p className="text-xs text-[#8b7e6d]">Format dan properti payload JSON yang dapat dikirim saat memanggil API Call Spec ini</p>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(template.requestSchema || { type: "object", properties: {} }, null, 2));
-                  alert("Input Request Schema berhasil disalin!");
-                }}
-                className="px-4 py-2 rounded-xl glass-panel border border-[#edd6bb]/30 text-xs font-extrabold text-[#b8860b] dark:text-[#e1b329] flex items-center gap-1.5 hover:bg-[#e1b329]/10"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy Request Schema</span>
-              </button>
-            </div>
-
-            <pre className="p-6 rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 dark:border-[#edd6bb]/20 text-xs font-mono text-[#b8860b] dark:text-amber-200 leading-relaxed overflow-x-auto">
-              {JSON.stringify(template.requestSchema || { type: "object", properties: {} }, null, 2)}
-            </pre>
-          </div>
-        )}
+        {activeTab === "request_schema" && renderRequestSchemaTab()}
 
         {/* TAB 3: OUTPUT JSON RESPONSE SCHEMA */}
-        {activeTab === "schema" && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-[#edd6bb]/20 pb-4">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Output Target JSON Response Schema</h3>
-                <p className="text-xs text-[#8b7e6d]">Skema struktur data JSON yang dihasilkan secara deterministik oleh Call Spec ini</p>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(template.responseSchema || { type: "object", properties: {} }, null, 2));
-                  alert("JSON Schema berhasil disalin ke clipboard!");
-                }}
-                className="px-4 py-2 rounded-xl glass-panel border border-[#edd6bb]/30 text-xs font-extrabold text-[#b8860b] dark:text-[#e1b329] flex items-center gap-1.5 hover:bg-[#e1b329]/10"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy Response Schema</span>
-              </button>
-            </div>
-
-            <pre className="p-6 rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 dark:border-[#edd6bb]/20 text-xs font-mono text-[#b8860b] dark:text-amber-200 leading-relaxed overflow-x-auto">
-              {JSON.stringify(template.responseSchema || { type: "object", properties: {} }, null, 2)}
-            </pre>
-          </div>
-        )}
+        {activeTab === "schema" && renderResponseSchemaTab()}
 
         {/* TAB 4: TOOL CALLING CONFIGURATION */}
         {activeTab === "toolcalling" && (
@@ -726,3 +865,4 @@ export default function TemplateDetailPage() {
     </div>
   );
 }
+
