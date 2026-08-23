@@ -242,23 +242,77 @@ class Repository:
         tmpl: Optional[Template] = None,
     ) -> Dict[str, Any]:
         """Serializes CallSpec model instance into a standardized clean camelCase JSON dictionary."""
+        has_ver_req = (
+            ver
+            and ver.request_schema
+            and isinstance(ver.request_schema, dict)
+            and bool(ver.request_schema.get("properties"))
+        )
         req_schema = (
             ver.request_schema
-            if (ver and ver.request_schema is not None)
-            else (tmpl.request_schema if (tmpl and tmpl.request_schema) else None)
+            if has_ver_req
+            else (
+                tmpl.request_schema
+                if (tmpl and tmpl.request_schema)
+                else (ver.request_schema if ver else None)
+            )
+        )
+
+        has_ver_res = (
+            ver
+            and ver.response_schema
+            and isinstance(ver.response_schema, dict)
+            and bool(ver.response_schema.get("properties"))
         )
         res_schema = (
             ver.response_schema
-            if (ver and ver.response_schema is not None)
-            else (tmpl.response_schema if (tmpl and tmpl.response_schema) else None)
+            if has_ver_res
+            else (
+                tmpl.response_schema
+                if (tmpl and tmpl.response_schema)
+                else (ver.response_schema if ver else None)
+            )
         )
-        sys_prompt = ver.system_prompt if ver else getattr(spec, "system_prompt", None)
-        ext_prompt = ver.extraction_prompt if ver else getattr(spec, "extraction_prompt", None)
+
+        sys_prompt = (
+            (ver.system_prompt if ver else None)
+            or (tmpl.system_prompt if tmpl else None)
+            or getattr(spec, "system_prompt", None)
+        )
+        ext_prompt = (
+            (ver.extraction_prompt if ver else None)
+            or (tmpl.extraction_prompt if tmpl else None)
+            or getattr(spec, "extraction_prompt", None)
+        )
         ext_model = (ver.external_model_name if (ver and ver.external_model_name) else spec.external_model_name)
         ext_key = (ver.external_api_key if (ver and ver.external_api_key) else spec.external_api_key)
 
-        use_ext_key = ver.use_external_api_key if (ver and ver.use_external_api_key is not None) else spec.use_external_api_key
-        tools_cfg = (ver.tools_config if (ver and ver.tools_config is not None) else spec.tools_config) or {}
+        use_ext_key = (ver.use_external_api_key if (ver and ver.use_external_api_key is not None) else spec.use_external_api_key)
+        
+        has_ver_tools = (
+            ver
+            and ver.tools_config
+            and isinstance(ver.tools_config, dict)
+            and bool(ver.tools_config.get("tools"))
+        )
+        has_spec_tools = (
+            spec.tools_config
+            and isinstance(spec.tools_config, dict)
+            and bool(spec.tools_config.get("tools"))
+        )
+        tools_cfg = (
+            ver.tools_config
+            if has_ver_tools
+            else (
+                spec.tools_config
+                if has_spec_tools
+                else (
+                    tmpl.tools_config
+                    if (tmpl and tmpl.tools_config)
+                    else (ver.tools_config if ver else spec.tools_config or {})
+                )
+            )
+        )
 
         return {
             "id": spec.id,
@@ -310,10 +364,21 @@ class Repository:
         )
         ver_res = await db.execute(ver_stmt)
         ver = ver_res.scalar_one_or_none()
-        if not ver:
-            return None
 
-        return Repository._serialize_call_spec(spec, ver)
+        tmpl = None
+        tmpl_id = getattr(spec, "template_id", None) or getattr(spec, "published_template_id", None)
+        if tmpl_id:
+            t_stmt = select(Template).where(Template.id == tmpl_id)
+            t_res = await db.execute(t_stmt)
+            tmpl = t_res.scalar_one_or_none()
+        
+        if not tmpl and spec.slug:
+            clean_code = spec.slug.split("-clone-")[0]
+            t_stmt = select(Template).where((Template.code == spec.slug) | (Template.code == clean_code))
+            t_res = await db.execute(t_stmt)
+            tmpl = t_res.scalar_one_or_none()
+
+        return Repository._serialize_call_spec(spec, ver, tmpl)
 
     @staticmethod
     async def update_call_spec(
