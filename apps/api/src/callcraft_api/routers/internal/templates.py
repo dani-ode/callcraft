@@ -266,8 +266,12 @@ async def fork_template_to_spec(
         name=f"{tmpl.name} (Clone)",
         slug=new_slug,
         description=f"Cloned from Marketplace template: {tmpl.name}",
+        template_id=tmpl.id,
+        request_schema=tmpl.request_schema,
         response_schema=tmpl.response_schema,
         system_prompt=tmpl.system_prompt,
+        extraction_prompt=tmpl.extraction_prompt,
+        tools_config=tmpl.tools_config,
     )
 
     return {

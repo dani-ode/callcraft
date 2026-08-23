@@ -452,6 +452,7 @@ class Repository:
         name: str,
         slug: str,
         description: Optional[str] = None,
+        template_id: Optional[str] = None,
         request_schema: Optional[Dict[str, Any]] = None,
         response_schema: Optional[Dict[str, Any]] = None,
         system_prompt: Optional[str] = None,
@@ -463,9 +464,19 @@ class Repository:
     ) -> Dict[str, Any]:
         """Creates a new Call Spec and version in database."""
         spec_id = f"spc_{str(ulid.new())}"
+
+        if not request_schema:
+            request_schema = {
+                "properties": {
+                    "image": {"type": "string", "description": "Base64 or URL of input document/image"}
+                },
+                "required": ["image"],
+            }
+
         spec = CallSpec(
             id=spec_id,
             user_id=user_id,
+            template_id=template_id,
             name=name,
             slug=slug,
             description=description,
