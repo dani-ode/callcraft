@@ -505,6 +505,8 @@ class Repository:
         )
         db.add(ver)
         await db.commit()
+        await db.refresh(spec)
+        await db.refresh(ver)
 
         return Repository._serialize_call_spec(spec, ver)
 

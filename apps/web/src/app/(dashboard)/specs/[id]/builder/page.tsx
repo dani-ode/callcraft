@@ -117,6 +117,9 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
         const reqSchema = specObj.requestSchema;
         if (reqSchema && typeof reqSchema === "object") {
           const parsedRequestFields = jsonSchemaToSchemaFields(reqSchema);
+          console.log("[Callcraft Builder] Spec ID:", params.id);
+          console.log("[Callcraft Builder] Raw requestSchema from DB:", reqSchema);
+          console.log("[Callcraft Builder] Parsed requestFields for Visual Tree:", parsedRequestFields);
           setRequestFields(parsedRequestFields);
         }
       })

@@ -254,24 +254,33 @@ async def fork_template_to_spec(
             detail="Anda tidak dapat meng-clone template yang Anda buat sendiri."
         )
 
+    req_schema = tmpl.request_schema
+    res_schema = tmpl.response_schema
+    sys_prompt = tmpl.system_prompt
+    ext_prompt = tmpl.extraction_prompt
+    tools_cfg = tmpl.tools_config
+    tmpl_id = tmpl.id
+    tmpl_name = tmpl.name
+    tmpl_code = tmpl.code
+
     tmpl.fork_count += 1
     await db.commit()
 
     random_suffix = str(ulid.new()).lower()[-8:]
-    new_slug = f"{tmpl.code}-clone-{random_suffix}"
+    new_slug = f"{tmpl_code}-clone-{random_suffix}"
 
     new_spec = await Repository.create_call_spec(
         db=db,
         user_id=user_id,
-        name=f"{tmpl.name} (Clone)",
+        name=f"{tmpl_name} (Clone)",
         slug=new_slug,
-        description=f"Cloned from Marketplace template: {tmpl.name}",
-        template_id=tmpl.id,
-        request_schema=tmpl.request_schema,
-        response_schema=tmpl.response_schema,
-        system_prompt=tmpl.system_prompt,
-        extraction_prompt=tmpl.extraction_prompt,
-        tools_config=tmpl.tools_config,
+        description=f"Cloned from Marketplace template: {tmpl_name}",
+        template_id=tmpl_id,
+        request_schema=req_schema,
+        response_schema=res_schema,
+        system_prompt=sys_prompt,
+        extraction_prompt=ext_prompt,
+        tools_config=tools_cfg,
     )
 
     return {
