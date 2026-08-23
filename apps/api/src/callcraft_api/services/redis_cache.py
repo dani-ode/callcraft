@@ -1,10 +1,25 @@
 import json
 import logging
+from decimal import Decimal
+from datetime import datetime, date
+from uuid import UUID
 from typing import Any, Dict, Optional
 import redis.asyncio as redis
 from callcraft_api.config import settings
 
 logger = logging.getLogger("callcraft.redis")
+
+def _json_default_serializer(obj: Any) -> Any:
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, UUID):
+        return str(obj)
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+def dumps_safe(data: Any) -> str:
+    return json.dumps(data, default=_json_default_serializer)
 
 # In-memory Redis simulation for offline / testing
 _MEM_CACHE: Dict[str, str] = {}
@@ -42,7 +57,7 @@ class RedisCacheService:
 
     async def set_spec(self, user_id: str, spec_slug: str, spec_data: Dict[str, Any], ttl: int = 3600):
         key = f"callcraft:spec:{user_id}:{spec_slug}"
-        val = json.dumps(spec_data)
+        val = dumps_safe(spec_data)
         if self._is_connected and self._client:
             try:
                 await self._client.setex(key, ttl, val)
@@ -54,7 +69,7 @@ class RedisCacheService:
 
     async def push_outbox(self, request_payload: Dict[str, Any]):
         key = "callcraft:outbox:api_requests"
-        val = json.dumps(request_payload)
+        val = dumps_safe(request_payload)
         if self._is_connected and self._client:
             try:
                 await self._client.rpush(key, val)
