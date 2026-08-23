@@ -288,9 +288,41 @@ async def execute_callcraft(
         field_defs[fname] = _parse_dict_to_field_def(fmeta, is_required=is_req)
     
     response_schema_obj = ResponseSchema(properties=field_defs)
-    tool_schema = generate_ai_tool_schema("extract_structured_data", "Extract structured JSON from document", response_schema_obj)
 
+    # Resolve configured Tool Name from "Tool Calling & Multi-Agent Execution Configuration"
+    tools_cfg = cached_spec.get("tools_config") or cached_spec.get("toolsConfig") or {}
+    tools_list = tools_cfg.get("tools") if isinstance(tools_cfg.get("tools"), list) else []
+
+    configured_tool_name = "extract_structured_data"
+    configured_tool_desc = "Extract structured JSON from document"
+
+    if tools_list:
+        first_tool = tools_list[0]
+        if isinstance(first_tool, dict) and first_tool.get("name"):
+            configured_tool_name = first_tool.get("name").strip()
+            if first_tool.get("description"):
+                configured_tool_desc = first_tool.get("description").strip()
+    elif cached_spec.get("slug"):
+        slug_name = cached_spec.get("slug").replace("-", "_").strip()
+        if slug_name:
+            configured_tool_name = f"extract_{slug_name}" if not slug_name.startswith("extract_") else slug_name
+
+    # Build multi-agent & tool calling prompt instructions dynamically
     system_prompt = cached_spec.get("systemPrompt") or ""
+    if tools_cfg.get("instruction") or tools_list:
+        tool_instr_parts = []
+        if tools_cfg.get("instruction"):
+            tool_instr_parts.append(f"Instruction: {tools_cfg.get('instruction')}")
+        if tools_list:
+            tool_instr_parts.append("Available Tool Actions:")
+            for t in tools_list:
+                if isinstance(t, dict) and t.get("name"):
+                    tool_instr_parts.append(f"- {t.get('name')}: {t.get('description', '')}")
+        
+        system_prompt = (system_prompt + "\n\n[Tool Calling & Multi-Agent Execution Configuration]\n" + "\n".join(tool_instr_parts)).strip()
+
+    tool_schema = generate_ai_tool_schema(configured_tool_name, configured_tool_desc, response_schema_obj)
+
     user_prompt = payload.prompt or cached_spec.get("extractionPrompt")
 
     # 6. Dispatch to AI Provider Adapter
@@ -331,45 +363,37 @@ async def execute_callcraft(
         )
 
     processing_time_ms = int((time.time() - start_time) * 1000)
-    now_iso = datetime.now(timezone.utc).isoformat()
 
     # Calculate token usage metrics and costs dynamically from DB model info
     prompt_tokens = tokens.get("prompt_tokens", 0)
     completion_tokens = tokens.get("completion_tokens", 0)
-    total_tokens = tokens.get("total_tokens", prompt_tokens + completion_tokens)
-    cost_prompt = (prompt_tokens / 1000.0) * float(model_info.get("costPer1kPromptTokens") or 0.0)
-    cost_comp = (completion_tokens / 1000.0) * float(model_info.get("costPer1kCompletionTokens") or 0.0)
+
+    cost_prompt = (model_info.get("costPer1kPromptTokens") or 0.0) * (prompt_tokens / 1000.0)
+    cost_comp = (model_info.get("costPer1kCompletionTokens") or 0.0) * (completion_tokens / 1000.0)
     estimated_cost_usd = round(cost_prompt + cost_comp, 6)
 
-    # 8. Push Audit Payload to Redis Outbox
+    # 9. Asynchronously record usage stats to DB & push event payload to Outbox queue
     outbox_payload = {
+        "event": "api_request.completed",
         "request_id": request_id,
         "user_id": user_id,
-        "call_spec_id": cached_spec["id"],
-        "call_spec_version_id": f"ver_{cached_spec.get('activeVersionNumber', 1)}",
-        "status": "SUCCESS",
+        "spec_slug": spec_slug,
+        "provider_code": provider_code,
+        "model_identifier": active_model,
+        "status": "success",
         "http_status": 200,
-        "input_type": input_type,
-        "input_size_bytes": input_size_bytes,
+        "input_type": "image" if image_bytes else "text",
+        "input_size_bytes": len(image_bytes) if image_bytes else 0,
         "processing_time_ms": processing_time_ms,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
-        "total_tokens": total_tokens,
-        "created_at": now_iso,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "estimated_cost_usd": estimated_cost_usd,
+        "client_ip": get_client_ip(request),
+        "user_agent": request.headers.get("User-Agent"),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     await redis_service.push_outbox(outbox_payload)
-
-    # 9. Execution trace steps (qna-6.md: steps is always an array [])
-    execution_steps = [
-        {
-            "step_id": "step_1",
-            "agent": "vision_parser" if image_bytes else "data_retriever",
-            "action_type": "tool_call",
-            "tool_name": "extract_structured_data",
-            "status": "success",
-            "duration_ms": processing_time_ms,
-        }
-    ]
 
     # 10. Return Standardized Enterprise Envelope Response Pattern (qna-6.md)
     return build_success_envelope(
@@ -383,5 +407,5 @@ async def execute_callcraft(
         tokens=tokens,
         estimated_cost_usd=estimated_cost_usd,
         image_bytes=image_bytes,
+        tool_name=configured_tool_name,
     )
-

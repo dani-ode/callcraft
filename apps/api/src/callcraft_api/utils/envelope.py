@@ -160,6 +160,7 @@ def build_success_envelope(
     tokens: Dict[str, int],
     estimated_cost_usd: float,
     image_bytes: Optional[bytes] = None,
+    tool_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Constructs a standardized Enterprise Success Envelope dictionary (qna-6.md)."""
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -169,7 +170,7 @@ def build_success_envelope(
             "step_id": "step_1",
             "agent": "vision_parser" if image_bytes else "data_retriever",
             "action_type": "tool_call",
-            "tool_name": "extract_structured_data",
+            "tool_name": tool_name or "extract_structured_data",
             "status": "success",
             "duration_ms": processing_time_ms,
         }
