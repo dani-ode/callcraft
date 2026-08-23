@@ -289,12 +289,13 @@ async def execute_callcraft(
     
     response_schema_obj = ResponseSchema(properties=field_defs)
 
-    # Resolve configured Tool Name from "Tool Calling & Multi-Agent Execution Configuration"
+    # Resolve configured Tool Name and Agent Name from "Tool Calling & Multi-Agent Execution Configuration"
     tools_cfg = cached_spec.get("tools_config") or cached_spec.get("toolsConfig") or {}
     tools_list = tools_cfg.get("tools") if isinstance(tools_cfg.get("tools"), list) else []
 
-    configured_tool_name = "extract_structured_data"
-    configured_tool_desc = "Extract structured JSON from document"
+    configured_tool_name = None
+    configured_tool_desc = None
+    configured_agent_name = None
 
     if tools_list:
         first_tool = tools_list[0]
@@ -302,10 +303,18 @@ async def execute_callcraft(
             configured_tool_name = first_tool.get("name").strip()
             if first_tool.get("description"):
                 configured_tool_desc = first_tool.get("description").strip()
-    elif cached_spec.get("slug"):
-        slug_name = cached_spec.get("slug").replace("-", "_").strip()
-        if slug_name:
-            configured_tool_name = f"extract_{slug_name}" if not slug_name.startswith("extract_") else slug_name
+            if first_tool.get("agentRole"):
+                configured_agent_name = first_tool.get("agentRole").strip()
+
+    if not configured_tool_name:
+        slug_name = (cached_spec.get("slug") or "").replace("-", "_").strip()
+        configured_tool_name = f"extract_{slug_name}" if slug_name else "extract_data"
+
+    if not configured_tool_desc:
+        configured_tool_desc = f"Extract structured data for {cached_spec.get('name', 'specification')}"
+
+    if not configured_agent_name:
+        configured_agent_name = "vision_parser" if image_bytes else "data_retriever"
 
     # Build multi-agent & tool calling prompt instructions dynamically
     system_prompt = cached_spec.get("systemPrompt") or ""
@@ -408,4 +417,5 @@ async def execute_callcraft(
         estimated_cost_usd=estimated_cost_usd,
         image_bytes=image_bytes,
         tool_name=configured_tool_name,
+        agent_name=configured_agent_name,
     )

@@ -159,18 +159,24 @@ def build_success_envelope(
     cached_spec: Dict[str, Any],
     tokens: Dict[str, int],
     estimated_cost_usd: float,
+    tool_name: str,
+    agent_name: str,
     image_bytes: Optional[bytes] = None,
-    tool_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Constructs a standardized Enterprise Success Envelope dictionary (qna-6.md)."""
+    if not tool_name:
+        raise ValueError("tool_name parameter must be explicitly provided to build_success_envelope")
+    if not agent_name:
+        raise ValueError("agent_name parameter must be explicitly provided to build_success_envelope")
+
     now_iso = datetime.now(timezone.utc).isoformat()
 
     execution_steps = [
         {
             "step_id": "step_1",
-            "agent": "vision_parser" if image_bytes else "data_retriever",
+            "agent": agent_name,
             "action_type": "tool_call",
-            "tool_name": tool_name or "extract_structured_data",
+            "tool_name": tool_name,
             "status": "success",
             "duration_ms": processing_time_ms,
         }
