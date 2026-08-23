@@ -194,7 +194,6 @@ def build_success_envelope(
             "total_duration_ms": processing_time_ms,
             "steps": execution_steps,
             "promptBuilder": prompt_b_text,
-            "prompt_builder": prompt_b_text,
             "warnings": [],
         },
         "metrics": {
@@ -220,7 +219,6 @@ def build_success_envelope(
             "model": active_model,
             "processingTimeMs": processing_time_ms,
             "promptBuilder": prompt_b_text,
-            "prompt_builder": prompt_b_text,
             "tokens": tokens,
         },
     }
