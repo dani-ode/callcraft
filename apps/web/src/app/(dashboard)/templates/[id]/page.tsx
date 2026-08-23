@@ -20,6 +20,9 @@ import {
   Layers,
   Send,
   Trash2,
+  Wrench,
+  FileJson,
+  Bot,
 } from "lucide-react";
 import {
   fetchTemplateDetail,
@@ -54,7 +57,9 @@ export default function TemplateDetailPage() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"readme" | "schema" | "request" | "reviews">("readme");
+  const [activeTab, setActiveTab] = useState<
+    "readme" | "request_schema" | "schema" | "toolcalling" | "request" | "reviews"
+  >("readme");
 
   // Comment Posting Form State
   const [newRating, setNewRating] = useState(5);
@@ -315,7 +320,7 @@ export default function TemplateDetailPage() {
               className="px-6 py-3 rounded-2xl bg-[#e1b329] hover:bg-[#ffb443] disabled:opacity-50 text-slate-950 font-extrabold text-xs shadow-xl shadow-[#e1b329]/25 flex items-center gap-2 transition-all transform active:scale-95"
             >
               {cloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
-              <span>{cloning ? "Meng-clone Spec..." : "Clone Template ke Katalogs"}</span>
+              <span>{cloning ? "Meng-clone Spec..." : "Clone Template ke Katalog"}</span>
             </button>
           </div>
         </div>
@@ -325,7 +330,7 @@ export default function TemplateDetailPage() {
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0">
             <button
               onClick={() => setActiveTab("readme")}
-              className={`px-5 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all ${
+              className={`px-4 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all shrink-0 ${
                 activeTab === "readme"
                   ? "bg-white dark:bg-[#0d0907] text-[#b8860b] dark:text-[#e1b329] border-[#edd6bb]/40 dark:border-[#edd6bb]/20 border-b-transparent shadow-sm"
                   : "text-[#8b7e6d] hover:text-slate-900 dark:hover:text-[#edd6bb] border-transparent"
@@ -336,20 +341,44 @@ export default function TemplateDetailPage() {
             </button>
 
             <button
+              onClick={() => setActiveTab("request_schema")}
+              className={`px-4 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all shrink-0 ${
+                activeTab === "request_schema"
+                  ? "bg-white dark:bg-[#0d0907] text-[#b8860b] dark:text-[#e1b329] border-[#edd6bb]/40 dark:border-[#edd6bb]/20 border-b-transparent shadow-sm"
+                  : "text-[#8b7e6d] hover:text-slate-900 dark:hover:text-[#edd6bb] border-transparent"
+              }`}
+            >
+              <FileJson className="w-4 h-4 text-[#e1b329]" />
+              <span>Input Request Schema</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("schema")}
-              className={`px-5 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all ${
+              className={`px-4 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all shrink-0 ${
                 activeTab === "schema"
                   ? "bg-white dark:bg-[#0d0907] text-[#b8860b] dark:text-[#e1b329] border-[#edd6bb]/40 dark:border-[#edd6bb]/20 border-b-transparent shadow-sm"
                   : "text-[#8b7e6d] hover:text-slate-900 dark:hover:text-[#edd6bb] border-transparent"
               }`}
             >
               <Layers className="w-4 h-4 text-[#e1b329]" />
-              <span>Output JSON Schema</span>
+              <span>Output Response Schema</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("toolcalling")}
+              className={`px-4 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all shrink-0 ${
+                activeTab === "toolcalling"
+                  ? "bg-white dark:bg-[#0d0907] text-[#b8860b] dark:text-[#e1b329] border-[#edd6bb]/40 dark:border-[#edd6bb]/20 border-b-transparent shadow-sm"
+                  : "text-[#8b7e6d] hover:text-slate-900 dark:hover:text-[#edd6bb] border-transparent"
+              }`}
+            >
+              <Wrench className="w-4 h-4 text-[#e1b329]" />
+              <span>Tool Calling ({template.toolsConfig?.tools?.length || 0})</span>
             </button>
 
             <button
               onClick={() => setActiveTab("request")}
-              className={`px-5 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all ${
+              className={`px-4 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all shrink-0 ${
                 activeTab === "request"
                   ? "bg-white dark:bg-[#0d0907] text-[#b8860b] dark:text-[#e1b329] border-[#edd6bb]/40 dark:border-[#edd6bb]/20 border-b-transparent shadow-sm"
                   : "text-[#8b7e6d] hover:text-slate-900 dark:hover:text-[#edd6bb] border-transparent"
@@ -361,7 +390,7 @@ export default function TemplateDetailPage() {
 
             <button
               onClick={() => setActiveTab("reviews")}
-              className={`px-5 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all ${
+              className={`px-4 py-3 rounded-t-2xl text-xs font-extrabold flex items-center gap-2 border-t border-x transition-all shrink-0 ${
                 activeTab === "reviews"
                   ? "bg-white dark:bg-[#0d0907] text-[#b8860b] dark:text-[#e1b329] border-[#edd6bb]/40 dark:border-[#edd6bb]/20 border-b-transparent shadow-sm"
                   : "text-[#8b7e6d] hover:text-slate-900 dark:hover:text-[#edd6bb] border-transparent"
@@ -388,12 +417,12 @@ export default function TemplateDetailPage() {
             </div>
 
             <div className="p-6 rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 dark:border-[#edd6bb]/20">
-              <MarkdownRenderer content={template.description} />
+              <MarkdownRenderer content={template.description || ""} />
             </div>
 
             {template.systemPrompt && (
               <div className="space-y-3 pt-4 border-t border-[#edd6bb]/20">
-                <h4 className="text-xs font-extrabold text-slate-900 dark:text-[#edd6bb] uppercase tracking-wider flex items-center gap-2">
+                <h4 className="text-xs font-extrabold text-slate-900 dark:text-[#edd6bb] uppercase tracking-wider flex items-center gap-2 font-mono">
                   <Code2 className="w-4 h-4 text-[#e1b329]" />
                   <span>AI System Instructions Prompt</span>
                 </h4>
@@ -405,23 +434,49 @@ export default function TemplateDetailPage() {
           </div>
         )}
 
-        {/* TAB 2: OUTPUT JSON SCHEMA */}
+        {/* TAB 2: INPUT REQUEST SCHEMA */}
+        {activeTab === "request_schema" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b border-[#edd6bb]/20 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Input Request Body Schema</h3>
+                <p className="text-xs text-[#8b7e6d]">Format dan properti payload JSON yang dapat dikirim saat memanggil API Call Spec ini</p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(template.requestSchema || { type: "object", properties: {} }, null, 2));
+                  alert("Input Request Schema berhasil disalin!");
+                }}
+                className="px-4 py-2 rounded-xl glass-panel border border-[#edd6bb]/30 text-xs font-extrabold text-[#b8860b] dark:text-[#e1b329] flex items-center gap-1.5 hover:bg-[#e1b329]/10"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Request Schema</span>
+              </button>
+            </div>
+
+            <pre className="p-6 rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 dark:border-[#edd6bb]/20 text-xs font-mono text-[#b8860b] dark:text-amber-200 leading-relaxed overflow-x-auto">
+              {JSON.stringify(template.requestSchema || { type: "object", properties: {} }, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        {/* TAB 3: OUTPUT JSON RESPONSE SCHEMA */}
         {activeTab === "schema" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between border-b border-[#edd6bb]/20 pb-4">
               <div>
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Output Target JSON Schema</h3>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Output Target JSON Response Schema</h3>
                 <p className="text-xs text-[#8b7e6d]">Skema struktur data JSON yang dihasilkan secara deterministik oleh Call Spec ini</p>
               </div>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(template.responseSchema, null, 2));
+                  navigator.clipboard.writeText(JSON.stringify(template.responseSchema || { type: "object", properties: {} }, null, 2));
                   alert("JSON Schema berhasil disalin ke clipboard!");
                 }}
                 className="px-4 py-2 rounded-xl glass-panel border border-[#edd6bb]/30 text-xs font-extrabold text-[#b8860b] dark:text-[#e1b329] flex items-center gap-1.5 hover:bg-[#e1b329]/10"
               >
                 <Copy className="w-3.5 h-3.5" />
-                <span>Copy JSON Schema</span>
+                <span>Copy Response Schema</span>
               </button>
             </div>
 
@@ -431,7 +486,112 @@ export default function TemplateDetailPage() {
           </div>
         )}
 
-        {/* TAB 3: REQUEST CURL INTEGRATION */}
+        {/* TAB 4: TOOL CALLING CONFIGURATION */}
+        {activeTab === "toolcalling" && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between border-b border-[#edd6bb]/20 pb-4 gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-[#edd6bb]">Spesifikasi Multi-Tool Calling</h3>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${
+                    template.toolsConfig?.enabled !== false
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                      : "bg-slate-500/15 text-slate-500 border border-slate-500/30"
+                  }`}>
+                    {template.toolsConfig?.enabled !== false ? `ToolChoice: ${template.toolsConfig?.toolChoice || "auto"}` : "Disabled"}
+                  </span>
+                </div>
+                <p className="text-xs text-[#8b7e6d] mt-0.5">
+                  Daftar agen spesialis & fungsi Tool Calling otomatis yang terdaftar di dalam template ini
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(template.toolsConfig || {}, null, 2));
+                  alert("Tools Configuration JSON berhasil disalin!");
+                }}
+                className="px-4 py-2 rounded-xl glass-panel border border-[#edd6bb]/30 text-xs font-extrabold text-[#b8860b] dark:text-[#e1b329] flex items-center gap-1.5 hover:bg-[#e1b329]/10"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Tools Config JSON</span>
+              </button>
+            </div>
+
+            {template.toolsConfig?.instruction && (
+              <div className="p-4 rounded-2xl bg-[#e1b329]/10 border border-[#e1b329]/30 text-xs text-[#b8860b] dark:text-[#ffb443] space-y-1">
+                <span className="font-bold uppercase tracking-wider text-[10px] block font-mono">Routing Instruction Prompt:</span>
+                <p className="italic font-medium">{template.toolsConfig.instruction}</p>
+              </div>
+            )}
+
+            {/* Registered Tools Grid / Cards */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#8b7e6d] flex items-center gap-2 font-mono">
+                <Wrench className="w-3.5 h-3.5 text-[#e1b329]" />
+                <span>Terdaftar ({template.toolsConfig?.tools?.length || 0} Spesialisasi Tool Calling)</span>
+              </h4>
+
+              {(!template.toolsConfig?.tools || template.toolsConfig.tools.length === 0) ? (
+                <div className="p-8 text-center rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 dark:border-[#edd6bb]/20">
+                  <p className="text-xs text-[#8b7e6d] italic">Template ini belum memiliki konfigurasi Tool Calling terdaftar.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {template.toolsConfig.tools.map((t: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="p-5 rounded-2xl glass-panel border border-[#edd6bb]/40 dark:border-[#edd6bb]/20 bg-[#fcfaf7] dark:bg-[#0d0907] space-y-3 shadow-md hover:border-[#e1b329]/40 transition-all"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 font-mono">
+                          <span className="w-6 h-6 rounded-lg bg-[#e1b329]/20 text-[#b8860b] dark:text-[#e1b329] font-bold text-xs flex items-center justify-center border border-[#e1b329]/30">
+                            #{idx + 1}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-[#edd6bb]">{t.name}</span>
+                        </div>
+                        {t.agentRole && (
+                          <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 text-[11px] font-extrabold flex items-center gap-1.5">
+                            <Bot className="w-3.5 h-3.5 text-[#e1b329]" />
+                            <span>{t.agentRole}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-700 dark:text-[#edd6bb]/90 leading-relaxed font-sans">
+                        {t.description}
+                      </p>
+
+                      {(t.textContext || t.includeImageContext) && (
+                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#edd6bb]/20 text-[11px]">
+                          {t.textContext && (
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-200/60 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 font-mono text-[10px]">
+                              Context: {t.textContext}
+                            </span>
+                          )}
+                          {t.includeImageContext && (
+                            <span className="px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold text-[10px]">
+                              + Multimodal Image Context Enabled
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Raw JSON viewer */}
+            <div className="pt-4 border-t border-[#edd6bb]/20 space-y-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-[#edd6bb] block font-mono">Raw Tools Config JSON Schema:</span>
+              <pre className="p-5 rounded-2xl bg-[#0d0907] border border-[#edd6bb]/20 text-xs font-mono text-emerald-400 leading-relaxed overflow-x-auto">
+                {JSON.stringify(template.toolsConfig || {}, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: REQUEST CURL INTEGRATION */}
         {activeTab === "request" && (
           <div className="space-y-6">
             <div className="border-b border-[#edd6bb]/20 pb-4">

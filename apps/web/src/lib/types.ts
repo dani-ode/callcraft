@@ -43,6 +43,8 @@ export interface ToolDefinition {
   agentRole?: string;
   toolChoice?: 'auto' | 'required' | 'none';
   parameters?: Record<string, any>;
+  textContext?: string;
+  includeImageContext?: boolean;
   context?: {
     textContext?: string;
     includeImageContext?: boolean;
@@ -52,6 +54,7 @@ export interface ToolDefinition {
 export interface ToolCallingConfig {
   enabled: boolean;
   toolChoice: 'auto' | 'required' | 'none';
+  instruction?: string;
   tools: ToolDefinition[];
 }
 
