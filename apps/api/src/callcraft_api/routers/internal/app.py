@@ -58,7 +58,21 @@ async def get_app_init(db: Optional[AsyncSession] = Depends(get_db_session)):
     res = await db.execute(stmt)
     app_setting = res.scalar_one_or_none()
     if not app_setting:
-        raise HTTPException(status_code=404, detail="Pengaturan aplikasi belum terinisialisasi di database.")
+        app_setting = AppInit(
+            id=APP_INIT_ID,
+            app_name="Callcraft",
+            app_icon="Feather",
+            tagline="Multimodal AI Execution Gateway",
+            description="Dynamic AI Tool Calling, Structured JSON Coercion, and Multimodal API Gateway.",
+            favicon_url="/favicon.ico",
+            disable_landing_page=False,
+            default_registration_status="pending_verification",
+            require_email_verification=True,
+        )
+        db.add(app_setting)
+        await db.commit()
+        await db.refresh(app_setting)
+
     return _serialize_app_init(app_setting)
 
 

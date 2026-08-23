@@ -189,3 +189,9 @@ INSERT INTO user_usage_daily (id, user_id, usage_date, total_requests, successfu
 ('usg_01HZX01USG000000000013', 'usr_demo_developer_02', CURRENT_DATE - INTERVAL '1 day', 175, 170, 5, 225000, 0.072600),
 ('usg_01HZX01USG000000000014', 'usr_demo_developer_02', CURRENT_DATE, 52, 50, 2, 64000, 0.020500)
 ON CONFLICT (user_id, usage_date) DO NOTHING;
+
+-- 14. SEED APP INIT SETTINGS
+INSERT INTO app_init (id, app_name, app_icon, tagline, description, favicon_url, disable_landing_page, default_registration_status, require_email_verification) VALUES
+('app_01HZX01INIT00000000001', 'Callcraft', 'Feather', 'Multimodal AI Execution Gateway', 'Dynamic AI Tool Calling, Structured JSON Coercion, and Multimodal API Gateway.', '/favicon.ico', false, 'pending_verification', true)
+ON CONFLICT (id) DO NOTHING;
+
