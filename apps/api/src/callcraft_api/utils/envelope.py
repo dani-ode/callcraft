@@ -105,48 +105,24 @@ def build_error_envelope(
     code = error_code or infer_error_code(status_code, message)
     advice = actionable_step or infer_actionable_step(status_code, code, message)
 
-def build_error_envelope(
-    status_code: int,
-    message: str,
-    error_code: Optional[str] = None,
-    details: Optional[List[Dict[str, Any]]] = None,
-    actionable_step: Optional[str] = None,
-    request_id: Optional[str] = None,
-    start_time: Optional[float] = None,
-) -> Dict[str, Any]:
-    """Constructs a standardized Enterprise Error Envelope dictionary (qna-7.md)."""
-    req_id = request_id or f"req_{str(ulid.new())}"
-    duration_ms = int((time.time() - start_time) * 1000) if start_time else 0
-    now_iso = datetime.now(timezone.utc).isoformat()
-
-    code = error_code or infer_error_code(status_code, message)
-    advice = actionable_step or infer_actionable_step(status_code, code, message)
-
-    trace_block = {
-        "totalDurationMs": duration_ms,
-        "total_duration_ms": duration_ms,
-        "steps": [],
-        "warnings": [],
-    }
-
     return {
         "meta": {
             "requestId": req_id,
-            "request_id": req_id,
             "timestamp": now_iso,
             "status": "failed",
             "apiVersion": "v1.0",
-            "api_version": "v1.0",
         },
         "error": {
             "code": code,
             "message": message,
             "details": details or [],
             "actionableStep": advice,
-            "actionable_step": advice,
         },
-        "executionTrace": trace_block,
-        "execution_trace": trace_block,
+        "executionTrace": {
+            "totalDurationMs": duration_ms,
+            "steps": [],
+            "warnings": [],
+        },
         "detail": message,  # Backward compatibility field for standard FastAPI callers
     }
 
@@ -198,52 +174,35 @@ def build_success_envelope(
     completion_tokens = tokens.get("completion_tokens", 0)
     total_tokens = tokens.get("total_tokens", prompt_tokens + completion_tokens)
 
-    primary_res = {
-        "type": "structured_json",
-        "content": coerced_data,
-    }
-    human_msg = f"Ekstraksi terstruktur '{cached_spec['name']}' berhasil diproses via provider AI '{provider_code}' ({active_model})."
-
-    trace_block = {
-        "totalDurationMs": processing_time_ms,
-        "total_duration_ms": processing_time_ms,
-        "steps": execution_steps,
-        "promptBuilder": prompt_b_text,
-        "warnings": [],
-    }
-
     return {
         "meta": {
             "requestId": request_id,
-            "request_id": request_id,
             "traceId": trace_id,
-            "trace_id": trace_id,
             "timestamp": now_iso,
             "status": "completed",
             "apiVersion": "v1.0",
-            "api_version": "v1.0",
             "executionMode": "sync",
-            "execution_mode": "sync",
         },
         "data": {
-            "primaryResult": primary_res,
-            "primary_result": primary_res,
-            "humanReadableMessage": human_msg,
-            "human_readable_message": human_msg,
+            "primaryResult": {
+                "type": "structured_json",
+                "content": coerced_data,
+            },
+            "humanReadableMessage": f"Ekstraksi terstruktur '{cached_spec['name']}' berhasil diproses via provider AI '{provider_code}' ({active_model}).",
         },
-        "executionTrace": trace_block,
-        "execution_trace": trace_block,
+        "executionTrace": {
+            "totalDurationMs": processing_time_ms,
+            "steps": execution_steps,
+            "promptBuilder": prompt_b_text,
+            "warnings": [],
+        },
         "metrics": {
             "usage": {
                 "promptTokens": prompt_tokens,
-                "prompt_tokens": prompt_tokens,
                 "completionTokens": completion_tokens,
-                "completion_tokens": completion_tokens,
                 "totalTokens": total_tokens,
-                "total_tokens": total_tokens,
             },
             "estimatedCostUsd": estimated_cost_usd,
-            "estimated_cost_usd": estimated_cost_usd,
         },
         # Top-level backward compatibility aliases for existing UI consumers:
         "success": True,
