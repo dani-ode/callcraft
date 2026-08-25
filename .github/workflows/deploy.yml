@@ -72,12 +72,7 @@ jobs:
             set -e
             echo "🚀 Starting Callcraft Studio deployment..."
             
-            # Clone repository if it does not exist on VPS yet, otherwise enter directory
-            if [ ! -d "$HOME/callcraft" ]; then
-              echo "Folder ~/callcraft belum ada di VPS. Cloning repositori..."
-              git clone https://github.com/dani-ode/callcraft.git "$HOME/callcraft"
-            fi
-            
+            # Navigate to project directory on VPS (configured with production .env)
             cd "$HOME/callcraft"
             
             # Fetch & pull latest commits
