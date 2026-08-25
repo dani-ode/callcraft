@@ -85,7 +85,17 @@ jobs:
             set -e
             echo "🚀 Starting Callcraft Studio deployment..."
             
-            # Navigate to project directory on VPS (configured with production .env)
+            # Check if directory exists and is a git repository
+            if [ ! -d "$HOME/callcraft" ]; then
+              echo "Folder ~/callcraft belum ada. Cloning repositori..."
+              git clone https://github.com/dani-ode/callcraft.git "$HOME/callcraft"
+            elif [ ! -d "$HOME/callcraft/.git" ]; then
+              echo "Folder ~/callcraft ada tapi belum terinisialisasi git. Menginisialisasi remote..."
+              cd "$HOME/callcraft"
+              git init
+              git remote add origin https://github.com/dani-ode/callcraft.git || git remote set-url origin https://github.com/dani-ode/callcraft.git
+            fi
+            
             cd "$HOME/callcraft"
             
             # Fetch & pull latest commits
