@@ -69,6 +69,8 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required in .env}
     container_name: callcraft-web
     restart: always
     ports:
