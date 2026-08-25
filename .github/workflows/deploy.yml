@@ -9,6 +9,20 @@ jobs:
   test:
     name: Build & Test Check
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: callcraft_db
+          POSTGRES_USER: callcraft_user
+          POSTGRES_PASSWORD: secret_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -31,6 +45,11 @@ jobs:
           cache: 'pip'
 
       - name: Install Backend Dependencies & Run Pytest
+        env:
+          DATABASE_URL: postgresql://callcraft_user:secret_password@localhost:5432/callcraft_db
+          REDIS_URL: redis://localhost:6379
+          MASTER_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          SERVICE_CLIENT_SECRET: sec_live_test_secret_key_12345
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
