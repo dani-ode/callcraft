@@ -8,17 +8,20 @@ class Settings(BaseSettings):
 
     app_name: str = "Callcraft Data Plane API"
     app_env: str
-    port: int = 8080
+    port: int
 
     postgres_user: str
     postgres_password: str
     postgres_db: str
-    postgres_host: str = "127.0.0.1"
-    postgres_port: int = 5432
+    postgres_host: str
+    postgres_port: int
+
+    redis_host: str = "127.0.0.1"
+    redis_port: int = 6379
+    redis_password: str
 
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
-    redis_password: Optional[str] = None
 
     master_encryption_key: str
     service_client_id: str
@@ -43,8 +46,8 @@ class Settings(BaseSettings):
         if self.redis_url:
             return self.redis_url
         if self.redis_password:
-            return f"redis://:{self.redis_password}@127.0.0.1:6379"
-        return "redis://127.0.0.1:6379"
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}"
+        return f"redis://{self.redis_host}:{self.redis_port}"
 
 
 settings = Settings()
