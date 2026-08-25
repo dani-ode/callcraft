@@ -30,7 +30,7 @@ async def test_session():
     The schema is dropped after the test completes to ensure no shared state.
     """
     schema_name = f"test_{uuid.uuid4().hex[:12]}"
-    db_url = _build_asyncpg_url(settings.database_url)
+    db_url = _build_asyncpg_url(settings.resolved_database_url)
 
     # Use a separate engine with search_path scoped to the ephemeral schema
     schema_engine = create_async_engine(

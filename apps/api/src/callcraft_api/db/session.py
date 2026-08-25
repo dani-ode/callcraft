@@ -6,7 +6,7 @@ from callcraft_api.config import settings
 
 logger = logging.getLogger("callcraft.db")
 
-db_url = settings.database_url
+db_url = settings.resolved_database_url
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif db_url.startswith("postgresql://") and "+asyncpg" not in db_url:

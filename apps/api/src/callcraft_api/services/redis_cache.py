@@ -33,7 +33,7 @@ class RedisCacheService:
 
     async def connect(self):
         try:
-            self._client = redis.from_url(settings.redis_url, decode_responses=True)
+            self._client = redis.from_url(settings.resolved_redis_url, decode_responses=True)
             await self._client.ping()
             self._is_connected = True
             logger.info("Connected to Redis successfully.")

@@ -24,7 +24,7 @@ async def ensure_db_initialized():
     Session-scoped fixture that initializes all PostgreSQL tables and seeds
     baseline data once before the entire test suite runs.
     """
-    db_url = _build_asyncpg_url(settings.database_url)
+    db_url = _build_asyncpg_url(settings.resolved_database_url)
     engine = create_async_engine(db_url, echo=False)
 
     async with engine.begin() as conn:
