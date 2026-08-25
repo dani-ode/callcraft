@@ -1,0 +1,77 @@
+name: Callcraft Studio CI/CD Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Build & Test Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'apps/web/package-lock.json'
+
+      - name: Install Frontend Dependencies & Type Check
+        run: |
+          cd apps/web
+          npm ci || npm install
+          npx tsc --noEmit
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Backend Dependencies & Run Pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest
+
+  deploy:
+    name: Deploy to VPS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Execute SSH Commands on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            echo "🚀 Starting Callcraft Studio deployment..."
+            
+            # Navigate to project directory on VPS
+            cd ~/callcraft || cd /var/www/callcraft || cd /home/${{ secrets.VPS_USERNAME }}/callcraft
+            
+            # Fetch & pull latest commits from main
+            git fetch origin main
+            git reset --hard origin/main
+            
+            # Rebuild & restart Docker Compose containers
+            docker compose down --remove-orphans || true
+            docker compose up -d --build
+            
+            # Run automatic DB migrations & cleanup unused docker assets
+            docker compose exec -T callcraft-api python3 -m callcraft_api.db.init_db || true
+            docker image prune -f
+            
+            # Reload Apache if configured
+            sudo systemctl reload apache2 || sudo service apache2 reload || true
+            
+            echo "✅ Callcraft Studio successfully deployed to VPS!"
