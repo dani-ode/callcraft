@@ -7,12 +7,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = "Callcraft Data Plane API"
-    app_env: str = "development"
+    app_env: str
     port: int = 8080
 
-    postgres_user: str = "callcraft_user"
-    postgres_password: str = "secret_password"
-    postgres_db: str = "callcraft_db"
+    postgres_user: str
+    postgres_password: str
+    postgres_db: str
     postgres_host: str = "127.0.0.1"
     postgres_port: int = 5432
 
@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     redis_url: Optional[str] = None
     redis_password: Optional[str] = None
 
-    master_encryption_key: str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    service_client_id: str = "svc_nextjs_main"
-    service_client_secret: str = "sec_live_default_nextjs_service_secret_key_12345"
+    master_encryption_key: str
+    service_client_id: str
+    service_client_secret: str
 
     gemini_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
