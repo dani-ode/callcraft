@@ -76,7 +76,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - INTERNAL_PYTHON_API_URL=${INTERNAL_PYTHON_API_URL:?INTERNAL_PYTHON_API_URL is required in .env}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required in .env}
       - SERVICE_CLIENT_ID=${SERVICE_CLIENT_ID:?SERVICE_CLIENT_ID is required in .env}
       - SERVICE_CLIENT_SECRET=${SERVICE_CLIENT_SECRET:?SERVICE_CLIENT_SECRET is required in .env}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required in .env}
