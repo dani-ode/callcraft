@@ -69,14 +69,34 @@ CREATE TABLE service_clients (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. API_CREDENTIALS
+-- 7. PROJECTS
+CREATE TABLE projects (
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) NOT NULL,
+    description TEXT,
+    color VARCHAR(20) NOT NULL DEFAULT '#e1b329',
+    icon VARCHAR(50) NOT NULL DEFAULT 'Boxes',
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_project_slug UNIQUE (user_id, slug)
+);
+
+CREATE INDEX idx_projects_user_id ON projects(user_id);
+CREATE INDEX idx_projects_status ON projects(status);
+
+-- 8. API_CREDENTIALS
 CREATE TABLE api_credentials (
     id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id VARCHAR(50) REFERENCES projects(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     public_key VARCHAR(100) NOT NULL UNIQUE,
     secret_key_hash VARCHAR(255) NOT NULL,
     environment VARCHAR(20) NOT NULL DEFAULT 'production',
+    ip_whitelist JSONB NOT NULL DEFAULT '[]'::jsonb,
     last_used_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,
@@ -84,9 +104,10 @@ CREATE TABLE api_credentials (
 );
 
 CREATE INDEX idx_api_credentials_user_id ON api_credentials(user_id);
+CREATE INDEX idx_api_credentials_project_id ON api_credentials(project_id);
 CREATE INDEX idx_api_credentials_public_key ON api_credentials(public_key);
 
--- 8. AI_PROVIDERS
+-- 9. AI_PROVIDERS
 CREATE TABLE ai_providers (
     id VARCHAR(50) PRIMARY KEY,
     code VARCHAR(50) NOT NULL UNIQUE,
@@ -95,7 +116,7 @@ CREATE TABLE ai_providers (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. AI_MODELS
+-- 10. AI_MODELS
 CREATE TABLE ai_models (
     id VARCHAR(50) PRIMARY KEY,
     provider_id VARCHAR(50) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
@@ -113,20 +134,23 @@ CREATE TABLE ai_models (
 
 CREATE INDEX idx_ai_models_provider ON ai_models(provider_id);
 
--- 10. USER_AI_PROVIDERS
+-- 11. USER_AI_PROVIDERS
 CREATE TABLE user_ai_providers (
     id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id VARCHAR(50) REFERENCES projects(id) ON DELETE CASCADE,
     provider_id VARCHAR(50) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
     encrypted_api_key TEXT NOT NULL,
     key_nonce VARCHAR(100) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_user_provider UNIQUE (user_id, provider_id)
+    CONSTRAINT uq_user_project_provider UNIQUE (user_id, project_id, provider_id)
 );
 
--- 11. TEMPLATES
+CREATE INDEX idx_user_ai_providers_project_id ON user_ai_providers(project_id);
+
+-- 12. TEMPLATES
 CREATE TABLE templates (
     id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
@@ -138,8 +162,10 @@ CREATE TABLE templates (
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
     tools_config JSONB DEFAULT '{}'::jsonb,
-    system_prompt TEXT NOT NULL,
-    extraction_prompt TEXT,
+    positive_prompt TEXT,
+    negative_prompt TEXT,
+    additional_prompt TEXT,
+    allow_additional_prompt BOOLEAN NOT NULL DEFAULT true,
     is_official BOOLEAN NOT NULL DEFAULT true,
     is_published BOOLEAN NOT NULL DEFAULT true,
     fork_count INT NOT NULL DEFAULT 0,
@@ -153,7 +179,7 @@ CREATE TABLE templates (
 CREATE INDEX idx_templates_category ON templates(category);
 CREATE INDEX idx_templates_user_id ON templates(user_id);
 
--- 11a. TEMPLATE_LIKES
+-- 12a. TEMPLATE_LIKES
 CREATE TABLE template_likes (
     template_id VARCHAR(50) NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -161,7 +187,7 @@ CREATE TABLE template_likes (
     PRIMARY KEY (template_id, user_id)
 );
 
--- 11b. TEMPLATE_COMMENTS
+-- 12b. TEMPLATE_COMMENTS
 CREATE TABLE template_comments (
     id VARCHAR(50) PRIMARY KEY,
     template_id VARCHAR(50) NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
@@ -175,7 +201,7 @@ CREATE TABLE template_comments (
 CREATE INDEX idx_template_comments_template_id ON template_comments(template_id);
 CREATE INDEX idx_template_comments_user_id ON template_comments(user_id);
 
--- 11c. APP_INIT
+-- 12c. APP_INIT
 CREATE TABLE app_init (
     id VARCHAR(50) PRIMARY KEY,
     app_name VARCHAR(100) NOT NULL DEFAULT 'Callcraft',
@@ -184,16 +210,19 @@ CREATE TABLE app_init (
     description TEXT,
     favicon_url TEXT DEFAULT '/favicon.ico',
     disable_landing_page BOOLEAN NOT NULL DEFAULT false,
+    default_allow_additional_prompt BOOLEAN NOT NULL DEFAULT true,
+    default_additional_prompt TEXT DEFAULT 'Opsional: Instruksi tambahan dari user...',
     default_registration_status VARCHAR(50) DEFAULT 'pending_verification',
     require_email_verification BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 12. CALL_SPECS
+-- 13. CALL_SPECS
 CREATE TABLE call_specs (
     id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id VARCHAR(50) REFERENCES projects(id) ON DELETE CASCADE,
     template_id VARCHAR(50) REFERENCES templates(id) ON DELETE SET NULL,
     name VARCHAR(100) NOT NULL,
     slug VARCHAR(100) NOT NULL,
@@ -213,16 +242,19 @@ CREATE TABLE call_specs (
 );
 
 CREATE INDEX idx_call_specs_user_id ON call_specs(user_id);
+CREATE INDEX idx_call_specs_project_id ON call_specs(project_id);
 
--- 13. CALL_SPEC_VERSIONS
+-- 14. CALL_SPEC_VERSIONS
 CREATE TABLE call_spec_versions (
     id VARCHAR(50) PRIMARY KEY,
     call_spec_id VARCHAR(50) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
     version_number INT NOT NULL,
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
-    system_prompt TEXT,
-    extraction_prompt TEXT,
+    positive_prompt TEXT,
+    negative_prompt TEXT,
+    additional_prompt TEXT,
+    allow_additional_prompt BOOLEAN NOT NULL DEFAULT true,
     preferred_model_id VARCHAR(50) REFERENCES ai_models(id),
     allow_pdf_input BOOLEAN NOT NULL DEFAULT true,
     use_external_api_key BOOLEAN NOT NULL DEFAULT true,
@@ -233,7 +265,7 @@ CREATE TABLE call_spec_versions (
     CONSTRAINT uq_spec_version UNIQUE (call_spec_id, version_number)
 );
 
--- 14. SYSTEM_PROMPTS
+-- 15. SYSTEM_PROMPTS
 CREATE TABLE system_prompts (
     id VARCHAR(50) PRIMARY KEY,
     code VARCHAR(100) NOT NULL UNIQUE,
@@ -244,7 +276,7 @@ CREATE TABLE system_prompts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 15. API_REQUESTS
+-- 16. API_REQUESTS
 CREATE TABLE api_requests (
     id VARCHAR(50) PRIMARY KEY,
     request_id VARCHAR(100) NOT NULL UNIQUE,
@@ -280,7 +312,7 @@ CREATE INDEX idx_api_requests_user_created ON api_requests(user_id, created_at D
 CREATE INDEX idx_api_requests_spec_id ON api_requests(call_spec_id);
 CREATE INDEX idx_api_requests_status ON api_requests(status);
 
--- 16. USER_USAGE_DAILY
+-- 17. USER_USAGE_DAILY
 CREATE TABLE user_usage_daily (
     id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -296,10 +328,11 @@ CREATE TABLE user_usage_daily (
 
 CREATE INDEX idx_user_usage_daily_date ON user_usage_daily(user_id, usage_date DESC);
 
--- 17. PLAYGROUND_STATES
+-- 18. PLAYGROUND_STATES
 CREATE TABLE playground_states (
     id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id VARCHAR(50) REFERENCES projects(id) ON DELETE CASCADE,
     call_spec_id VARCHAR(50) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
     selected_credential_id VARCHAR(50) REFERENCES api_credentials(id) ON DELETE SET NULL,
     checked_states JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -315,5 +348,3 @@ CREATE TABLE playground_states (
 
 CREATE INDEX idx_playground_states_user_id ON playground_states(user_id);
 CREATE INDEX idx_playground_states_call_spec_id ON playground_states(call_spec_id);
-
-

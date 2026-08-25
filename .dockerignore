@@ -1,0 +1,11 @@
+node_modules
+apps/web/node_modules
+apps/web/.next
+.next
+.venv
+__pycache__
+*.pyc
+.git
+.pytest_cache
+callcraft.egg-info
+target

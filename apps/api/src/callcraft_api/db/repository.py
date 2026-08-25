@@ -14,6 +14,7 @@ from callcraft_api.db.models import (
     CallSpec,
     CallSpecVersion,
     PlaygroundState,
+    Project,
     Template,
     User,
     UserAiProvider,
@@ -31,21 +32,23 @@ logger = logging.getLogger("callcraft.db.repository")
 class Repository:
     @staticmethod
     async def verify_api_credential(
-        db: Optional[AsyncSession], secret_key: str, public_key: Optional[str] = None
+        db: Optional[AsyncSession],
+        secret_key: str,
+        public_key: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Verifies customer API key against database credentials."""
-        if db is None:
+        """Verifies customer API key strictly against database credentials without fallbacks."""
+        if db is None or not secret_key or not public_key or not public_key.strip():
             return None
 
-        if public_key:
-            stmt = select(ApiCredential).where(
-                ApiCredential.public_key == public_key,
-                ApiCredential.revoked_at.is_(None),
-            )
-        else:
-            stmt = select(ApiCredential).where(
-                ApiCredential.revoked_at.is_(None),
-            )
+        clean_pk = public_key.strip()
+        stmt = select(ApiCredential).where(
+            ApiCredential.public_key == clean_pk,
+            ApiCredential.revoked_at.is_(None),
+        )
+        if user_id:
+            stmt = stmt.where(ApiCredential.user_id == user_id)
+
         result = await db.execute(stmt)
         creds = result.scalars().all()
 
@@ -56,6 +59,7 @@ class Repository:
                 return {
                     "id": cred.id,
                     "user_id": cred.user_id,
+                    "project_id": cred.project_id,
                     "name": cred.name,
                     "public_key": cred.public_key,
                     "environment": cred.environment,
@@ -66,9 +70,12 @@ class Repository:
 
     @staticmethod
     async def get_user_ai_provider_key(
-        db: Optional[AsyncSession], user_id: str, provider_code: str
+        db: Optional[AsyncSession],
+        user_id: str,
+        provider_code: str,
+        project_id: Optional[str] = None,
     ) -> Optional[str]:
-        """Retrieves and decrypts user-supplied AI Provider API key using AES-256-GCM."""
+        """Retrieves and decrypts user-supplied AI Provider API key using AES-256-GCM, optionally filtered by project_id."""
         if db is None:
             return None
 
@@ -79,6 +86,9 @@ class Repository:
             AiProvider.code == provider_code.lower(),
             UserAiProvider.is_active.is_(True),
         )
+        if project_id:
+            stmt = stmt.where(UserAiProvider.project_id == project_id)
+
         res = await db.execute(stmt)
         row = res.first()
         if not row:
@@ -98,9 +108,13 @@ class Repository:
 
     @staticmethod
     async def save_user_ai_provider_key(
-        db: AsyncSession, user_id: str, provider_code: str, raw_api_key: str
+        db: AsyncSession,
+        user_id: str,
+        provider_code: str,
+        raw_api_key: str,
+        project_id: Optional[str] = None,
     ) -> bool:
-        """Encrypts and persists user AI provider API key using AES-256-GCM."""
+        """Encrypts and persists user AI provider API key using AES-256-GCM, optionally scoped per project."""
         stmt = select(AiProvider).where(AiProvider.code == provider_code.lower())
         res = await db.execute(stmt)
         prov = res.scalar_one_or_none()
@@ -113,6 +127,11 @@ class Repository:
             UserAiProvider.user_id == user_id,
             UserAiProvider.provider_id == prov.id,
         )
+        if project_id:
+            existing_stmt = existing_stmt.where(UserAiProvider.project_id == project_id)
+        else:
+            existing_stmt = existing_stmt.where(UserAiProvider.project_id.is_(None))
+
         existing_res = await db.execute(existing_stmt)
         user_prov = existing_res.scalar_one_or_none()
 
@@ -125,6 +144,7 @@ class Repository:
             user_prov = UserAiProvider(
                 id=f"uap_{str(ulid.new())}",
                 user_id=user_id,
+                project_id=project_id,
                 provider_id=prov.id,
                 encrypted_api_key=enc_key,
                 key_nonce=nonce,
@@ -137,9 +157,11 @@ class Repository:
 
     @staticmethod
     async def list_user_ai_providers(
-        db: Optional[AsyncSession], user_id: str
+        db: Optional[AsyncSession],
+        user_id: str,
+        project_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Lists active decrypted user AI provider API keys."""
+        """Lists active decrypted user AI provider API keys, filtered by project if provided."""
         if db is None:
             return []
 
@@ -149,6 +171,9 @@ class Repository:
             UserAiProvider.user_id == user_id,
             UserAiProvider.is_active.is_(True),
         )
+        if project_id:
+            stmt = stmt.where(UserAiProvider.project_id == project_id)
+
         res = await db.execute(stmt)
         rows = res.all()
 
@@ -167,6 +192,7 @@ class Repository:
 
             results.append({
                 "id": user_prov.id,
+                "projectId": user_prov.project_id,
                 "providerCode": prov.code,
                 "providerName": prov.name,
                 "key": decrypted or "",
@@ -244,8 +270,10 @@ class Repository:
         """Serializes CallSpec model instance into a standardized clean camelCase JSON dictionary."""
         req_schema = ver.request_schema if ver else (tmpl.request_schema if tmpl else None)
         res_schema = ver.response_schema if ver else (tmpl.response_schema if tmpl else None)
-        sys_prompt = (ver.system_prompt if ver else None) or (tmpl.system_prompt if tmpl else None) or getattr(spec, "system_prompt", None)
-        ext_prompt = (ver.extraction_prompt if ver else None) or (tmpl.extraction_prompt if tmpl else None) or getattr(spec, "extraction_prompt", None)
+        pos_prompt = (ver.positive_prompt if ver else None) or (tmpl.positive_prompt if tmpl else None) or getattr(spec, "positive_prompt", None)
+        neg_prompt = (ver.negative_prompt if ver else None) or (tmpl.negative_prompt if tmpl else None) or getattr(spec, "negative_prompt", None)
+        add_prompt = (ver.additional_prompt if ver else None) or (tmpl.additional_prompt if tmpl else None) or getattr(spec, "additional_prompt", None)
+        allow_add_prompt = (ver.allow_additional_prompt if (ver and ver.allow_additional_prompt is not None) else (tmpl.allow_additional_prompt if (tmpl and tmpl.allow_additional_prompt is not None) else getattr(spec, "allow_additional_prompt", True)))
         ext_model = (ver.external_model_name if (ver and ver.external_model_name) else spec.external_model_name)
         ext_key = (ver.external_api_key if (ver and ver.external_api_key) else spec.external_api_key)
 
@@ -255,6 +283,7 @@ class Repository:
         return {
             "id": spec.id,
             "userId": spec.user_id,
+            "projectId": spec.project_id,
             "name": spec.name,
             "slug": spec.slug,
             "description": spec.description or "",
@@ -269,8 +298,11 @@ class Repository:
             "requestSchema": req_schema,
             "responseSchema": res_schema,
             "toolsConfig": tools_cfg,
-            "systemPrompt": sys_prompt,
-            "extractionPrompt": ext_prompt,
+            "positivePrompt": pos_prompt,
+            "extractionPrompt": pos_prompt,
+            "negativePrompt": neg_prompt,
+            "additionalPrompt": add_prompt,
+            "allowAdditionalPrompt": allow_add_prompt,
             "likesCount": tmpl.likes_count if tmpl else 0,
             "forkCount": tmpl.fork_count if tmpl else 0,
             "ratingAvg": tmpl.rating_avg if tmpl else None,
@@ -322,8 +354,10 @@ class Repository:
         description: Optional[str] = None,
         request_schema: Optional[Dict[str, Any]] = None,
         response_schema: Optional[Dict[str, Any]] = None,
-        system_prompt: Optional[str] = None,
-        extraction_prompt: Optional[str] = None,
+        positive_prompt: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
+        additional_prompt: Optional[str] = None,
+        allow_additional_prompt: Optional[bool] = None,
         use_external_api_key: Optional[bool] = None,
         external_model_name: Optional[str] = None,
         external_api_key: Optional[str] = None,
@@ -382,10 +416,14 @@ class Repository:
             ver.request_schema = request_schema
         if response_schema is not None:
             ver.response_schema = response_schema
-        if system_prompt is not None:
-            ver.system_prompt = system_prompt
-        if extraction_prompt is not None:
-            ver.extraction_prompt = extraction_prompt
+        if positive_prompt is not None:
+            ver.positive_prompt = positive_prompt
+        if negative_prompt is not None:
+            ver.negative_prompt = negative_prompt
+        if additional_prompt is not None:
+            ver.additional_prompt = additional_prompt
+        if allow_additional_prompt is not None:
+            ver.allow_additional_prompt = allow_additional_prompt
         if use_external_api_key is not None:
             ver.use_external_api_key = use_external_api_key
         if external_model_name is not None:
@@ -422,12 +460,17 @@ class Repository:
         return True
 
     @staticmethod
-    async def list_call_specs(db: Optional[AsyncSession], user_id: str) -> List[Dict[str, Any]]:
-        """Lists all Call Specs for a specific user."""
+    async def list_call_specs(
+        db: Optional[AsyncSession], user_id: str, project_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Lists all Call Specs for a specific user, optionally filtered by project."""
         if db is None:
             return []
 
-        stmt = select(CallSpec).where(CallSpec.user_id == user_id).order_by(CallSpec.created_at.desc())
+        stmt = select(CallSpec).where(CallSpec.user_id == user_id)
+        if project_id:
+            stmt = stmt.where(CallSpec.project_id == project_id)
+        stmt = stmt.order_by(CallSpec.created_at.desc())
         res = await db.execute(stmt)
         specs = res.scalars().all()
 
@@ -456,12 +499,15 @@ class Repository:
         user_id: str,
         name: str,
         slug: str,
+        project_id: Optional[str] = None,
         description: Optional[str] = None,
         template_id: Optional[str] = None,
         request_schema: Optional[Dict[str, Any]] = None,
         response_schema: Optional[Dict[str, Any]] = None,
-        system_prompt: Optional[str] = None,
-        extraction_prompt: Optional[str] = None,
+        positive_prompt: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
+        additional_prompt: Optional[str] = None,
+        allow_additional_prompt: bool = True,
         use_external_api_key: bool = True,
         external_model_name: Optional[str] = None,
         external_api_key: Optional[str] = None,
@@ -473,6 +519,7 @@ class Repository:
         spec = CallSpec(
             id=spec_id,
             user_id=user_id,
+            project_id=project_id,
             template_id=template_id,
             name=name,
             slug=slug,
@@ -493,8 +540,10 @@ class Repository:
             version_number=1,
             request_schema=request_schema,
             response_schema=response_schema,
-            system_prompt=system_prompt,
-            extraction_prompt=extraction_prompt,
+            positive_prompt=positive_prompt,
+            negative_prompt=negative_prompt,
+            additional_prompt=additional_prompt,
+            allow_additional_prompt=allow_additional_prompt,
             use_external_api_key=use_external_api_key,
             external_model_name=external_model_name,
             external_api_key=external_api_key,
@@ -532,21 +581,27 @@ class Repository:
         ]
 
     @staticmethod
-    async def list_api_credentials(db: Optional[AsyncSession], user_id: str) -> List[Dict[str, Any]]:
-        """Lists active customer API credentials for a user."""
+    async def list_api_credentials(
+        db: Optional[AsyncSession], user_id: str, project_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Lists active customer API credentials for a user, optionally filtered by project."""
         if db is None:
             return []
 
         stmt = select(ApiCredential).where(
             ApiCredential.user_id == user_id,
             ApiCredential.revoked_at.is_(None),
-        ).order_by(ApiCredential.created_at.desc())
+        )
+        if project_id:
+            stmt = stmt.where(ApiCredential.project_id == project_id)
+        stmt = stmt.order_by(ApiCredential.created_at.desc())
         res = await db.execute(stmt)
         creds = res.scalars().all()
 
         return [
             {
                 "id": c.id,
+                "projectId": c.project_id,
                 "name": c.name,
                 "publicKey": c.public_key,
                 "environment": c.environment,
@@ -559,7 +614,12 @@ class Repository:
 
     @staticmethod
     async def create_api_credential(
-        db: AsyncSession, user_id: str, name: str, environment: str = "production", ip_whitelist: Optional[List[str]] = None
+        db: AsyncSession,
+        user_id: str,
+        name: str,
+        environment: str = "production",
+        ip_whitelist: Optional[List[str]] = None,
+        project_id: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], str]:
         """Creates new API credential pair. Returns (credential_dict, secret_key)."""
         cred_id = f"crd_{str(ulid.new())}"
@@ -572,6 +632,7 @@ class Repository:
         cred = ApiCredential(
             id=cred_id,
             user_id=user_id,
+            project_id=project_id,
             name=name,
             public_key=public_key,
             secret_key_hash=secret_hash,
@@ -583,6 +644,7 @@ class Repository:
 
         return {
             "id": cred.id,
+            "projectId": cred.project_id,
             "name": cred.name,
             "publicKey": cred.public_key,
             "environment": cred.environment,
@@ -612,6 +674,7 @@ class Repository:
 
         return {
             "id": cred.id,
+            "projectId": cred.project_id,
             "name": cred.name,
             "publicKey": cred.public_key,
             "environment": cred.environment,
@@ -621,20 +684,32 @@ class Repository:
         }
 
     @staticmethod
-    async def list_api_requests(db: Optional[AsyncSession], user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """Lists recent audit execution logs."""
+    async def list_api_requests(
+        db: Optional[AsyncSession],
+        user_id: str,
+        limit: int = 50,
+        project_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Lists recent audit execution logs, optionally filtered by project_id."""
         if db is None:
             return []
 
-        stmt = select(ApiRequest).where(ApiRequest.user_id == user_id).order_by(ApiRequest.created_at.desc()).limit(limit)
+        stmt = select(ApiRequest, CallSpec.name.label("spec_display_name")).join(
+            CallSpec, ApiRequest.call_spec_id == CallSpec.id, isouter=True
+        ).where(ApiRequest.user_id == user_id)
+
+        if project_id:
+            stmt = stmt.where(CallSpec.project_id == project_id)
+
+        stmt = stmt.order_by(ApiRequest.created_at.desc()).limit(limit)
         res = await db.execute(stmt)
-        reqs = res.scalars().all()
+        rows = res.all()
 
         return [
             {
                 "id": r.id,
                 "requestId": r.request_id,
-                "specName": r.call_spec_id,
+                "specName": spec_name or r.call_spec_id,
                 "status": r.status,
                 "httpStatus": r.http_status,
                 "processingTimeMs": r.processing_time_ms,
@@ -642,7 +717,7 @@ class Repository:
                 "costUsd": r.estimated_cost_usd or 0.0,
                 "createdAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
             }
-            for r in reqs
+            for r, spec_name in rows
         ]
 
     @staticmethod
@@ -792,4 +867,136 @@ class Repository:
             "updatedAt": existing.updated_at.isoformat() if existing.updated_at else datetime.now(timezone.utc).isoformat(),
         }
 
+    # =========================================================================
+    # PROJECT CRUD
+    # =========================================================================
 
+    @staticmethod
+    def _serialize_project(project: Project) -> Dict[str, Any]:
+        """Serializes a Project model instance into a camelCase dictionary."""
+        return {
+            "id": project.id,
+            "userId": project.user_id,
+            "name": project.name,
+            "slug": project.slug,
+            "description": project.description or "",
+            "color": project.color,
+            "icon": project.icon,
+            "status": project.status,
+            "createdAt": project.created_at.isoformat() if project.created_at else None,
+            "updatedAt": project.updated_at.isoformat() if project.updated_at else None,
+        }
+
+    @staticmethod
+    async def list_projects(db: Optional[AsyncSession], user_id: str) -> List[Dict[str, Any]]:
+        """Lists all active projects for a user."""
+        if db is None:
+            return []
+        stmt = (
+            select(Project)
+            .where(Project.user_id == user_id, Project.status == "active")
+            .order_by(Project.created_at.asc())
+        )
+        res = await db.execute(stmt)
+        projects = res.scalars().all()
+        return [Repository._serialize_project(p) for p in projects]
+
+    @staticmethod
+    async def get_project(
+        db: Optional[AsyncSession], project_id: str, user_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Gets a single project by ID, verifying ownership."""
+        if db is None:
+            return None
+        stmt = select(Project).where(Project.id == project_id, Project.user_id == user_id)
+        res = await db.execute(stmt)
+        project = res.scalar_one_or_none()
+        if not project:
+            return None
+        return Repository._serialize_project(project)
+
+    @staticmethod
+    async def create_project(
+        db: AsyncSession,
+        user_id: str,
+        name: str,
+        slug: str,
+        description: Optional[str] = None,
+        color: str = "#e1b329",
+        icon: str = "Boxes",
+    ) -> Dict[str, Any]:
+        """Creates a new project for a user."""
+        project_id = f"prj_{str(ulid.new())}"
+        project = Project(
+            id=project_id,
+            user_id=user_id,
+            name=name,
+            slug=slug,
+            description=description,
+            color=color,
+            icon=icon,
+            status="active",
+        )
+        db.add(project)
+        await db.commit()
+        await db.refresh(project)
+        return Repository._serialize_project(project)
+
+    @staticmethod
+    async def update_project(
+        db: Optional[AsyncSession],
+        project_id: str,
+        user_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
+        icon: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Updates a project's metadata."""
+        if db is None:
+            return None
+        stmt = select(Project).where(Project.id == project_id, Project.user_id == user_id)
+        res = await db.execute(stmt)
+        project = res.scalar_one_or_none()
+        if not project:
+            return None
+        if name is not None:
+            project.name = name
+        if description is not None:
+            project.description = description
+        if color is not None:
+            project.color = color
+        if icon is not None:
+            project.icon = icon
+        project.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(project)
+        return Repository._serialize_project(project)
+
+    @staticmethod
+    async def delete_project(
+        db: Optional[AsyncSession], project_id: str, user_id: str
+    ) -> bool:
+        """Deletes a project and all its associated resources (via CASCADE)."""
+        if db is None:
+            return False
+        stmt = select(Project).where(Project.id == project_id, Project.user_id == user_id)
+        res = await db.execute(stmt)
+        project = res.scalar_one_or_none()
+        if not project:
+            return False
+        await db.delete(project)
+        await db.commit()
+        return True
+
+    @staticmethod
+    async def count_user_projects(db: Optional[AsyncSession], user_id: str) -> int:
+        """Returns the count of active projects for a user."""
+        if db is None:
+            return 0
+        stmt = select(func.count()).select_from(Project).where(
+            Project.user_id == user_id,
+            Project.status == "active",
+        )
+        res = await db.execute(stmt)
+        return res.scalar_one() or 0

@@ -10,10 +10,15 @@ interface ExecutionSettingsProps {
   setSpecSlug: (val: string) => void;
   selectedModel: string;
   setSelectedModel: (val: string) => void;
-  systemPrompt: string;
-  setSystemPrompt: (val: string) => void;
+  positivePrompt?: string;
   extractionPrompt: string;
   setExtractionPrompt: (val: string) => void;
+  negativePrompt?: string;
+  setNegativePrompt?: (val: string) => void;
+  additionalPrompt?: string;
+  setAdditionalPrompt?: (val: string) => void;
+  allowAdditionalPrompt?: boolean;
+  setAllowAdditionalPrompt?: (val: boolean) => void;
   useExternalApiKey?: boolean;
   setUseExternalApiKey?: (val: boolean) => void;
   currentProviderStatus: { active: boolean; label: string };
@@ -26,10 +31,15 @@ export function ExecutionSettings({
   setSpecSlug,
   selectedModel,
   setSelectedModel,
-  systemPrompt,
-  setSystemPrompt,
+  positivePrompt,
   extractionPrompt,
   setExtractionPrompt,
+  negativePrompt = "",
+  setNegativePrompt,
+  additionalPrompt = "",
+  setAdditionalPrompt,
+  allowAdditionalPrompt = true,
+  setAllowAdditionalPrompt,
   useExternalApiKey = true,
   setUseExternalApiKey,
   currentProviderStatus,
@@ -38,105 +48,132 @@ export function ExecutionSettings({
     <div className="space-y-5">
       <h3 className="text-sm font-bold flex items-center gap-2">
         <Sliders className="w-4 h-4 text-[#e1b329]" />
-        <span>API & Model Configurations</span>
+        <span>Call Spec Config & AI Model</span>
       </h3>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-semibold opacity-90">Spec Name</label>
-            <input
-              type="text"
-              value={specName}
-              onChange={(e) => setSpecName(e.target.value)}
-              className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-[#e1b329]"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold opacity-90">API Slug</label>
+        <div>
+          <label className="text-xs font-semibold opacity-90">Spec Name</label>
+          <input
+            type="text"
+            value={specName}
+            onChange={(e) => setSpecName(e.target.value)}
+            className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#e1b329]"
+            placeholder="e.g. Identity Document Parser"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold opacity-90">API Endpoint Slug</label>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs font-mono opacity-60 shrink-0">/v1/call/</span>
             <input
               type="text"
               value={specSlug}
               onChange={(e) => setSpecSlug(e.target.value)}
-              className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs font-mono font-bold text-[#e1b329] focus:outline-none focus:border-[#e1b329]"
+              className="w-full glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#e1b329]"
+              placeholder="ktp-parser"
             />
           </div>
         </div>
 
-        {/* External AI API Key Toggle Option */}
-        <div className="p-4 rounded-xl glass-panel border border-[#edd6bb]/20 space-y-2">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <label className="text-xs font-bold text-[#2c1d11] dark:text-[#edd6bb] flex items-center gap-1.5 cursor-pointer">
-                <Key className="w-4 h-4 text-[#e1b329]" />
-                <span>Izinkan External AI API Key</span>
-              </label>
-              <p className="text-[11px] opacity-75 leading-relaxed">
-                Izinkan pemanggil API mengirimkan header <code className="font-mono text-[#e1b329]">X-AI-API-KEY</code> dan <code className="font-mono text-[#e1b329]">X-AI-MODEL-NAME</code> secara kustom saat memanggil request. Jika header tidak dikirimkan, API akan otomatis menggunakan model yang terhubung dengan Spec ini.
-              </p>
+        {/* API Key Credentials Option Toggle */}
+        <div className="p-3.5 rounded-xl glass-panel border border-[#edd6bb]/20 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 cursor-pointer">
+              <Key className="w-3.5 h-3.5 text-[#e1b329]" />
+              <span>Allow Caller API Key & Model Override</span>
+            </label>
+            <input
+              type="checkbox"
+              checked={useExternalApiKey}
+              onChange={(e) => setUseExternalApiKey?.(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 text-[#e1b329] focus:ring-[#e1b329] bg-slate-900 cursor-pointer"
+            />
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+            {useExternalApiKey ? (
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                ✓ Callers can pass their own <code className="font-mono">X-AI-API-KEY</code> & <code className="font-mono">X-AI-MODEL-NAME</code> headers dynamically.
+              </span>
+            ) : (
+              <span className="text-amber-800 dark:text-amber-300 font-medium">
+                🔒 Execution will strictly use user&apos;s saved API Credentials in Callcraft.
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* Request Additional Prompt Toggle */}
+        <div className="p-3.5 rounded-xl glass-panel border border-[#edd6bb]/20 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 cursor-pointer">
+              <Bot className="w-3.5 h-3.5 text-[#e1b329]" />
+              <span>Request Additional Prompt (User Instruction)</span>
+            </label>
+            <input
+              type="checkbox"
+              checked={allowAdditionalPrompt}
+              onChange={(e) => setAllowAdditionalPrompt?.(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 text-[#e1b329] focus:ring-[#e1b329] bg-slate-900 cursor-pointer"
+            />
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+            {allowAdditionalPrompt ? (
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                ✓ Aktif: Pemanggil API dapat menyertakan bidang <code className="font-mono">&quot;prompt&quot;</code> sebagai instruksi tambahan per request.
+              </span>
+            ) : (
+              <span className="text-rose-600 dark:text-rose-400 font-medium">
+                🚫 Nonaktif: Bidang instruksi pengguna tidak diaktifkan pada spesifikasi ini.
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* Provider Credential Status Indicator */}
+        <div className="p-3 rounded-xl bg-[#fdfaf5] dark:bg-slate-900/60 border border-[#edd6bb]/30 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bot className="w-4 h-4 text-[#e1b329]" />
+            <div>
+              <span className="text-xs font-semibold block text-slate-800 dark:text-slate-200">
+                Primary Provider: Gemini AI
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                {currentProviderStatus.label}
+              </span>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={useExternalApiKey}
-              onClick={() => setUseExternalApiKey?.(!useExternalApiKey)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                useExternalApiKey ? "bg-[#e1b329]" : "bg-slate-700 dark:bg-slate-800"
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-950 shadow-lg ring-0 transition duration-200 ease-in-out ${
-                  useExternalApiKey ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border shrink-0 bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400">
+            <ShieldCheck className="w-3 h-3" />
+            <span>Ready</span>
           </div>
         </div>
 
-        {/* AI Model Selector */}
-        <div className="space-y-3 p-4 rounded-xl glass-panel border border-[#edd6bb]/20">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold flex items-center gap-1.5">
-              <Bot className="w-4 h-4 text-[#e1b329]" />
-              <span>Preferred Execution AI Model</span>
-            </label>
-
-            {/* Provider Key Status Badge */}
-            {currentProviderStatus.active ? (
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-500/25 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Key Configured</span>
-              </span>
-            ) : (
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 text-[10px] font-bold border border-amber-500/30 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                <span>Key Setup Required</span>
-              </span>
-            )}
-          </div>
-
+        <div>
+          <label className="text-xs font-semibold opacity-90">Preferred External Model</label>
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-[#e1b329] bg-transparent"
+            className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#e1b329]"
           >
-            <optgroup label="Google Gemini (Key Configured)">
-              <option value="gemini-3.6-flash" className="bg-slate-900">Gemini 3.6 Flash (Default - Fast Vision & Tools)</option>
-              <option value="gemini-3.5-flash" className="bg-slate-900">Gemini 3.5 Flash</option>
-              <option value="gemini-3.5-flash-lite" className="bg-slate-900">Gemini 3.5 Flash Lite</option>
+            <optgroup label="Google Gemini (Recommended)">
+              <option value="gemini-3.6-flash" className="bg-slate-900">Gemini 3.6 Flash (Fastest Structured OCR)</option>
+              <option value="gemini-1.5-flash" className="bg-slate-900">Gemini 1.5 Flash (Default)</option>
+              <option value="gemini-1.5-pro" className="bg-slate-900">Gemini 1.5 Pro (Complex Reasoning)</option>
+              <option value="gemini-2.0-flash-exp" className="bg-slate-900">Gemini 2.0 Flash Experimental</option>
             </optgroup>
-            <optgroup label="OpenAI (Key Configured)">
-              <option value="gpt-5.6-luna" className="bg-slate-900">GPT-5.6 Luna (High Accuracy Reasoning)</option>
-              <option value="gpt-5.6-terra" className="bg-slate-900">GPT-5.6 Terra</option>
-              <option value="gpt-5.6-sol" className="bg-slate-900">GPT-5.6 Sol</option>
+            <optgroup label="OpenAI (Setup Required in API Keys menu)">
+              <option value="gpt-4o-mini" className="bg-slate-900">GPT-4o Mini (Cost efficient)</option>
+              <option value="gpt-4o" className="bg-slate-900">GPT-4o (Vision Multimodal)</option>
             </optgroup>
             <optgroup label="Anthropic Claude (Setup Required in API Keys menu)">
-              <option value="claude-sonnet-5" className="bg-slate-900">Claude Sonnet 5</option>
-              <option value="claude-opus-5" className="bg-slate-900">Claude Opus 5</option>
-              <option value="claude-haiku-4.5" className="bg-slate-900">Claude Haiku 4.5</option>
+              <option value="claude-3-5-sonnet-20241022" className="bg-slate-900">Claude 3.5 Sonnet</option>
+              <option value="claude-3-haiku-20240307" className="bg-slate-900">Claude 3 Haiku</option>
             </optgroup>
             <optgroup label="Mistral AI (Setup Required in API Keys menu)">
-              <option value="mistral-medium-3.5" className="bg-slate-900">Mistral Medium 3.5</option>
+              <option value="pixtral-12b" className="bg-slate-900">Pixtral 12B (Vision OCR)</option>
               <option value="mistral-small-4" className="bg-slate-900">Mistral Small 4</option>
             </optgroup>
             <optgroup label="DeepSeek & OCR (Setup Required in API Keys menu)">
@@ -144,41 +181,49 @@ export function ExecutionSettings({
               <option value="deepseek-v4-pro" className="bg-slate-900">DeepSeek V4 Pro</option>
             </optgroup>
           </select>
-
-          <div className="pt-2 border-t border-[#edd6bb]/15 flex items-center justify-between text-[11px]">
-            <span className="opacity-75">Manage, test, or update AI Provider API keys:</span>
-            <Link
-              href="/keys"
-              className="text-[#e1b329] hover:underline font-bold flex items-center gap-1 transition-colors"
-            >
-              <span>API Credentials Menu</span>
-              <ExternalLink className="w-3 h-3" />
-            </Link>
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold opacity-90">System Extraction Prompt (System Role)</label>
-          <textarea
-            rows={3}
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            className="w-full mt-1.5 glass-panel border border-[#edd6bb]/25 rounded-xl p-3 text-xs focus:outline-none focus:border-[#e1b329] leading-relaxed font-sans"
-            placeholder="Base system prompt given to the AI model..."
-          />
         </div>
 
         <div>
           <label className="text-xs font-semibold opacity-90 flex items-center justify-between">
-            <span>Preset Extraction Directives (Additional Spec Prompt)</span>
-            <span className="text-[10px] text-[#e1b329] font-bold">Appended to extraction instructions</span>
+            <span>Positive Extraction Prompt</span>
+            <span className="text-[10px] text-[#e1b329] font-bold">What AI SHOULD extract</span>
           </label>
           <textarea
             rows={3}
-            value={extractionPrompt}
+            value={positivePrompt || extractionPrompt}
             onChange={(e) => setExtractionPrompt(e.target.value)}
             className="w-full mt-1.5 glass-panel border border-[#edd6bb]/25 rounded-xl p-3 text-xs focus:outline-none focus:border-[#e1b329] leading-relaxed font-sans"
-            placeholder="Specific directives for this API spec..."
+            placeholder="Specific extraction instructions for this API spec..."
+          />
+        </div>
+
+        {allowAdditionalPrompt && (
+          <div>
+            <label className="text-xs font-semibold opacity-90 flex items-center justify-between text-sky-600 dark:text-sky-400">
+              <span>Default Additional Prompt (User Instruction)</span>
+              <span className="text-[10px] font-bold">User Override Instructions</span>
+            </label>
+            <textarea
+              rows={2}
+              value={additionalPrompt}
+              onChange={(e) => setAdditionalPrompt?.(e.target.value)}
+              className="w-full mt-1.5 glass-panel border border-sky-500/25 rounded-xl p-3 text-xs focus:outline-none focus:border-sky-500 leading-relaxed font-sans"
+              placeholder="Opsional: Instruksi tambahan dari user..."
+            />
+          </div>
+        )}
+
+        <div>
+          <label className="text-xs font-semibold opacity-90 flex items-center justify-between text-red-600 dark:text-red-400">
+            <span>Negative Prompt (Constraints & Prohibitions)</span>
+            <span className="text-[10px] font-bold">What AI MUST AVOID</span>
+          </label>
+          <textarea
+            rows={3}
+            value={negativePrompt}
+            onChange={(e) => setNegativePrompt?.(e.target.value)}
+            className="w-full mt-1.5 glass-panel border border-red-500/25 rounded-xl p-3 text-xs focus:outline-none focus:border-red-500 leading-relaxed font-sans"
+            placeholder="Prohibitions, fallback constraints, invalid document rules..."
           />
         </div>
       </div>

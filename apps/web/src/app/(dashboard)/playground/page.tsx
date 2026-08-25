@@ -29,8 +29,11 @@ import { DynamicSpecForm } from "@/components/playground/dynamic-spec-form";
 import { SchemaPreview } from "@/components/schema-builder/schema-preview";
 import { jsonSchemaToSchemaFields } from "@/components/schema-builder/schema-helpers";
 
+import { useProject } from "@/context/project-context";
+
 function PlaygroundContent() {
   const { user } = useAuth();
+  const { activeProject } = useProject();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -40,17 +43,15 @@ function PlaygroundContent() {
   const [specsLoading, setSpecsLoading] = useState(true);
 
   // Form State
-  const [provider, setProvider] = useState("gemini");
-  const [aiModelName, setAiModelName] = useState("gemini-1.5-flash");
-  const [apiKey, setApiKey] = useState("call_sk_live_dev_secret_key_12345");
+  const [provider, setProvider] = useState("");
+  const [aiModelName, setAiModelName] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [aiApiKey, setAiApiKey] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [imageUrl, setImageUrl] = useState("https://raw.githubusercontent.com/tesseract-ocr/test/main/testing/eurotext.png");
+  const [negativePrompt, setNegativePrompt] = useState("");
   const [extraInputs, setExtraInputs] = useState<Record<string, any>>({});
 
   // Tracks which optional headers are enabled via checkboxes in DynamicSpecForm.
-  // Keys that matter: "X-AI-MODEL-NAME" and "X-AI-API-KEY".
-  // Default false (unchecked) — API falls back to spec / saved DB key when not sent.
   const [checkedHeaders, setCheckedHeaders] = useState<Record<string, boolean>>({});
 
   // Execution Output State
@@ -59,16 +60,20 @@ function PlaygroundContent() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Public key lifted from DynamicSpecForm via onPublicKeyChange callback
+  const [publicKey, setPublicKey] = useState<string>("");
+
   // Right Panel Tab State ("body" | "header" | "prompt")
   const [rightPanelTab, setRightPanelTab] = useState<"body" | "header" | "prompt">("body");
 
-  // Load user specs on mount
+  // Load user specs on mount or project switch
   useEffect(() => {
     let isMounted = true;
-    fetchCallSpecs()
+    setSpecsLoading(true);
+    fetchCallSpecs(activeProject?.id)
       .then((data) => {
         if (!isMounted) return;
-        setUserSpecs(data);
+        setUserSpecs(data || []);
       })
       .catch((err) => {
         console.warn("[Playground] Specs load error:", err);
@@ -80,49 +85,56 @@ function PlaygroundContent() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [activeProject?.id]);
 
-  // Sync selected spec from URL query param or localStorage or default to first user spec
+  // Sync selected spec from URL query param or localStorage or default to first spec IN CURRENT PROJECT
   useEffect(() => {
     if (specsLoading) return;
+
+    if (userSpecs.length === 0) {
+      setActiveSpec(null);
+      setSpecId("");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("callcraft_playground_selected_spec");
+      }
+      return;
+    }
 
     const paramSpecId = searchParams.get("specId");
     const localSpecId = typeof window !== "undefined" ? localStorage.getItem("callcraft_playground_selected_spec") : null;
 
     let targetId = paramSpecId || localSpecId || "";
+    const exists = userSpecs.some((s) => s.id === targetId || s.slug === targetId);
 
-    if (userSpecs.length > 0) {
-      const exists = userSpecs.some((s) => s.id === targetId || s.slug === targetId);
-      if (!exists && targetId) {
-        // Target ID no longer exists (e.g. deleted sample preset like ktp-parser)
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("callcraft_playground_selected_spec");
-        }
-        targetId = userSpecs[0].id;
-      } else if (!targetId) {
-        targetId = userSpecs[0].id;
+    if (!exists) {
+      targetId = userSpecs[0].id;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("callcraft_playground_selected_spec", targetId);
       }
     }
 
-    if (targetId) {
-      setSpecId(targetId);
-      resolveAndSetSpec(targetId);
-    }
+    setSpecId(targetId);
+    resolveAndSetSpec(targetId, userSpecs);
   }, [searchParams, userSpecs, specsLoading]);
 
-  const resolveAndSetSpec = async (targetId: string) => {
-    if (!targetId) return;
+  const resolveAndSetSpec = (targetId: string, currentSpecs: CallSpec[] = userSpecs) => {
+    if (!targetId || currentSpecs.length === 0) {
+      setActiveSpec(null);
+      return;
+    }
 
-    const applySpecToForm = (spec: CallSpec) => {
-      setActiveSpec(spec);
-      setPrompt(spec.extractionPrompt || "");
-      setProvider(spec.provider || "gemini");
-      setAiModelName(spec.externalModelName || "gemini-3.6-flash");
-      setAiApiKey(spec.externalApiKey || "");
+    const found = currentSpecs.find((s) => s.id === targetId || s.slug === targetId);
+    if (found) {
+      setActiveSpec(found);
+      setPrompt(found.additionalPrompt || "");
+      setNegativePrompt(found.negativePrompt || "");
+      setProvider(found.provider || "");
+      setAiModelName(found.externalModelName || "");
+      setAiApiKey(found.externalApiKey || "");
 
       // Restore session data for this spec if present in sessionStorage
       if (typeof window !== "undefined") {
-        const sessRaw = sessionStorage.getItem(`callcraft_playground_session_${spec.id}`);
+        const sessRaw = sessionStorage.getItem(`callcraft_playground_session_${found.id}`);
         if (sessRaw) {
           try {
             const sess = JSON.parse(sessRaw);
@@ -137,28 +149,8 @@ function PlaygroundContent() {
           setError(null);
         }
       }
-    };
-
-    // 1. Look in loaded user specs
-    const userSpec = userSpecs.find((s) => s.id === targetId || s.slug === targetId);
-    if (userSpec) {
-      applySpecToForm(userSpec);
-      return;
-    }
-
-    // 2. Fetch single spec directly from backend API
-    const singleSpec = await fetchCallSpecById(targetId);
-    if (singleSpec) {
-      applySpecToForm(singleSpec);
     } else {
-      // 404 Not Found: Clean invalid key and fallback to first spec
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("callcraft_playground_selected_spec");
-      }
-      if (userSpecs.length > 0) {
-        setSpecId(userSpecs[0].id);
-        applySpecToForm(userSpecs[0]);
-      }
+      setActiveSpec(null);
     }
   };
 
@@ -183,9 +175,7 @@ function PlaygroundContent() {
     setError(null);
     setResult(null);
 
-    // Only include optional AI headers if their checkboxes are explicitly enabled.
-    // When unchecked, the API uses the spec's configured model / user's saved DB key.
-    const useExternalKey = activeSpec?.useExternalApiKey ?? (activeSpec as any)?.use_external_api_key ?? true;
+    const useExternalKey = activeSpec.useExternalApiKey ?? false;
     const sendModelHeader = !useExternalKey || (checkedHeaders["X-AI-MODEL-NAME"] === true);
     const sendKeyHeader   = !useExternalKey || (checkedHeaders["X-AI-API-KEY"] === true);
 
@@ -197,10 +187,12 @@ function PlaygroundContent() {
         specId: currentSpecKey,
         provider,
         apiKey,
-        image: imageUrl,
+        publicKey,
         prompt: prompt || undefined,
+        negativePrompt: negativePrompt || undefined,
         aiApiKey: sendKeyHeader ? (aiApiKey || undefined) : undefined,
         aiModelName: sendModelHeader ? (aiModelName || undefined) : undefined,
+        data: extraInputs,
       });
       setResult(data);
 
@@ -253,13 +245,8 @@ function PlaygroundContent() {
   };
 
   // Convert current active spec schemas into SchemaField[] for live Monaco JSON Schema preview
-  const responseSchemaObj = activeSpec
-    ? activeSpec.responseSchema || (activeSpec as any).response_schema || { type: "object", properties: {} }
-    : { type: "object", properties: {} };
-
-  const requestSchemaObj = activeSpec
-    ? activeSpec.requestSchema || (activeSpec as any).request_schema || { type: "object", properties: {} }
-    : { type: "object", properties: {} };
+  const responseSchemaObj = activeSpec ? (activeSpec.responseSchema || {}) : {};
+  const requestSchemaObj = activeSpec ? (activeSpec.requestSchema || {}) : {};
 
   const activeResponseFields = useMemo(() => jsonSchemaToSchemaFields(responseSchemaObj), [responseSchemaObj]);
   const activeRequestFields = useMemo(() => jsonSchemaToSchemaFields(requestSchemaObj), [requestSchemaObj]);
@@ -356,8 +343,11 @@ function PlaygroundContent() {
             useExternalApiKey={activeSpec?.useExternalApiKey ?? (activeSpec as any)?.use_external_api_key ?? true}
             requestSchema={requestSchemaObj}
             responseSchema={responseSchemaObj}
-            systemPrompt={activeSpec.systemPrompt || (activeSpec as any).system_prompt}
-            extractionPrompt={activeSpec.extractionPrompt || (activeSpec as any).extraction_prompt}
+            positivePrompt={activeSpec.positivePrompt || activeSpec.extractionPrompt || (activeSpec as any).positive_prompt}
+            negativePrompt={activeSpec.negativePrompt || (activeSpec as any).negative_prompt}
+            setNegativePrompt={setNegativePrompt}
+            additionalPrompt={activeSpec.additionalPrompt || (activeSpec as any).additional_prompt}
+            allowAdditionalPrompt={activeSpec.allowAdditionalPrompt ?? (activeSpec as any).allow_additional_prompt ?? true}
             provider={provider}
             setProvider={setProvider}
             aiModelName={aiModelName}
@@ -366,8 +356,6 @@ function PlaygroundContent() {
             setApiKey={setApiKey}
             aiApiKey={aiApiKey}
             setAiApiKey={setAiApiKey}
-            imageUrl={imageUrl}
-            setImageUrl={setImageUrl}
             prompt={prompt}
             setPrompt={setPrompt}
             extraInputs={extraInputs}
@@ -375,6 +363,7 @@ function PlaygroundContent() {
             onRunTest={handleRunTest}
             loading={loading}
             onCheckedStateChange={setCheckedHeaders}
+            onPublicKeyChange={setPublicKey}
           />
 
           {/* Right Column: Tabbed Panel (Response Body & Response Header via SchemaPreview) */}
@@ -464,7 +453,14 @@ function PlaygroundContent() {
             {rightPanelTab === "body" && (
               <div className="flex-1 overflow-hidden min-h-[360px]">
                 <SchemaPreview
-                  schema={result || {}}
+                  schema={
+                    result
+                      ? (() => {
+                          const { _responseHeaders, _responseStatus, _responseStatusText, ...cleanBody } = result;
+                          return cleanBody;
+                        })()
+                      : {}
+                  }
                   activeTabName="Response Body"
                   noWrapper={true}
                 />
@@ -478,12 +474,11 @@ function PlaygroundContent() {
                   schema={
                     result
                       ? {
-                          status: 200,
-                          statusText: "OK",
-                          meta: result.meta,
-                          execution: result.execution,
-                          metrics: result.metrics,
-                          spec: result.spec,
+                          ...(result._responseStatus ? { "http_status": result._responseStatus } : {}),
+                          ...(result._responseStatusText ? { "http_status_text": result._responseStatusText } : {}),
+                          ...(result.meta?.requestId ? { "x-request-id": result.meta.requestId } : {}),
+                          ...(result.meta?.traceId ? { "x-trace-id": result.meta.traceId } : {}),
+                          ...(result._responseHeaders || {}),
                         }
                       : {}
                   }

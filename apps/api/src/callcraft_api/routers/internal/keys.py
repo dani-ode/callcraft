@@ -13,6 +13,7 @@ from callcraft_engine import validate_ip_or_cidr
 class SaveProviderKeyRequest(BaseModel):
     provider: str = Field(..., description="Provider code: gemini, openai, anthropic, or deepseek")
     api_key: str = Field(..., description="Raw AI Provider API key to encrypt and save")
+    project_id: Optional[str] = Field(None, description="Project this AI provider key belongs to")
 
 
 class VerifyProviderKeyRequest(BaseModel):
@@ -23,6 +24,7 @@ class VerifyProviderKeyRequest(BaseModel):
 class CreateApiKeyRequest(BaseModel):
     name: str = Field(..., description="Key description name")
     environment: str = Field(..., description="Credential environment: production or development")
+    project_id: Optional[str] = Field(None, description="Project this key belongs to")
     ip_whitelist: Optional[list[str]] = Field(default=None, description="Optional array of whitelisted IP addresses / CIDRs")
 
 
@@ -32,10 +34,11 @@ class UpdateApiKeyWhitelistRequest(BaseModel):
 
 @router.get("/keys")
 async def list_keys(
+    project_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
-    keys = await Repository.list_api_credentials(db, user_id)
+    keys = await Repository.list_api_credentials(db, user_id, project_id=project_id)
     return keys
 
 
@@ -57,7 +60,8 @@ async def create_key(
                 )
 
     cred, secret_key = await Repository.create_api_credential(
-        db=db, user_id=user_id, name=payload.name, environment=payload.environment, ip_whitelist=payload.ip_whitelist
+        db=db, user_id=user_id, name=payload.name, environment=payload.environment,
+        ip_whitelist=payload.ip_whitelist, project_id=payload.project_id
     )
     return {
         "credential": cred,
@@ -110,11 +114,12 @@ async def delete_key(
 
 @router.get("/logs")
 async def list_logs(
+    project_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     limit: int = 50,
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
-    logs = await Repository.list_api_requests(db, user_id, limit)
+    logs = await Repository.list_api_requests(db, user_id, limit, project_id=project_id)
     return logs
 
 
@@ -133,7 +138,7 @@ async def save_provider_key(
         raise HTTPException(status_code=400, detail="API Key cannot be empty")
 
     success = await Repository.save_user_ai_provider_key(
-        db=db, user_id=user_id, provider_code=provider, raw_api_key=key
+        db=db, user_id=user_id, provider_code=provider, raw_api_key=key, project_id=payload.project_id
     )
     if not success:
         raise HTTPException(status_code=400, detail=f"Invalid or unsupported AI provider code: '{provider}'")
@@ -146,10 +151,11 @@ async def save_provider_key(
 
 @router.get("/providers/keys")
 async def list_provider_keys(
+    project_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
-    keys = await Repository.list_user_ai_providers(db, user_id)
+    keys = await Repository.list_user_ai_providers(db, user_id, project_id=project_id)
     return keys
 
 

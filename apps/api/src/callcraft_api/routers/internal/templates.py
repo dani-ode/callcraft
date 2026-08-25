@@ -113,7 +113,8 @@ async def list_templates(
             "isLiked": t.id in liked_ids,
             "requestSchema": t.request_schema,
             "responseSchema": t.response_schema,
-            "systemPrompt": t.system_prompt,
+            "positivePrompt": t.positive_prompt,
+            "negativePrompt": t.negative_prompt,
             "createdAt": t.created_at.isoformat() if t.created_at else None,
         })
 
@@ -156,8 +157,8 @@ async def publish_spec_to_marketplace(
         request_schema=ver.request_schema,
         response_schema=ver.response_schema,
         tools_config=ver.tools_config or {},
-        system_prompt=ver.system_prompt,
-        extraction_prompt=ver.extraction_prompt,
+        positive_prompt=ver.positive_prompt,
+        negative_prompt=ver.negative_prompt,
         is_official=False,
         is_published=True,
     )
@@ -227,15 +228,17 @@ async def get_template_detail(
         "requestSchema": tmpl.request_schema,
         "responseSchema": tmpl.response_schema,
         "toolsConfig": tmpl.tools_config,
-        "systemPrompt": tmpl.system_prompt,
-        "extractionPrompt": tmpl.extraction_prompt,
+        "positivePrompt": tmpl.positive_prompt,
+        "extractionPrompt": tmpl.positive_prompt,
+        "negativePrompt": tmpl.negative_prompt,
         "createdAt": tmpl.created_at.isoformat() if tmpl.created_at else None,
     }
 
 
 @router.post("/templates/{template_id}/fork")
-async def fork_template_to_spec(
+async def fork_template(
     template_id: str,
+    project_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
@@ -254,10 +257,16 @@ async def fork_template_to_spec(
             detail="Anda tidak dapat meng-clone template yang Anda buat sendiri."
         )
 
+    target_project_id = project_id
+    if not target_project_id:
+        user_projects = await Repository.list_projects(db, user_id)
+        if user_projects:
+            target_project_id = user_projects[0]["id"]
+
     req_schema = tmpl.request_schema
     res_schema = tmpl.response_schema
-    sys_prompt = tmpl.system_prompt
-    ext_prompt = tmpl.extraction_prompt
+    pos_prompt = tmpl.positive_prompt
+    neg_prompt = tmpl.negative_prompt
     tools_cfg = tmpl.tools_config
     tmpl_id = tmpl.id
     tmpl_name = tmpl.name
@@ -272,14 +281,15 @@ async def fork_template_to_spec(
     new_spec = await Repository.create_call_spec(
         db=db,
         user_id=user_id,
+        project_id=target_project_id,
         name=f"{tmpl_name} (Clone)",
         slug=new_slug,
         description=f"Cloned from Marketplace template: {tmpl_name}",
         template_id=tmpl_id,
         request_schema=req_schema,
         response_schema=res_schema,
-        system_prompt=sys_prompt,
-        extraction_prompt=ext_prompt,
+        positive_prompt=pos_prompt,
+        negative_prompt=neg_prompt,
         tools_config=tools_cfg,
     )
 

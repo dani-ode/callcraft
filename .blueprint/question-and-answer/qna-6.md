@@ -19,65 +19,64 @@ Berikut adalah rancangan JSON level produksi yang bisa menampung kompleksitas ap
 ```json
 {
   "meta": {
-    "request_id": "req_882391005_abc",
-    "trace_id": "trc_5599201",
+    "requestId": "req_882391005_abc",
+    "traceId": "trc_5599201",
     "timestamp": "2026-08-23T20:05:12Z",
     "status": "completed",
-    "api_version": "v2.1",
-    "execution_mode": "async_webhook"
+    "apiVersion": "v2.1",
+    "executionMode": "async_webhook"
   },
   "data": {
-    "primary_result": {
+    "primaryResult": {
       "type": "structured_json",
       "content": {
-        "status_analisis": "disetujui",
-        "estimasi_biaya": 450000000,
+        "statusAnalisis": "disetujui",
+        "estimasiBiaya": 450000000,
         "kategori": "infrastruktur_backend"
       }
     },
-    "human_readable_message": "Analisis selesai. Estimasi biaya telah divalidasi dengan database internal dan kalender telah diperbarui."
+    "humanReadableMessage": "Analisis selesai. Estimasi biaya telah divalidasi dengan database internal dan kalender telah diperbarui."
   },
-  "execution_trace": {
-    "total_duration_ms": 4250,
+  "executionTrace": {
+    "totalDurationMs": 4250,
     "steps": [
       {
-        "step_id": "step_1",
+        "stepId": "step_1",
         "agent": "vision_parser",
-        "action_type": "tool_call",
-        "tool_name": "extract_image_data",
+        "actionType": "tool_call",
+        "toolName": "extract_image_data",
         "status": "success",
-        "duration_ms": 1200
+        "durationMs": 1200
       },
       {
-        "step_id": "step_2",
+        "stepId": "step_2",
         "agent": "data_retriever",
-        "action_type": "tool_call",
-        "tool_name": "milvus_vector_search",
+        "actionType": "tool_call",
+        "toolName": "milvus_vector_search",
         "status": "success",
-        "duration_ms": 350
+        "durationMs": 350
       },
       {
-        "step_id": "step_3",
+        "stepId": "step_3",
         "agent": "system_integrator",
-        "action_type": "api_call",
-        "tool_name": "n8n_trigger_workflow",
+        "actionType": "api_call",
+        "toolName": "n8n_trigger_workflow",
         "status": "success",
-        "duration_ms": 800
+        "durationMs": 800
       }
     ],
     "warnings": []
   },
   "metrics": {
     "usage": {
-      "prompt_tokens": 1050,
-      "completion_tokens": 320,
-      "total_tokens": 1370
+      "promptTokens": 1050,
+      "completionTokens": 320,
+      "totalTokens": 1370
     },
-    "estimated_cost_usd": 0.015
+    "estimatedCostUsd": 0.015
   }
 }
-
-```
+````
 
 ### Mengapa Struktur Ini Sangat Kuat untuk Masa Depan?
 

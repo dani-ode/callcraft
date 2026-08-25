@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,15 +7,29 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from callcraft_api.config import settings
+from callcraft_api.db.session import AsyncSessionLocal, engine
+from callcraft_api.db.init_db import init_db
+from callcraft_api.db.models import Base
 from callcraft_api.routers import admin, auth, health, internal, public
 from callcraft_api.utils.envelope import build_error_envelope
 
 logger = logging.getLogger("callcraft.api.exception")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize PostgreSQL schema and seed baseline data on application boot."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with AsyncSessionLocal() as session:
+        await init_db(session)
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     description="AI-Powered Dynamic Multimodal Execution Engine & Gateway",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS

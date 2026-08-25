@@ -47,7 +47,7 @@ async def test_auth_register_verify_and_login_flow():
                 "password": "anotherpassword"
             })
             assert dup_resp.status_code == 400
-            assert "sudah terdaftar" in dup_resp.json()["detail"]
+            assert "sudah terdaftar" in dup_resp.json()["error"]["message"]
 
             # 3. Force status active via admin endpoint
             await ac.put(f"/internal/v1/admin/users/{reg_data['id']}/verify")
@@ -110,7 +110,7 @@ async def test_public_call_execution_header_and_spec_fallback():
         "useExternalApiKey": True,
         "externalModelName": "gemini-3.6-flash",
         "externalApiKey": "sk-mock-gemini-key-12345",
-        "systemPrompt": "Extract KTP data",
+        "positivePrompt": "Extract KTP data",
         "responseSchema": {
             "type": "object",
             "properties": {"name": {"type": "string"}},
@@ -136,14 +136,14 @@ async def test_public_call_execution_header_and_spec_fallback():
                 # 1. Hit without headers (Fallback to spec's model "gemini-3.6-flash")
                 resp_fallback = await ac.post(
                     "/v1/call/usr_test123",
-                    headers={"Authorization": "Bearer call_sk_valid_key", "X-CALL-SPEC-ID": "ktp-parser"},
+                    headers={"Authorization": "Bearer call_sk_valid_key", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
                     json={"prompt": "Extract name"}
                 )
                 assert resp_fallback.status_code == 200
                 data_fallback = resp_fallback.json()
                 print("DEBUG data_fallback keys:", list(data_fallback.keys()))
                 print("DEBUG data_fallback data:", data_fallback.get("data"))
-                res_content = data_fallback["data"]["primary_result"]["content"] if isinstance(data_fallback["data"], dict) and "primary_result" in data_fallback["data"] else data_fallback["data"]
+                res_content = data_fallback["data"]["primaryResult"]["content"] if isinstance(data_fallback["data"], dict) and "primaryResult" in data_fallback["data"] else data_fallback["data"]
                 assert res_content["name"] == "John Doe"
 
                 # 2. Hit with override headers
@@ -151,6 +151,7 @@ async def test_public_call_execution_header_and_spec_fallback():
                     "/v1/call/usr_test123",
                     headers={
                         "Authorization": "Bearer call_sk_valid_key",
+                        "X-CALL-PUBLIC-KEY": "pk_live_test_123",
                         "X-CALL-SPEC-ID": "ktp-parser",
                         "X-AI-API-KEY": "sk-user-custom-key-12345",
                         "X-AI-MODEL-NAME": "gpt-5.6-luna",
@@ -159,8 +160,8 @@ async def test_public_call_execution_header_and_spec_fallback():
                 )
                 assert resp_override.status_code == 200
                 data_override = resp_override.json()
-                assert data_override["execution"]["model"] == "gpt-5.6-luna"
-                assert data_override["execution"]["provider"] == "openai"
+                assert "openai" in data_override["data"]["humanReadableMessage"]
+                assert "gpt-5.6-luna" in data_override["data"]["humanReadableMessage"]
         except Exception as exc:
             import traceback
             traceback.print_exc()
@@ -268,12 +269,11 @@ async def test_ai_connection_failure_envelope():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             res = await ac.post(
                 "/v1/call/usr_test123",
-                headers={"Authorization": "Bearer call_sk_valid_key", "X-CALL-SPEC-ID": "ktp-parser"},
+                headers={"Authorization": "Bearer call_sk_valid_key", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
                 json={"prompt": "Test AI connection failure"},
             )
             assert res.status_code == 502
             data = res.json()
             assert data["meta"]["status"] == "failed"
             assert "EXECUTION_FAILED" in data["error"]["code"] or "CONNECTION" in data["error"]["code"]
-            assert data["error"]["actionable_step"] != ""
-
+            assert data["error"]["actionableStep"] != ""

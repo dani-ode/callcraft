@@ -15,6 +15,7 @@ from callcraft_api.db.models import (
     CallSpec,
     CallSpecVersion,
     Permission,
+    Project,
     Role,
     ServiceClient,
     SystemPrompt,
@@ -259,13 +260,37 @@ async def init_db(session: AsyncSession) -> None:
                 )
             )
 
-    # 6. Seed API Credentials
-    credentials_data = [
-        ("crd_01HZX01KEY00000000001", "usr_default_dev_01", "Default Production Key", "pk_live_default_key_01", "call_sk_live_default_dev_key_01", "production"),
-        ("crd_01HZX01KEY00000000002", "usr_default_dev_01", "Development Sandbox Key", "pk_test_sandbox_key_01", "call_sk_test_sandbox_dev_key_01", "sandbox"),
-        ("crd_01HZX01KEY00000000003", "usr_demo_developer_02", "Acme Production Gateway Key", "pk_live_acme_key_02", "call_sk_live_acme_gateway_key_02", "production"),
+    # 5.5 Seed Projects (MUST happen before api_credentials and call_specs)
+    projects_data = [
+        ("prj_01HZX01PROJECT000000001", "usr_default_dev_01", "Callcraft Platform", "callcraft-platform", "Proyek utama platform Callcraft — document parsing, identity verification, dan multimodal AI execution suite.", "#e1b329", "Feather"),
+        ("prj_01HZX01PROJECT000000002", "usr_default_dev_01", "Internal Tooling", "internal-tooling", "Alat bantu internal untuk tim Callcraft — expense automation dan receipt extractor.", "#6366f1", "Wrench"),
+        ("prj_01HZX01PROJECT000000003", "usr_demo_developer_02", "Acme Document Suite", "acme-document-suite", "Suite ekstraksi dokumen korporat untuk Acme Corp — invoice, kontrak, dan laporan keuangan.", "#10b981", "Boxes"),
+        ("prj_01HZX01PROJECT000000004", "usr_demo_engineer_04", "IDCheck KYC Engine", "idcheck-kyc-engine", "Mesin KYC berbasis AI untuk validasi identitas nasional Indonesia — e-KTP, SIM, dan Paspor RI.", "#f59e0b", "ShieldCheck"),
+        ("prj_01HZX01PROJECT000000005", "usr_demo_health_05", "MedTech Clinical Suite", "medtech-clinical-suite", "Suite analisis dokumen medis — resep dokter, laporan lab, dan resume rawat inap pasien.", "#ef4444", "Stethoscope"),
     ]
-    for cid, uid, cname, pkey, skey, cenv in credentials_data:
+    for prj_id, prj_uid, prj_name, prj_slug, prj_desc, prj_color, prj_icon in projects_data:
+        stmt = select(Project).where(Project.id == prj_id)
+        res = await session.execute(stmt)
+        if not res.scalar_one_or_none():
+            session.add(Project(
+                id=prj_id,
+                user_id=prj_uid,
+                name=prj_name,
+                slug=prj_slug,
+                description=prj_desc,
+                color=prj_color,
+                icon=prj_icon,
+                status="active",
+            ))
+    await session.flush()
+
+    # 6. Seed API Credentials (with project_id)
+    credentials_data = [
+        ("crd_01HZX01KEY00000000001", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "Default Production Key", "pk_live_default_key_01", "call_sk_live_default_dev_key_01", "production"),
+        ("crd_01HZX01KEY00000000002", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "Development Sandbox Key", "pk_test_sandbox_key_01", "call_sk_test_sandbox_dev_key_01", "sandbox"),
+        ("crd_01HZX01KEY00000000003", "usr_demo_developer_02", "prj_01HZX01PROJECT000000003", "Acme Production Gateway Key", "pk_live_acme_key_02", "call_sk_live_acme_gateway_key_02", "production"),
+    ]
+    for cid, uid, prj_id, cname, pkey, skey, cenv in credentials_data:
         stmt = select(ApiCredential).where(ApiCredential.public_key == pkey)
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
@@ -273,6 +298,7 @@ async def init_db(session: AsyncSession) -> None:
                 ApiCredential(
                     id=cid,
                     user_id=uid,
+                    project_id=prj_id,
                     name=cname,
                     public_key=pkey,
                     secret_key_hash=hash_secret_argon2(skey),
@@ -280,21 +306,22 @@ async def init_db(session: AsyncSession) -> None:
                 )
             )
 
-    # 7. Seed User AI Provider Encrypted Keys
+    # 7. Seed User AI Provider Encrypted Keys (with project_id)
     user_ai_providers_data = [
-        ("uap_01HZX01UAP000000000001", "usr_default_dev_01", "01HZX01PROVIDER00000000001", settings.gemini_api_key or "AIzaSyDummyGeminiKey_12345"),
-        ("uap_01HZX01UAP000000000002", "usr_default_dev_01", "01HZX01PROVIDER00000000002", settings.openai_api_key or "sk-proj-DummyOpenAIKey_12345"),
+        ("uap_01HZX01UAP000000000001", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000001", settings.gemini_api_key or "AIzaSyDummyGeminiKey_12345"),
+        ("uap_01HZX01UAP000000000002", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000002", settings.openai_api_key or "sk-proj-DummyOpenAIKey_12345"),
     ]
-    for uap_id, uid, pid, raw_key in user_ai_providers_data:
+    for uap_id, uid, prj_id, pid, raw_key in user_ai_providers_data:
         try:
             enc_key, nonce = encrypt_aes_256_gcm(raw_key, settings.master_encryption_key)
-            stmt = select(UserAiProvider).where(UserAiProvider.user_id == uid, UserAiProvider.provider_id == pid)
+            stmt = select(UserAiProvider).where(UserAiProvider.user_id == uid, UserAiProvider.project_id == prj_id, UserAiProvider.provider_id == pid)
             res = await session.execute(stmt)
             if not res.scalar_one_or_none():
                 session.add(
                     UserAiProvider(
                         id=uap_id,
                         user_id=uid,
+                        project_id=prj_id,
                         provider_id=pid,
                         encrypted_api_key=enc_key,
                         key_nonce=nonce,
@@ -339,10 +366,9 @@ async def init_db(session: AsyncSession) -> None:
             "categories": ["identity", "ocr", "kyc", "government"],
             "request_schema": {
                 "properties": {
-                    "image": {"type": "string", "description": "Base64 or URL of identity document image"},
-                    "prompt": {"type": "string", "description": "Optional guidelines"}
+                    "identity_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Identity document image or PDF file"}
                 },
-                "required": ["image"]
+                "required": ["identity_document"]
             },
             "response_schema": {
                 "properties": {
@@ -367,32 +393,32 @@ async def init_db(session: AsyncSession) -> None:
                     "nationality": {"type": "string", "required": True}
                 }
             },
-            "system_prompt": "Analisis dokumen identitas resmi yang diunggah (e-KTP Indonesia, SIM, atau Paspor RI). Tentukan jenis dokumen fisik dan eksekusi Tool Calling yang paling presisi.",
+            "positive_prompt": "Ekstrak data terstruktur kartu e-KTP Indonesia, SIM, atau Paspor RI dengan presisi tinggi.",
+            "negative_prompt": "Dilarang mengarang data jika informasi tidak tertera di gambar. Dilarang mengeksekusi tool_call jika dokumen bukan merupakan dokumen identitas resmi negara seperti e-KTP, SIM, atau Paspor RI (misal: Kartu Mahasiswa, Kartu Pelajar, Buku Tabungan, atau Struk).",
             "tools_config": {
                 "enabled": True,
                 "toolChoice": "auto",
-                "instruction": "Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen identitas resmi yang terdeteksi (e-KTP Indonesia vs SIM vs Paspor RI).",
                 "tools": [
                     {
                         "name": "extract_indonesian_ktp_identity",
                         "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia (NIK 16-digit, Nama Lengkap, Tempat/Tgl Lahir, Jenis Kelamin, Golongan Darah, Alamat Lengkap, RT/RW, Kel/Desa, Kecamatan, Agama, Status Perkawinan, Pekerjaan, Kewarganegaraan, Masa Berlaku).",
                         "agentRole": "Indonesian Identity & KYC Verification Specialist",
                         "textContext": "Khusus dokumen e-KTP (Kartu Tanda Penduduk) Republik Indonesia.",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                     {
                         "name": "extract_driver_license_permit",
                         "description": "Ekstraksi data terstruktur Surat Izin Mengemudi (SIM) / Driver License (Nomor SIM, Golongan SIM A/B1/B2/C/D, Nama Pemilik, Tempat/Tgl Lahir, Tinggi Badan, Pekerjaan, Alamat, Kab/Kota, Masa Berlaku).",
                         "agentRole": "Driver License Inspection Specialist",
                         "textContext": "Khusus dokumen SIM (Surat Izin Mengemudi) Republik Indonesia atau International Driver Permit.",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                     {
                         "name": "extract_republic_indonesia_passport",
                         "description": "Ekstraksi lengkap Paspor Republik Indonesia (Jenis Paspor, Kode Negara IDN, Nomor Paspor, Nama Lengkap, Kewarganegaraan, Tanggal Lahir, Jenis Kelamin, Tempat Dikeluarkan, Tanggal Dikeluarkan, Tanggal Habis Berlaku, Nomor Registrasi, Machine Readable Zone / MRZ Line 1 & Line 2).",
                         "agentRole": "Immigration & International Travel Document Inspector",
                         "textContext": "Khusus dokumen Paspor Resmi Republik Indonesia (Elektronik / Non-Elektronik).",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                 ],
             },
@@ -407,10 +433,10 @@ async def init_db(session: AsyncSession) -> None:
             "categories": ["finance", "retail", "accounting", "expenses"],
             "request_schema": {
                 "properties": {
-                    "image": {"type": "string"},
+                    "receipt_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Receipt or invoice image or PDF file"},
                     "currency_override": {"type": "string"}
                 },
-                "required": ["image"]
+                "required": ["receipt_document"]
             },
             "response_schema": {
                 "properties": {
@@ -457,32 +483,32 @@ async def init_db(session: AsyncSession) -> None:
                     }
                 }
             },
-            "system_prompt": "Analisis dokumen transaksi keuangan yang diunggah. Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Struk Kasir Retail vs Corporate Invoice B2B vs Rekening Koran Bank).",
+            "positive_prompt": "Ekstrak rincian transaksi kasir retail, faktur B2B corporate, atau mutasi rekening koran bank.",
+            "negative_prompt": "Jangan rekayasa angka atau jumlah pembayaran. Dilarang mengeksekusi tool_call jika dokumen bukan merupakan bukti transaksi keuangan yang valid.",
             "tools_config": {
                 "enabled": True,
                 "toolChoice": "auto",
-                "instruction": "Pilih 1 tool_call yang paling sesuai dengan tipe transaksi finansial (Struk Kasir Retail vs Faktur Tagihan Corporate Invoice B2B vs Laporan Mutasi Rekening Koran Bank).",
                 "tools": [
                     {
                         "name": "extract_retail_store_receipt",
                         "description": "Ekstraksi struk kasir toko/restoran (Nama Merchant, Tanggal Transaksi, Line Items Rincian Barang, Subtotal, Tax/PPN, Service Charge, Total Bayar, Metode Pembayaran).",
                         "agentRole": "Retail Expense Audit Agent",
                         "textContext": "Untuk struk kasir toko, minimarket, kwitansi, dan resto.",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                     {
                         "name": "extract_corporate_tax_invoice",
                         "description": "Ekstraksi faktur pajak dan tagihan B2B corporate (Invoice Number, Vendor Name, Buyer Company, NPWP, Invoice Date, Due Date, Tax Amount, Line Items, Total Amount).",
                         "agentRole": "Corporate Accounts Payable Auditor",
                         "textContext": "Untuk dokumen invoice tagihan B2B dan faktur pajak.",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                     {
                         "name": "extract_bank_account_statement",
                         "description": "Ekstraksi Laporan Mutasi Rekening Koran Bank (Nama Bank, Nama Pemilik Rekening, Nomor Rekening / IBAN, Periode Laporan, Saldo Awal, Total Debet, Total Kredit, Saldo Akhir, Rincian Baris Mutasi [Tanggal, Uraian Keterangan Transaksi, Saldo Debet/Kredit, Running Balance]).",
                         "agentRole": "Bank Statement Reconciliation & Financial Audit Specialist",
                         "textContext": "Khusus dokumen rekening koran bank (BCA, Mandiri, BRI, BNI, CIMB, atau Internasional).",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                 ],
             },
@@ -497,10 +523,10 @@ async def init_db(session: AsyncSession) -> None:
             "categories": ["medical", "diagnostics", "healthcare", "pharma"],
             "request_schema": {
                 "properties": {
-                    "image": {"type": "string"},
+                    "medical_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Medical document or lab result file"},
                     "patient_id_override": {"type": "string"}
                 },
-                "required": ["image"]
+                "required": ["medical_document"]
             },
             "response_schema": {
                 "properties": {
@@ -550,32 +576,32 @@ async def init_db(session: AsyncSession) -> None:
                     }
                 }
             },
-            "system_prompt": "Analisis dokumen medis/kesehatan yang diunggah. Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen (Resep Obat Dokter vs Laporan Lab Medis vs Resume Medis Rawat Inap).",
+            "positive_prompt": "Ekstrak data resep dokter, laporan laboratorium medis, atau ringkasan pasien pulang rawat inap.",
+            "negative_prompt": "Dilarang mengasumsikan dosis obat atau hasil lab yang tidak tertera pada dokumen. Dilarang mengeksekusi tool_call jika dokumen bukan lembar medis yang valid.",
             "tools_config": {
                 "enabled": True,
                 "toolChoice": "auto",
-                "instruction": "Pilih 1 tool_call yang paling sesuai dengan dokumen kesehatan (Resep Dokter vs Laporan Hasil Lab Medis vs Resume Medis Pasien Rawat Inap).",
                 "tools": [
                     {
                         "name": "extract_doctor_prescription",
                         "description": "Ekstraksi lembar resep obat dokter (Nama Pasien, Umur, Nama Dokter, Tanggal Resep, Daftar Obat, Dosis & Signa Aturan Pakai).",
                         "agentRole": "Clinical Pharmacology Specialist",
                         "textContext": "Untuk resep obat dari dokter, klinik, dan apotek.",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                     {
                         "name": "extract_medical_lab_result",
                         "description": "Ekstraksi laporan lab medis (Nama Pasien, Tanggal Tes, Nama Fasilitas Medis, Parameter Tes Lab, Nilai Hasil, Nilai Rujukan Normal).",
                         "agentRole": "Clinical Diagnostics Inspector",
                         "textContext": "Untuk hasil pemeriksaan laboratorium darah, tes urine, dan diagnostik medis.",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                     {
                         "name": "extract_clinical_discharge_resume",
                         "description": "Ekstraksi resume medis / Ringkasan Pasien Pulang (Nama Pasien, Tanggal Masuk RS, Tanggal Keluar RS, Diagnosa Utama ICD-10, Diagnosa Sekunder, Prosedur Medis, Kondisi Pulang).",
                         "agentRole": "Hospital Medical Record Auditor & Clinical Summary Specialist",
                         "textContext": "Khusus lembar resume medis dan ringkasan perawatan rawat inap rumah sakit.",
-                        "includeImageContext": True,
+                        "includeImageContext": False,
                     },
                 ],
             },
@@ -619,7 +645,10 @@ async def init_db(session: AsyncSession) -> None:
                     categories=tmpl.get("categories", [tmpl["category"]]),
                     request_schema=tmpl["request_schema"],
                     response_schema=tmpl["response_schema"],
-                    system_prompt=tmpl["system_prompt"],
+                    positive_prompt=tmpl.get("positive_prompt"),
+                    negative_prompt=tmpl.get("negative_prompt"),
+                    additional_prompt=tmpl.get("additional_prompt", "Opsional: Instruksi tambahan dari user..."),
+                    allow_additional_prompt=tmpl.get("allow_additional_prompt", True),
                     tools_config=tmpl.get("tools_config", {}),
                     is_official=True,
                     is_published=True,
@@ -654,6 +683,7 @@ async def init_db(session: AsyncSession) -> None:
         (
             "spc_01HZX01SPEC0000000001",
             "usr_default_dev_01",
+            "prj_01HZX01PROJECT000000001",
             "tmpl_id_ktp",
             "Government Identity Document Verification",
             "ktp-parser",
@@ -664,6 +694,7 @@ async def init_db(session: AsyncSession) -> None:
         (
             "spc_01HZX01SPEC0000000002",
             "usr_default_dev_01",
+            "prj_01HZX01PROJECT000000002",
             "tmpl_retail_receipt",
             "Financial Receipt & Invoice Suite",
             "receipt-extractor",
@@ -674,6 +705,7 @@ async def init_db(session: AsyncSession) -> None:
         (
             "spc_01HZX01SPEC0000000003",
             "usr_default_dev_01",
+            "prj_01HZX01PROJECT000000001",
             "tmpl_medical_prescription",
             "Medical Prescription Scanner",
             "prescription-parser",
@@ -685,7 +717,7 @@ async def init_db(session: AsyncSession) -> None:
 
     tmpl_map = {t["id"]: t for t in templates_data}
 
-    for sid, suid, stpid, sname, sslug, sdesc, sresp, mident in specs_data:
+    for sid, suid, sprj_id, stpid, sname, sslug, sdesc, sresp, mident in specs_data:
         stmt = select(CallSpec).where(CallSpec.user_id == suid, CallSpec.slug == sslug)
         res = await session.execute(stmt)
         spec_obj = res.scalar_one_or_none()
@@ -695,6 +727,7 @@ async def init_db(session: AsyncSession) -> None:
             spec_obj = CallSpec(
                 id=sid,
                 user_id=suid,
+                project_id=sprj_id,
                 published_template_id=stpid,
                 name=sname,
                 slug=sslug,
@@ -715,7 +748,8 @@ async def init_db(session: AsyncSession) -> None:
                     version_number=1,
                     request_schema=matched_tmpl.get("request_schema"),
                     response_schema=sresp,
-                    system_prompt=matched_tmpl.get("system_prompt", "Extract document structured fields accurately."),
+                    positive_prompt=matched_tmpl.get("positive_prompt"),
+                    negative_prompt=matched_tmpl.get("negative_prompt"),
                     preferred_model_id=model_map.get(mident),
                     use_external_api_key=True,
                     external_model_name=mident,
@@ -730,7 +764,7 @@ async def init_db(session: AsyncSession) -> None:
         ("req_01HZX01REQ000000000002", "req_live_01HZX01BBB88", "usr_default_dev_01", "spc_01HZX01SPEC0000000002", "ver_01HZX01SPEC0000000002", "crd_01HZX01KEY00000000001", "gemini", "gemini-3.6-flash", "SUCCESS", 200, "base64", 285400, 850, 1250, 310, 1560, 0.000186, "198.51.100.42", "Node/v20.11.0", now - timedelta(minutes=45)),
         ("req_01HZX01REQ000000000003", "req_live_01HZX01CCC77", "usr_default_dev_01", "spc_01HZX01SPEC0000000003", "ver_01HZX01SPEC0000000003", "crd_01HZX01KEY00000000001", "openai", "gpt-5.6-luna", "SUCCESS", 200, "url", 98400, 640, 890, 180, 1070, 0.004025, "203.0.113.15", "curl/7.88.1", now - timedelta(hours=2)),
         ("req_01HZX01REQ000000000004", "req_live_01HZX01DDD66", "usr_default_dev_01", "spc_01HZX01SPEC0000000001", "ver_01HZX01SPEC0000000001", "crd_01HZX01KEY00000000001", "gemini", "gemini-3.6-flash", "VALIDATION_ERROR", 422, "base64", 12000, 45, 0, 0, 0, 0.000000, "198.51.100.42", "python-requests/2.31.0", now - timedelta(hours=5)),
-        ("req_01HZX01REQ000000000005", "req_live_01HZX01EEE55", "usr_default_dev_01", "spc_01HZX01SPEC0000000004", "ver_01HZX01SPEC0000000004", "crd_01HZX01KEY00000000001", "anthropic", "claude-sonnet-5", "SUCCESS", 200, "url", 310500, 1120, 1420, 260, 1680, 0.008160, "172.56.21.9", "Go-http-client/1.1", now - timedelta(hours=12)),
+        ("req_01HZX01REQ000000000005", "req_live_01HZX01EEE55", "usr_default_dev_01", "spc_01HZX01SPEC0000000002", "ver_01HZX01SPEC0000000002", "crd_01HZX01KEY00000000001", "anthropic", "claude-sonnet-5", "SUCCESS", 200, "url", 310500, 1120, 1420, 260, 1680, 0.008160, "172.56.21.9", "Go-http-client/1.1", now - timedelta(hours=12)),
     ]
 
     for log_id, req_id, log_uid, spec_id, ver_id, cred_id, pcode, mident, st, hst, itype, isize, ptime, ptok, ctok, ttok, cost, ip, ua, log_created in logs_data:

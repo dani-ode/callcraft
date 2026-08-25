@@ -15,6 +15,12 @@ def generate_ai_tool_schema(
         if field_def.required:
             required_fields.append(field_name)
 
+    # Attach _ai_commentary parameter so AI generates dynamic contextual commentary for humanReadableMessage
+    properties_json["_ai_commentary"] = {
+        "type": "string",
+        "description": "Komentar/penjelasan ringkas manusiawi dari AI mengenai hasil analisis dokumen ini (misal: jenis dokumen yang ditemukan, atau penjelasan/alasan jika dokumen tidak sesuai atau bingung/tidak jelas).",
+    }
+
     return {
         "type": "function",
         "function": {

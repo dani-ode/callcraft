@@ -17,6 +17,7 @@ import {
   Trash2,
   AlertTriangle,
   FlaskConical,
+  MessageSquarePlus,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SchemaField } from "@/components/schema-builder/types";
@@ -36,8 +37,10 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
   const [specName, setSpecName] = useState("");
   const [specSlug, setSpecSlug] = useState(params.id || "");
   const [selectedModel, setSelectedModel] = useState("gemini-3.6-flash");
-  const [systemPrompt, setSystemPrompt] = useState("");
   const [extractionPrompt, setExtractionPrompt] = useState("");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [additionalPrompt, setAdditionalPrompt] = useState("");
+  const [allowAdditionalPrompt, setAllowAdditionalPrompt] = useState(true);
   const [useExternalApiKey, setUseExternalApiKey] = useState(true);
   const [toolsConfig, setToolsConfig] = useState<ToolCallingConfig>({
     enabled: true,
@@ -92,11 +95,17 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
         if (!isMounted || !specObj) return;
         if (specObj.name) setSpecName(specObj.name);
         if (specObj.slug) setSpecSlug(specObj.slug);
-        if (specObj.systemPrompt !== undefined) {
-          setSystemPrompt(specObj.systemPrompt || "");
+        if (specObj.positivePrompt !== undefined || specObj.extractionPrompt !== undefined) {
+          setExtractionPrompt(specObj.positivePrompt || specObj.extractionPrompt || "");
         }
-        if (specObj.extractionPrompt !== undefined) {
-          setExtractionPrompt(specObj.extractionPrompt || "");
+        if (specObj.negativePrompt !== undefined) {
+          setNegativePrompt(specObj.negativePrompt || "");
+        }
+        if (specObj.additionalPrompt !== undefined) {
+          setAdditionalPrompt(specObj.additionalPrompt || "");
+        }
+        if (specObj.allowAdditionalPrompt !== undefined) {
+          setAllowAdditionalPrompt(specObj.allowAdditionalPrompt);
         }
         if (specObj.useExternalApiKey !== undefined) {
           setUseExternalApiKey(specObj.useExternalApiKey);
@@ -202,8 +211,11 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           requestSchema: requestSchemaObj,
           responseSchema: responseSchemaObj,
           toolsConfig: toolsConfig,
-          systemPrompt: systemPrompt,
+          positivePrompt: extractionPrompt,
           extractionPrompt: extractionPrompt,
+          negativePrompt: negativePrompt,
+          additionalPrompt: additionalPrompt,
+          allowAdditionalPrompt: allowAdditionalPrompt,
           useExternalApiKey: useExternalApiKey,
           externalModelName: selectedModel,
         });
@@ -219,8 +231,11 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           requestSchema: requestSchemaObj,
           responseSchema: responseSchemaObj,
           toolsConfig: toolsConfig,
-          systemPrompt: systemPrompt,
+          positivePrompt: extractionPrompt,
           extractionPrompt: extractionPrompt,
+          negativePrompt: negativePrompt,
+          additionalPrompt: additionalPrompt,
+          allowAdditionalPrompt: allowAdditionalPrompt,
           useExternalApiKey: useExternalApiKey,
           externalModelName: selectedModel,
         });
@@ -229,8 +244,10 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           const specObj = updatedSpec as any;
           if (specObj.name) setSpecName(specObj.name);
           if (specObj.slug) setSpecSlug(specObj.slug);
-          if (specObj.systemPrompt !== undefined) setSystemPrompt(specObj.systemPrompt || "");
-          if (specObj.extractionPrompt !== undefined) setExtractionPrompt(specObj.extractionPrompt || "");
+          if (specObj.positivePrompt !== undefined || specObj.extractionPrompt !== undefined) setExtractionPrompt(specObj.positivePrompt || specObj.extractionPrompt || "");
+          if (specObj.negativePrompt !== undefined) setNegativePrompt(specObj.negativePrompt || "");
+          if (specObj.additionalPrompt !== undefined) setAdditionalPrompt(specObj.additionalPrompt || "");
+          if (specObj.allowAdditionalPrompt !== undefined) setAllowAdditionalPrompt(specObj.allowAdditionalPrompt);
           if (specObj.useExternalApiKey !== undefined) setUseExternalApiKey(specObj.useExternalApiKey);
           if (specObj.externalModelName) setSelectedModel(specObj.externalModelName);
 
@@ -248,9 +265,7 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
         setTimeout(() => setSaveSuccess(false), 3500);
       }
     } catch (err: any) {
-      console.error("[Callcraft Builder] Save error:", err);
-      setSaveError(err.message || "Failed to save schema");
-      setTimeout(() => setSaveError(null), 5000);
+      setSaveError(err.message || "Failed to save Call Spec");
     } finally {
       setIsSaving(false);
     }
@@ -485,40 +500,69 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
                 setSpecSlug={setSpecSlug}
                 selectedModel={selectedModel}
                 setSelectedModel={setSelectedModel}
-                systemPrompt={systemPrompt}
-                setSystemPrompt={setSystemPrompt}
+                positivePrompt={extractionPrompt}
                 extractionPrompt={extractionPrompt}
                 setExtractionPrompt={setExtractionPrompt}
+                negativePrompt={negativePrompt}
+                setNegativePrompt={setNegativePrompt}
                 useExternalApiKey={useExternalApiKey}
                 setUseExternalApiKey={setUseExternalApiKey}
                 currentProviderStatus={providerKeyStatus[getProviderFromModel(selectedModel)] || { active: true, label: "Provider Active" }}
               />
-            ) : currentFieldList.length > 0 ? (
-              <FieldListRenderer
-                fields={currentFieldList}
-                allRootFields={currentFieldList}
-                onChange={setCurrentFieldList}
-                onDelete={handleDeleteField}
-                selectedFieldId={selectedFieldId}
-                onSelectFieldId={setSelectedFieldId}
-              />
             ) : (
-              <div className="text-center py-12 space-y-3">
-                <div className="p-3 rounded-2xl bg-[#e1b329]/15 inline-block text-[#e1b329]">
-                  <Code className="w-8 h-8" />
-                </div>
-                <h3 className="text-sm font-bold">No fields defined yet</h3>
-                <p className="text-xs opacity-75 max-w-xs mx-auto">
-                  Click &quot;Add Property&quot; to define fields for your schema.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleAddField}
-                  className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-xs font-extrabold shadow-md inline-flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add First Field</span>
-                </button>
+              <div className="space-y-3">
+                {activeTab === "request" && (
+                  <div className="p-3.5 rounded-2xl bg-[#edd6bb]/25 dark:bg-slate-900/60 border border-[#edd6bb]/40 dark:border-slate-800 flex items-center justify-between shadow-sm">
+                    <div>
+                      <div className="text-xs font-extrabold text-[#2c1d11] dark:text-[#edd6bb] flex items-center gap-1.5">
+                        <MessageSquarePlus className="w-4 h-4 text-[#e1b329]" />
+                        <span>Request Additional Prompt (User Instruction)</span>
+                      </div>
+                      <p className="text-[11px] text-[#8a715e] dark:text-slate-400 mt-0.5">
+                        Izinkan pemanggil API / Playground menyertakan instruksi tambahan kustom (<code className="font-mono text-[10px]">prompt</code>). Default: <strong className="text-emerald-600 dark:text-emerald-400">True</strong>
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                      <input
+                        type="checkbox"
+                        checked={allowAdditionalPrompt}
+                        onChange={(e) => setAllowAdditionalPrompt(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#e1b329]"></div>
+                    </label>
+                  </div>
+                )}
+
+                {currentFieldList.length > 0 ? (
+                  <FieldListRenderer
+                    fields={currentFieldList}
+                    allRootFields={currentFieldList}
+                    onChange={setCurrentFieldList}
+                    onDelete={handleDeleteField}
+                    selectedFieldId={selectedFieldId}
+                    onSelectFieldId={setSelectedFieldId}
+                    isRequestSchema={activeTab === "request"}
+                  />
+                ) : (
+                  <div className="text-center py-12 space-y-3">
+                    <div className="p-3 rounded-2xl bg-[#e1b329]/15 inline-block text-[#e1b329]">
+                      <Code className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-sm font-bold">No fields defined yet</h3>
+                    <p className="text-xs opacity-75 max-w-xs mx-auto">
+                      Click &quot;Add Property&quot; to define fields for your schema.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleAddField}
+                      className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#ffb443] text-slate-950 text-xs font-extrabold shadow-md inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add First Field</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

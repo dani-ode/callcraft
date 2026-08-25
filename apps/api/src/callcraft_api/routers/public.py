@@ -2,7 +2,7 @@ import re
 import time
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import ulid
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -53,51 +53,20 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client and request.client.host else "127.0.0.1"
 
 
-def _parse_dict_to_field_def(fmeta: dict, is_required: bool = True) -> FieldDefinition:
-    ftype_str = fmeta.get("type", "string").lower()
-    try:
-        ptype = PlatformDataType(ftype_str)
-    except ValueError:
-        ptype = PlatformDataType.STRING
-
-    sub_props = None
-    if ptype == PlatformDataType.OBJECT and "properties" in fmeta and isinstance(fmeta["properties"], dict):
-        sub_req_list = fmeta.get("required") or []
-        if not isinstance(sub_req_list, list):
-            sub_req_list = []
-        sub_props = {}
-        for sub_name, sub_meta in fmeta["properties"].items():
-            if isinstance(sub_meta, dict):
-                sub_req = sub_meta.get("required")
-                if isinstance(sub_req, bool):
-                    sub_is_req = sub_req
-                elif sub_req_list:
-                    sub_is_req = sub_name in sub_req_list
-                else:
-                    sub_is_req = True
-                sub_props[sub_name] = _parse_dict_to_field_def(sub_meta, is_required=sub_is_req)
-
-    sub_items = None
-    if ptype == PlatformDataType.ARRAY and "items" in fmeta and isinstance(fmeta["items"], dict):
-        sub_items = _parse_dict_to_field_def(fmeta["items"], is_required=True)
-
-    enum_vals = fmeta.get("enum_values") or fmeta.get("enum")
-
-    return FieldDefinition(
-        type=ptype,
-        description=fmeta.get("description"),
-        required=is_required,
-        enum_values=enum_vals,
-        properties=sub_props,
-        items=sub_items,
-    )
+from callcraft_api.services.execution_service import (
+    build_execution_trace_steps,
+    parse_dict_to_field_def,
+)
 
 
 class CallRequestPayload(BaseModel):
+    model_config = {"extra": "allow"}
+
     image: Optional[str] = Field(default=None, description="Base64 encoded string or URL of document/image/pdf")
     file: Optional[str] = Field(default=None, description="Alternative alias for image/pdf input stream")
     pdf: Optional[str] = Field(default=None, description="Alternative alias for PDF input stream")
-    prompt: Optional[str] = Field(default=None, description="Optional custom user prompt override")
+    prompt: Optional[str] = Field(default=None, description="Optional custom positive user prompt override")
+    negative_prompt: Optional[str] = Field(default=None, alias="negativePrompt", description="Optional negative prompt (prohibitions & constraints)")
     variables: Optional[Dict[str, Any]] = Field(default=None, description="Dynamic JSON context variables")
     ai_api_key: Optional[str] = Field(default=None, description="External AI API Key when external key mode is active")
     ai_model_name: Optional[str] = Field(default=None, description="External AI Model Name when external key mode is active")
@@ -130,7 +99,7 @@ async def execute_callcraft(
     )
     should_show_prompt = bool(show_prompt_hdr and show_prompt_hdr.strip().lower() == "true")
 
-    # 1. Authenticate Bearer API Key dynamically against DB credentials
+    # 1. Authenticate Bearer API Key dynamically against DB credentials (STRICT - NO FALLBACKS)
     if not authorization or not authorization.startswith("Bearer "):
         return create_error_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -141,15 +110,27 @@ async def execute_callcraft(
             start_time=start_time,
         )
 
+    if not x_call_public_key or not x_call_public_key.strip():
+        return create_error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="MISSING_PUBLIC_KEY",
+            message="Header 'X-CALL-PUBLIC-KEY' wajib diisi untuk verifikasi identitas API Key",
+            actionable_step="Sertakan header 'X-CALL-PUBLIC-KEY: pk_live_...' pada request API Anda.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
     secret_key = authorization.replace("Bearer ", "").strip()
-    cred = await Repository.verify_api_credential(db, secret_key, public_key=x_call_public_key)
-    
-    if not cred and not secret_key.startswith("call_sk_"):
+    cred = await Repository.verify_api_credential(
+        db, secret_key, public_key=x_call_public_key.strip(), user_id=user_id
+    )
+
+    if not cred:
         return create_error_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
             error_code="INVALID_API_KEY",
-            message="Kunci rahasia API (secret key) tidak valid atau telah dicabut",
-            actionable_step="Gunakan API Secret Key aktif dari dashboard Callcraft (menu API Keys).",
+            message="Kunci API (Public Key / Secret Key) tidak valid, tidak cocok, atau telah dicabut",
+            actionable_step="Gunakan pasangan Public Key dan Secret Key aktif dari akun Anda.",
             request_id=request_id,
             start_time=start_time,
         )
@@ -199,6 +180,21 @@ async def execute_callcraft(
         cached_spec = spec_data
         await redis_service.set_spec(user_id, spec_slug, cached_spec)
 
+    # 2b. Enforce strict Project Isolation between Customer API Key and target Call Spec
+    cred_project_id = cred.get("project_id") if cred else None
+    spec_project_id = cached_spec.get("projectId") if cached_spec else None
+    if cred_project_id and spec_project_id and cred_project_id != spec_project_id:
+        logger.warning(f"Project mismatch during API execution: Key project '{cred_project_id}' != Spec project '{spec_project_id}'")
+        return create_error_response(
+            status_code=status.HTTP_403_FORBIDDEN,
+            error_code="PROJECT_MISMATCH",
+            message="Akses Ditolak: Kunci API yang Anda gunakan terikat dengan project yang berbeda dari Call Spec ini.",
+            details=[{"cred_project_id": cred_project_id, "spec_project_id": spec_project_id}],
+            actionable_step="Gunakan API Key yang terdaftar pada project yang sama dengan Call Spec yang dieksekusi.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
     # 3. Model & AI Provider Resolution Flow from Database
     header_key = x_ai_api_key or payload.ai_api_key
     header_model = x_ai_model_name or payload.ai_model_name
@@ -234,11 +230,10 @@ async def execute_callcraft(
     if use_external_key and header_key:
         active_api_key = header_key
     else:
-        user_ai_key = await Repository.get_user_ai_provider_key(db, user_id, provider_code)
+        user_ai_key = await Repository.get_user_ai_provider_key(db, user_id, provider_code, project_id=spec_project_id)
         active_api_key = (
             user_ai_key
             or cached_spec.get("externalApiKey")
-            or getattr(settings, f"{provider_code}_api_key", None)
         )
 
     if not active_api_key:
@@ -253,40 +248,42 @@ async def execute_callcraft(
 
     adapter = get_adapter(provider_code)
 
-    # 4. Process Image / PDF Input Stream directly in RAM
-    input_source = payload.pdf or payload.file or payload.image
-    image_bytes = None
-    mime_type = None
-    input_type = "none"
-    input_size_bytes = 0
+    # 4. Process Image / PDF Input Streams directly in RAM (Support multiple images/documents)
+    image_files: List[Tuple[bytes, str]] = []
 
-    if input_source:
-        input_type = "url" if input_source.startswith(("http://", "https://")) else "base64"
-        try:
-            image_bytes, mime_type = await process_image_input(input_source)
-            input_size_bytes = len(image_bytes)
-        except SsrfError as e:
-            return create_error_response(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                error_code="SSRF_SECURITY_VIOLATION",
-                message=f"Pelanggaran keamanan SSRF: {e}",
-                actionable_step="Gunakan URL dokumen publik yang aman atau kirimkan string Base64.",
-                request_id=request_id,
-                start_time=start_time,
-            )
-        except BufferHandlerError as e:
-            return create_error_response(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                error_code="INVALID_INPUT_STREAM",
-                message=f"Gagal memproses file/dokumen: {e}",
-                details=[{"field": "image", "issue": str(e)}],
-                actionable_step="Pastikan dokumen berformat gambar (PNG/JPG) atau PDF yang valid.",
-                request_id=request_id,
-                start_time=start_time,
-            )
+    async def _process_and_append_source(src: Any):
+        if not src:
+            return
+        if isinstance(src, str) and (src.startswith(("http://", "https://", "data:")) or len(src) > 100):
+            try:
+                b, m = await process_image_input(src)
+                if b:
+                    image_files.append((b, m))
+            except Exception as e:
+                logger.warning(f"[Callcraft API] Error processing image source: {e}")
+        elif isinstance(src, list):
+            for item in src:
+                await _process_and_append_source(item)
 
+    extra_fields = (payload.model_extra or {}) if hasattr(payload, "model_extra") else {}
+    if extra_fields:
+        for k, v in extra_fields.items():
+            await _process_and_append_source(v)
 
+    payload_data = getattr(payload, "data", None)
+    if payload_data and isinstance(payload_data, dict):
+        for k, v in payload_data.items():
+            await _process_and_append_source(v)
 
+    if not image_files:
+        await _process_and_append_source(payload.pdf)
+        await _process_and_append_source(payload.file)
+        await _process_and_append_source(payload.image)
+
+    image_bytes = image_files[0][0] if image_files else None
+    mime_type = image_files[0][1] if image_files else None
+    input_type = "multi" if len(image_files) > 1 else ("base64" if image_files else "none")
+    input_size_bytes = sum(len(b) for b, _ in image_files)
 
     # 5. Construct Response Schema & Tool Calling JSON Schema
     raw_resp_schema = cached_spec.get("responseSchema") or {}
@@ -308,7 +305,7 @@ async def execute_callcraft(
         else:
             is_req = True
 
-        field_defs[fname] = _parse_dict_to_field_def(fmeta, is_required=is_req)
+        field_defs[fname] = parse_dict_to_field_def(fmeta, is_required=is_req)
     
     response_schema_obj = ResponseSchema(properties=field_defs)
 
@@ -339,56 +336,139 @@ async def execute_callcraft(
     if not configured_agent_name:
         configured_agent_name = "vision_parser" if image_bytes else "data_retriever"
 
-    # Build multi-agent & tool calling prompt instructions dynamically
-    system_prompt = cached_spec.get("systemPrompt") or ""
-    if tools_cfg.get("instruction") or tools_list:
-        tool_instr_parts = []
-        if tools_cfg.get("instruction"):
-            tool_instr_parts.append(f"Instruction: {tools_cfg.get('instruction')}")
-        if tools_list:
-            tool_instr_parts.append("Available Tool Actions:")
-            for t in tools_list:
-                if isinstance(t, dict) and t.get("name"):
-                    tool_instr_parts.append(f"- {t.get('name')}: {t.get('description', '')}")
-        
-        system_prompt = (system_prompt + "\n\n[Tool Calling & Multi-Agent Execution Configuration]\n" + "\n".join(tool_instr_parts)).strip()
+    # Generate tool schemas for all tools in tools_list so the AI model can perform pure autonomous tool selection
+    tools_schemas: List[Dict[str, Any]] = []
+    if tools_list:
+        for t in tools_list:
+            if isinstance(t, dict) and t.get("name"):
+                tn = str(t.get("name")).strip()
+                td = str(t.get("description") or f"Extract structured data for {tn}").strip()
+                ctx = t.get("context") if isinstance(t.get("context"), dict) else {}
+                ctx_imgs = t.get("imagesContext") or ctx.get("imagesContext") or []
+                if ctx_imgs and isinstance(ctx_imgs, list) and len(ctx_imgs) > 0:
+                    td += f" [Multimodal Reference Image Context: {len(ctx_imgs)} sample documents attached]"
+                ts = generate_ai_tool_schema(tn, td, response_schema_obj)
+                tools_schemas.append(ts)
 
-    tool_schema = generate_ai_tool_schema(configured_tool_name, configured_tool_desc, response_schema_obj)
+    if not tools_schemas:
+        slug_name = (cached_spec.get("slug") or "").replace("-", "_").strip()
+        def_name = f"extract_{slug_name}" if slug_name else "extract_data"
+        def_desc = f"Extract structured data for {cached_spec.get('name', 'specification')}"
+        tools_schemas = [generate_ai_tool_schema(def_name, def_desc, response_schema_obj)]
 
-    user_prompt = payload.prompt or cached_spec.get("extractionPrompt") or ""
+    # 5. Build prompt builder strictly with Positive Prompt, Additional Prompt (if allowed), and Negative Prompt
+    positive_prompt = cached_spec.get("positivePrompt") or cached_spec.get("extractionPrompt") or ""
+    negative_prompt = cached_spec.get("negativePrompt") or ""
+
+    allow_add_prompt = cached_spec.get("allowAdditionalPrompt")
+    if allow_add_prompt is None:
+        allow_add_prompt = True
+
+    additional_user_prompt = ""
+    if allow_add_prompt:
+        payload_data = getattr(payload, "data", None)
+        user_input_prompt = payload.prompt or (payload_data.get("prompt") if isinstance(payload_data, dict) else None)
+        additional_user_prompt = user_input_prompt or cached_spec.get("additionalPrompt") or ""
 
     # Interpolate dynamic template variables {{variable_name}} if payload.variables is provided
     if payload.variables and isinstance(payload.variables, dict):
         for k, v in payload.variables.items():
             placeholder = f"{{{{{k}}}}}"
-            if system_prompt and placeholder in system_prompt:
-                system_prompt = system_prompt.replace(placeholder, str(v))
-            if user_prompt and placeholder in user_prompt:
-                user_prompt = user_prompt.replace(placeholder, str(v))
+            if positive_prompt and placeholder in positive_prompt:
+                positive_prompt = positive_prompt.replace(placeholder, str(v))
+            if negative_prompt and placeholder in negative_prompt:
+                negative_prompt = negative_prompt.replace(placeholder, str(v))
+
+    # Collect all dynamic request payload fields (e.g. text inputs or custom schema parameters sent by client)
+    request_inputs = {}
+    extra_fields = (payload.model_extra or {}) if hasattr(payload, "model_extra") else {}
+    if extra_fields:
+        for k, v in extra_fields.items():
+            if k in ("prompt", "negativePrompt", "negative_prompt", "variables", "ai_api_key", "ai_model_name", "image", "file", "pdf"):
+                continue
+            request_inputs[k] = v
+
+    payload_data = getattr(payload, "data", None)
+    if payload_data and isinstance(payload_data, dict):
+        for k, v in payload_data.items():
+            if k in ("prompt", "negativePrompt", "negative_prompt", "variables", "ai_api_key", "ai_model_name", "image", "file", "pdf"):
+                continue
+            request_inputs[k] = v
 
     # Construct complete prompt builder text matching exact AI input JSON
     import json
     prompt_parts = []
-    if system_prompt:
-        prompt_parts.append(f"=== SYSTEM PROMPT ===\n{system_prompt}")
-    if user_prompt:
-        prompt_parts.append(f"=== USER EXTRACTION PROMPT ===\n{user_prompt}")
+    if positive_prompt:
+        prompt_parts.append(f"=== POSITIVE PROMPT ===\n{positive_prompt}")
+    if additional_user_prompt:
+        prompt_parts.append(f"=== ADDITIONAL PROMPT (USER INSTRUCTION) ===\n{additional_user_prompt}")
+    if negative_prompt:
+        prompt_parts.append(f"=== NEGATIVE PROMPT ===\n{negative_prompt}")
+    if request_inputs:
+        prompt_parts.append(f"=== REQUEST PAYLOAD INPUTS ===\n{json.dumps(request_inputs, indent=2)}")
     if payload.variables and isinstance(payload.variables, dict) and payload.variables:
         prompt_parts.append(f"=== INPUT CONTEXT VARIABLES ===\n{json.dumps(payload.variables, indent=2)}")
-    if tool_schema:
-        prompt_parts.append(f"=== AI TOOL SCHEMA ({configured_tool_name}) ===\n{json.dumps(tool_schema, indent=2)}")
+    if tools_schemas:
+        if len(tools_schemas) == 1:
+            ts_copy = json.loads(json.dumps(tools_schemas[0]))
+            if isinstance(ts_copy, dict) and isinstance(ts_copy.get("function"), dict) and isinstance(ts_copy["function"].get("parameters"), dict) and isinstance(ts_copy["function"]["parameters"].get("properties"), dict):
+                ts_copy["function"]["parameters"]["properties"].pop("_ai_commentary", None)
+            func_obj = ts_copy.get("function", ts_copy)
+            fn_name = func_obj.get("name", "extract_data") if isinstance(func_obj, dict) else "extract_data"
+            prompt_parts.append(f"=== AI TOOL SCHEMA ({fn_name}) ===\n{json.dumps(ts_copy, indent=2)}")
+        else:
+            schemas_desc = ["Available Function Tools Declared:"]
+            for ts in tools_schemas:
+                func_obj = ts.get("function", ts)
+                if isinstance(func_obj, dict):
+                    schemas_desc.append(f"- {func_obj.get('name')}: {func_obj.get('description', '')}")
+
+            first_func = tools_schemas[0].get("function", {}) if isinstance(tools_schemas[0], dict) else {}
+            params_raw = first_func.get("parameters", {}) if isinstance(first_func, dict) else {}
+            params_clean = json.loads(json.dumps(params_raw))
+            if isinstance(params_clean, dict) and isinstance(params_clean.get("properties"), dict):
+                params_clean["properties"].pop("_ai_commentary", None)
+
+            if params_clean:
+                schemas_desc.append(f"\nResponse Schema Parameters:\n{json.dumps(params_clean, indent=2)}")
+
+            prompt_parts.append(f"=== AI TOOL SCHEMAS SUITE ({len(tools_schemas)} Functions) ===\n" + "\n".join(schemas_desc))
 
     raw_prompt_builder = "\n\n".join(prompt_parts)
     prompt_builder_res = truncate_base64_in_prompt(raw_prompt_builder) if should_show_prompt else ""
 
-    # 6. Dispatch to AI Provider Adapter
+    effective_image_bytes = image_bytes
+    effective_mime_type = mime_type
+
+    # Dispatch to AI Provider Adapter with multi-tool schema declarations
+    tool_schema_param = tools_schemas[0] if len(tools_schemas) == 1 else tools_schemas
+
+    prompt_blocks = []
+    if positive_prompt:
+        prompt_blocks.append(positive_prompt)
+    if additional_user_prompt:
+        prompt_blocks.append(f"[USER INSTRUCTION / ADDITIONAL PROMPT]\n{additional_user_prompt}")
+    if request_inputs:
+        clean_text_inputs = {}
+        for k, v in request_inputs.items():
+            if isinstance(v, str) and (v.startswith("data:") or len(v) > 200):
+                continue
+            clean_text_inputs[k] = v
+        if clean_text_inputs:
+            prompt_blocks.append(f"[REQUEST INPUT PARAMETERS]\n{json.dumps(clean_text_inputs, indent=2)}")
+    if negative_prompt:
+        prompt_blocks.append(f"[NEGATIVE PROMPT / CONSTRAINTS & PROHIBITIONS]\n{negative_prompt}")
+
+    full_user_prompt = "\n\n".join(prompt_blocks).strip()
+
     try:
         raw_ai_out, tokens = await adapter.execute_structured_extraction(
-            image_bytes=image_bytes,
-            mime_type=mime_type,
-            tool_schema=tool_schema.get("function", tool_schema),
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+            image_bytes=effective_image_bytes,
+            mime_type=effective_mime_type,
+            images=image_files if image_files else None,
+            tool_schema=tool_schema_param,
+            system_prompt=None,
+            user_prompt=full_user_prompt,
             api_key=active_api_key,
             model_identifier=active_model,
         )
@@ -406,7 +486,7 @@ async def execute_callcraft(
 
     # 7. Type Coercion Engine
     try:
-        coerced_data = validate_and_coerce(response_schema_obj, raw_ai_out)
+        coerced_data = validate_and_coerce(response_schema_obj, raw_ai_out, allow_missing_required=False)
     except CoercionError as err:
         return create_error_response(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -451,32 +531,14 @@ async def execute_callcraft(
     }
     await redis_service.push_outbox(outbox_payload)
 
-    # Construct dynamic execution trace steps list (qna-6.md)
-    execution_steps = []
-    if tools_list:
-        step_duration = int(processing_time_ms / len(tools_list)) if tools_list else processing_time_ms
-        for idx, t in enumerate(tools_list, start=1):
-            if isinstance(t, dict) and t.get("name"):
-                execution_steps.append({
-                    "step_id": f"step_{idx}",
-                    "agent": (t.get("agentRole") or configured_agent_name or "vision_parser").strip(),
-                    "action_type": "tool_call",
-                    "tool_name": t.get("name").strip(),
-                    "status": "success",
-                    "duration_ms": step_duration,
-                })
-
-    if not execution_steps:
-        execution_steps = [
-            {
-                "step_id": "step_1",
-                "agent": configured_agent_name,
-                "action_type": "tool_call",
-                "tool_name": configured_tool_name,
-                "status": "success",
-                "duration_ms": processing_time_ms,
-            }
-        ]
+    # 9. Build executionTrace steps purely from AI model function call decision (execution_service.py)
+    execution_steps = build_execution_trace_steps(
+        raw_ai_out=raw_ai_out,
+        tools_list=tools_list,
+        configured_tool_name=configured_tool_name,
+        configured_agent_name=configured_agent_name,
+        processing_time_ms=processing_time_ms,
+    )
 
     # 10. Return Standardized Enterprise Envelope Response Pattern (qna-6.md)
     return build_success_envelope(

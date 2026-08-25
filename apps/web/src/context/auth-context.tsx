@@ -150,7 +150,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is not configured");
+
     const res = await fetch(`${apiUrl}/internal/v1/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -158,8 +160,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({ detail: "Login gagal" }));
-      throw new Error(errData.detail || `HTTP Error ${res.status}`);
+      const errData = await res.json().catch(() => null);
+      const message =
+        errData?.error?.message ||
+        errData?.detail ||
+        `Login gagal (HTTP ${res.status})`;
+      const hint = errData?.error?.actionableStep ?? undefined;
+      const err = new Error(message) as Error & { hint?: string };
+      err.hint = hint;
+      throw err;
     }
 
     const data = await res.json();
@@ -183,7 +192,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (name: string, email: string, password?: string): Promise<boolean> => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is not configured");
+
     const res = await fetch(`${apiUrl}/internal/v1/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -191,8 +202,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({ detail: "Pendaftaran gagal" }));
-      throw new Error(errData.detail || `HTTP Error ${res.status}`);
+      const errData = await res.json().catch(() => null);
+      const message =
+        errData?.error?.message ||
+        errData?.detail ||
+        `Pendaftaran gagal (HTTP ${res.status})`;
+      throw new Error(message);
     }
 
     const data = await res.json();
@@ -230,16 +245,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adminLogin = async (email: string, password?: string): Promise<boolean> => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is not configured");
+
     const res = await fetch(`${apiUrl}/internal/v1/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email || "dev@callcraft.io", password: password || "" }),
+      body: JSON.stringify({ email, password: password || "" }),
     });
 
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({ detail: "Login Admin gagal" }));
-      throw new Error(errData.detail || `HTTP Error ${res.status}`);
+      const errData = await res.json().catch(() => null);
+      const message =
+        errData?.error?.message ||
+        errData?.detail ||
+        `Login Admin gagal (HTTP ${res.status})`;
+      throw new Error(message);
     }
 
     const data = await res.json();

@@ -83,7 +83,7 @@ def infer_actionable_step(status_code: int, error_code: str, detail_message: str
     if error_code in ("AI_CONNECTION_FAILED", "AI_PROVIDER_EXECUTION_FAILED"):
         return "Periksa kembali API Key provider AI Anda, koneksi jaringan server, atau coba beberapa saat lagi."
     if status_code >= 500:
-        return "Terjadi kendala internal pada server. Silakan hubungi tim tim teknis atau coba beberapa saat lagi."
+        return "Terjadi kendala internal pada server. Silakan hubungi tim teknis atau coba beberapa saat lagi."
 
     return "Periksa kembali parameter request, header, dan kredensial API Anda."
 
@@ -123,7 +123,6 @@ def build_error_envelope(
             "steps": [],
             "warnings": [],
         },
-        "detail": message,  # Backward compatibility field for standard FastAPI callers
     }
 
 
@@ -164,15 +163,51 @@ def build_success_envelope(
     prompt_builder: Optional[str] = "",
 ) -> Dict[str, Any]:
     """Constructs a standardized Enterprise Success Envelope dictionary (qna-6.md)."""
-    if not execution_steps:
-        raise ValueError("execution_steps parameter must be a non-empty list of step dictionaries")
+    if execution_steps is None:
+        execution_steps = []
 
     now_iso = datetime.now(timezone.utc).isoformat()
     prompt_b_text = prompt_builder or ""
 
-    prompt_tokens = tokens.get("prompt_tokens", 0)
-    completion_tokens = tokens.get("completion_tokens", 0)
-    total_tokens = tokens.get("total_tokens", prompt_tokens + completion_tokens)
+    prompt_tokens = tokens.get("prompt_tokens", tokens.get("promptTokens", 0))
+    completion_tokens = tokens.get("completion_tokens", tokens.get("completionTokens", 0))
+    total_tokens = tokens.get("total_tokens", tokens.get("totalTokens", prompt_tokens + completion_tokens))
+
+    camel_tokens = {
+        "promptTokens": prompt_tokens,
+        "completionTokens": completion_tokens,
+        "totalTokens": total_tokens,
+    }
+
+    formatted_steps = []
+    for step in execution_steps:
+        if isinstance(step, dict):
+            formatted_steps.append({
+                "stepId": step.get("stepId") or step.get("step_id", ""),
+                "agent": step.get("agent", ""),
+                "actionType": step.get("actionType") or step.get("action_type", ""),
+                "toolName": step.get("toolName") or step.get("tool_name", ""),
+                "status": step.get("status", ""),
+                "durationMs": step.get("durationMs") if "durationMs" in step else step.get("duration_ms", 0),
+            })
+        else:
+            formatted_steps.append(step)
+
+    # Pop internal AI metadata keys so primaryResult.content stays clean
+    coerced_data.pop("_executed_tools", None)
+    ai_commentary = (
+        coerced_data.pop("_ai_message", None)
+        or coerced_data.pop("_ai_commentary", None)
+        or coerced_data.pop("aiMessage", None)
+        or coerced_data.pop("aiCommentary", None)
+    )
+
+    if not ai_commentary or not str(ai_commentary).strip():
+        if formatted_steps:
+            t_name = formatted_steps[0].get("toolName", "")
+            ai_commentary = f"Ekstraksi terstruktur '{cached_spec.get('name', 'Spec')}' berhasil diproses via provider AI '{provider_code}' ({active_model}) menggunakan tool '{t_name}'."
+        else:
+            ai_commentary = f"Hasil ekstraksi terstruktur '{cached_spec.get('name', 'Spec')}' diproses via provider AI '{provider_code}' ({active_model})."
 
     return {
         "meta": {
@@ -188,35 +223,16 @@ def build_success_envelope(
                 "type": "structured_json",
                 "content": coerced_data,
             },
-            "humanReadableMessage": f"Ekstraksi terstruktur '{cached_spec['name']}' berhasil diproses via provider AI '{provider_code}' ({active_model}).",
+            "humanReadableMessage": str(ai_commentary).strip(),
         },
         "executionTrace": {
             "totalDurationMs": processing_time_ms,
-            "steps": execution_steps,
+            "steps": formatted_steps,
             "promptBuilder": prompt_b_text,
             "warnings": [],
         },
         "metrics": {
-            "usage": {
-                "promptTokens": prompt_tokens,
-                "completionTokens": completion_tokens,
-                "totalTokens": total_tokens,
-            },
+            "usage": camel_tokens,
             "estimatedCostUsd": estimated_cost_usd,
-        },
-        # Top-level backward compatibility aliases for existing UI consumers:
-        "success": True,
-        "requestId": request_id,
-        "spec": {
-            "id": cached_spec["id"],
-            "name": cached_spec["name"],
-            "version": cached_spec.get("activeVersionNumber", 1),
-            "useExternalApiKey": cached_spec.get("useExternalApiKey", True),
-        },
-        "execution": {
-            "provider": provider_code,
-            "model": active_model,
-            "processingTimeMs": processing_time_ms,
-            "tokens": tokens,
         },
     }

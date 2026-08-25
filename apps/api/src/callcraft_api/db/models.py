@@ -60,6 +60,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    projects: Mapped[List["Project"]] = relationship("Project", back_populates="user", cascade="all, delete-orphan")
     api_credentials: Mapped[List["ApiCredential"]] = relationship("ApiCredential", back_populates="user", cascade="all, delete-orphan")
     call_specs: Mapped[List["CallSpec"]] = relationship("CallSpec", back_populates="user", cascade="all, delete-orphan")
     ai_providers: Mapped[List["UserAiProvider"]] = relationship("UserAiProvider", back_populates="user", cascade="all, delete-orphan")
@@ -97,11 +98,33 @@ class ServiceClient(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
+    user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
+    slug: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(TEXT)
+    color: Mapped[str] = mapped_column(VARCHAR(20), default="#e1b329", nullable=False)
+    icon: Mapped[str] = mapped_column(VARCHAR(50), default="Boxes", nullable=False)
+    status: Mapped[str] = mapped_column(VARCHAR(20), default="active", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (UniqueConstraint("user_id", "slug", name="uq_user_project_slug"),)
+
+    user: Mapped["User"] = relationship("User", back_populates="projects")
+    call_specs: Mapped[List["CallSpec"]] = relationship("CallSpec", back_populates="project", cascade="all, delete-orphan")
+    api_credentials: Mapped[List["ApiCredential"]] = relationship("ApiCredential", back_populates="project", cascade="all, delete-orphan")
+
+
 class ApiCredential(Base):
     __tablename__ = "api_credentials"
 
     id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     public_key: Mapped[str] = mapped_column(VARCHAR(100), unique=True, nullable=False, index=True)
     secret_key_hash: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
@@ -113,6 +136,7 @@ class ApiCredential(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="api_credentials")
+    project: Mapped[Optional["Project"]] = relationship("Project", back_populates="api_credentials")
 
 
 class AiProvider(Base):
@@ -151,6 +175,7 @@ class UserAiProvider(Base):
 
     id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     provider_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("ai_providers.id", ondelete="CASCADE"), nullable=False)
     encrypted_api_key: Mapped[str] = mapped_column(TEXT, nullable=False)
     key_nonce: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
@@ -158,9 +183,10 @@ class UserAiProvider(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    __table_args__ = (UniqueConstraint("user_id", "provider_id", name="uq_user_provider"),)
+    __table_args__ = (UniqueConstraint("user_id", "project_id", "provider_id", name="uq_user_project_provider"),)
 
     user: Mapped["User"] = relationship("User", back_populates="ai_providers")
+    project: Mapped[Optional["Project"]] = relationship("Project")
 
 
 class Template(Base):
@@ -176,8 +202,10 @@ class Template(Base):
     request_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     response_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     tools_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
-    system_prompt: Mapped[str] = mapped_column(TEXT, nullable=False)
-    extraction_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    positive_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    negative_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    additional_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    allow_additional_prompt: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     is_official: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     is_published: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     fork_count: Mapped[int] = mapped_column(INT, default=0, nullable=False)
@@ -220,6 +248,8 @@ class AppInit(Base):
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     favicon_url: Mapped[Optional[str]] = mapped_column(TEXT, default="/favicon.ico")
     disable_landing_page: Mapped[bool] = mapped_column(BOOLEAN, default=False, nullable=False)
+    default_allow_additional_prompt: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
+    default_additional_prompt: Mapped[Optional[str]] = mapped_column(TEXT, default="Opsional: Instruksi tambahan dari user...")
     default_registration_status: Mapped[str] = mapped_column(VARCHAR(50), default="pending_verification", nullable=False)
     require_email_verification: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -231,13 +261,14 @@ class CallSpec(Base):
 
     id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     template_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("templates.id", ondelete="SET NULL"))
     name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     slug: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT)
     active_version_number: Mapped[int] = mapped_column(INT, default=1, nullable=False)
     status: Mapped[str] = mapped_column(VARCHAR(50), default="active", nullable=False)
-    
+
     # PDF input support & External API Key flags
     allow_pdf_input: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
@@ -255,6 +286,7 @@ class CallSpec(Base):
     __table_args__ = (UniqueConstraint("user_id", "slug", name="uq_user_spec_slug"),)
 
     user: Mapped["User"] = relationship("User", back_populates="call_specs")
+    project: Mapped[Optional["Project"]] = relationship("Project", back_populates="call_specs")
     versions: Mapped[List["CallSpecVersion"]] = relationship("CallSpecVersion", back_populates="call_spec", cascade="all, delete-orphan")
 
 
@@ -266,8 +298,10 @@ class CallSpecVersion(Base):
     version_number: Mapped[int] = mapped_column(INT, nullable=False)
     request_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     response_schema: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
-    system_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
-    extraction_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    positive_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    negative_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    additional_prompt: Mapped[Optional[str]] = mapped_column(TEXT)
+    allow_additional_prompt: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     preferred_model_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("ai_models.id"))
 
     # Version-level flags
@@ -350,6 +384,7 @@ class PlaygroundState(Base):
 
     id: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True)
     user_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
     call_spec_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("call_specs.id", ondelete="CASCADE"), nullable=False, index=True)
     selected_credential_id: Mapped[Optional[str]] = mapped_column(VARCHAR(50), ForeignKey("api_credentials.id", ondelete="SET NULL"), nullable=True)
     checked_states: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
@@ -362,4 +397,3 @@ class PlaygroundState(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (UniqueConstraint("user_id", "call_spec_id", name="uq_user_spec_playground_state"),)
-

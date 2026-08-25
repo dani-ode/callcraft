@@ -31,6 +31,20 @@ export function buildJsonSchema(fieldList: SchemaField[]): Record<string, any> {
           description: f.description || undefined,
         };
       }
+    } else if (f.type === "file") {
+      const allowed = f.allowedExtensions
+        ? f.allowedExtensions.split(",").map((s) => s.trim().replace(/^\./, "")).filter(Boolean)
+        : ["jpg", "png", "webp", "pdf"];
+      properties[f.name] = {
+        type: "file",
+        description: f.description || undefined,
+        allowedExtensions: allowed,
+      };
+    } else if (f.type === "text") {
+      properties[f.name] = {
+        type: "string",
+        description: f.description || undefined,
+      };
     } else if (f.type === "object") {
       const childSchema = buildJsonSchema(f.properties || []);
       properties[f.name] = childSchema;
@@ -96,8 +110,12 @@ export function jsonSchemaToSchemaFields(schema: any): SchemaField[] {
     let enumValues: string | undefined = undefined;
     let arrayItemType: "string" | "number" | "object" | undefined = undefined;
     let childProperties: SchemaField[] | undefined = undefined;
+    let allowedExt: string | undefined = undefined;
 
-    if (propObj.enum && Array.isArray(propObj.enum)) {
+    if (propObj.type === "file") {
+      type = "file";
+      allowedExt = Array.isArray(propObj.allowedExtensions) ? propObj.allowedExtensions.join(", ") : propObj.allowedExtensions;
+    } else if (propObj.enum && Array.isArray(propObj.enum)) {
       type = "enum";
       enumValues = propObj.enum.join(", ");
     } else if (propObj.enum_values) {
@@ -115,7 +133,7 @@ export function jsonSchemaToSchemaFields(schema: any): SchemaField[] {
     } else if (propObj.type === "object" || propObj.properties) {
       type = "object";
       childProperties = jsonSchemaToSchemaFields(propObj);
-    } else if (["string", "number", "integer", "boolean", "date"].includes(propObj.type)) {
+    } else if (["string", "number", "integer", "boolean", "date", "text"].includes(propObj.type)) {
       type = propObj.type;
     }
 
@@ -124,9 +142,10 @@ export function jsonSchemaToSchemaFields(schema: any): SchemaField[] {
       name: key,
       type,
       required: isRequired,
-      description: propObj.description || "",
+      description: propObj.description || undefined,
       enumValues,
       arrayItemType,
+      allowedExtensions: allowedExt,
       properties: childProperties,
     });
   });

@@ -67,6 +67,17 @@ class RedisCacheService:
 
         _MEM_CACHE[key] = val
 
+    async def delete_spec(self, user_id: str, spec_id_or_slug: str):
+        key = f"callcraft:spec:{user_id}:{spec_id_or_slug}"
+        if self._is_connected and self._client:
+            try:
+                await self._client.delete(key)
+            except Exception as e:
+                logger.warning(f"Redis delete_spec error: {e}")
+
+        if key in _MEM_CACHE:
+            del _MEM_CACHE[key]
+
     async def push_outbox(self, request_payload: Dict[str, Any]):
         key = "callcraft:outbox:api_requests"
         val = dumps_safe(request_payload)

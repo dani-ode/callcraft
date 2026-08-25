@@ -272,19 +272,31 @@ async def login_user(
     if not user_obj or not verify_password(payload.password, user_obj.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email atau password tidak valid. Silakan periksa kembali.",
+            detail={
+                "message": "Email atau password yang Anda masukkan salah. Periksa kembali dan coba lagi.",
+                "code": "INVALID_CREDENTIALS",
+                "actionable_step": "Pastikan email sudah terdaftar dan password yang dimasukkan benar. Jika lupa password, gunakan fitur reset password.",
+            },
         )
 
     if user_obj.status == "pending_verification":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email Anda belum diverifikasi. Silakan lakukan verifikasi email terlebih dahulu.",
+            detail={
+                "message": "Akun Anda belum aktif. Silakan verifikasi email terlebih dahulu.",
+                "code": "EMAIL_NOT_VERIFIED",
+                "actionable_step": "Buka inbox email Anda dan klik link aktivasi yang telah dikirim. Jika tidak ada, klik 'Kirim Ulang Link Verifikasi'.",
+            },
         )
 
     if user_obj.status in ["suspended", "disabled"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Akun Anda berstatus '{user_obj.status}'. Hubungi administrator.",
+            detail={
+                "message": f"Akun Anda telah dinonaktifkan (status: {user_obj.status}).",
+                "code": "ACCOUNT_SUSPENDED",
+                "actionable_step": "Hubungi administrator Callcraft untuk informasi lebih lanjut mengenai status akun Anda.",
+            },
         )
 
     return {

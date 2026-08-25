@@ -13,10 +13,10 @@ Berikut adalah strategi penanganan error (*Error Handling*) yang komprehensif:
 ```json
 {
   "meta": {
-    "request_id": "req_882391009_xyz",
+    "requestId": "req_882391009_xyz",
     "timestamp": "2026-08-23T20:07:15Z",
     "status": "failed",
-    "api_version": "v2.1"
+    "apiVersion": "v2.1"
   },
   "error": {
     "code": "INVALID_IMAGE_FORMAT",
@@ -27,10 +27,10 @@ Berikut adalah strategi penanganan error (*Error Handling*) yang komprehensif:
         "issue": "String Base64 corrupt atau bukan format gambar yang dikenali."
       }
     ],
-    "actionable_step": "Silakan kompres gambar atau periksa kembali proses encoding Base64 di sisi client."
+    "actionableStep": "Silakan kompres gambar atau periksa kembali proses encoding Base64 di sisi client."
   },
-  "execution_trace": {
-    "total_duration_ms": 120,
+  "executionTrace": {
+    "totalDurationMs": 120,
     "steps": [],
     "warnings": []
   }
@@ -89,30 +89,30 @@ AI mengerti tugasnya, memberikan instruksi yang benar, tapi eksekusi di server g
 
 Dalam skenario kompleks (ingat contoh memanggil 3 *tools* di obrolan sebelumnya), bagaimana jika 2 *tools* sukses, tapi 1 *tool* gagal?
 
-Sebagai API kelas *enterprise*, Anda jangan langsung membuang hasil yang sudah sukses. Anda menggunakan status **`partial_success`**.
+Sebagai API kelas *enterprise*, Anda jangan langsung membuang hasil yang sudah sukses. Anda menggunakan status **`partialSuccess`**.
 
 ```json
 {
   "meta": {
-    "request_id": "req_882391010_pqr",
-    "status": "partial_success"
+    "requestId": "req_882391010_pqr",
+    "status": "partialSuccess"
   },
   "data": {
-    "primary_result": {
-      "estimasi_biaya": 450000000 
+    "primaryResult": {
+      "estimasiBiaya": 450000000 
     },
-    "human_readable_message": "Analisis denah dan estimasi biaya berhasil, namun sistem gagal menjadwalkannya di kalender."
+    "humanReadableMessage": "Analisis denah dan estimasi biaya berhasil, namun sistem gagal menjadwalkannya di kalender."
   },
   "error": {
     "code": "PARTIAL_TOOL_FAILURE",
     "message": "Gagal mengeksekusi tool 'create_calendar_event'.",
     "details": [{"issue": "Google Calendar API sedang down (HTTP 503)."}]
   },
-  "execution_trace": {
+  "executionTrace": {
     "steps": [
-      {"tool_name": "vision_analysis", "status": "success"},
-      {"tool_name": "query_milvus_db", "status": "success"},
-      {"tool_name": "create_calendar_event", "status": "failed"} 
+      {"toolName": "vision_analysis", "status": "success"},
+      {"toolName": "query_milvus_db", "status": "success"},
+      {"toolName": "create_calendar_event", "status": "failed"} 
     ]
   }
 }

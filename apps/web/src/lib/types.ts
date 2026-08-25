@@ -5,6 +5,19 @@ export interface UserProfile {
   role: string;
 }
 
+export interface Project {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  color: string;
+  icon: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AppInitSettings {
   id: string;
   appName: string;
@@ -20,6 +33,7 @@ export interface AppInitSettings {
 export interface ApiCredential {
   id: string;
   userId?: string;
+  projectId?: string;
   name: string;
   publicKey: string;
   secretKeyHash?: string;
@@ -45,22 +59,24 @@ export interface ToolDefinition {
   parameters?: Record<string, any>;
   textContext?: string;
   includeImageContext?: boolean;
+  imagesContext?: string[];
   context?: {
     textContext?: string;
     includeImageContext?: boolean;
+    imagesContext?: string[];
   };
 }
 
 export interface ToolCallingConfig {
   enabled: boolean;
   toolChoice: 'auto' | 'required' | 'none';
-  instruction?: string;
   tools: ToolDefinition[];
 }
 
 export interface CallSpec {
   id: string;
   userId?: string;
+  projectId?: string;
   name: string;
   slug: string;
   description?: string;
@@ -71,8 +87,11 @@ export interface CallSpec {
   requestSchema?: any;
   responseSchema?: any;
   toolsConfig?: ToolCallingConfig;
-  systemPrompt?: string;
+  positivePrompt?: string;
   extractionPrompt?: string;
+  negativePrompt?: string;
+  additionalPrompt?: string;
+  allowAdditionalPrompt?: boolean;
   allowPdfInput?: boolean;
   useExternalApiKey?: boolean;
   externalApiKey?: string;
@@ -107,7 +126,11 @@ export interface Template {
   requestSchema?: any;
   responseSchema?: any;
   toolsConfig?: ToolCallingConfig;
-  systemPrompt?: string;
+  positivePrompt?: string;
+  extractionPrompt?: string;
+  negativePrompt?: string;
+  additionalPrompt?: string;
+  allowAdditionalPrompt?: boolean;
   createdAt?: string;
 }
 

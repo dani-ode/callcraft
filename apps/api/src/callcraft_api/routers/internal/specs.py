@@ -8,17 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from callcraft_api.db.models import CallSpec, CallSpecVersion, Template, TemplateComment
 from callcraft_api.db.repository import Repository
 from callcraft_api.db.session import get_db_session
+from callcraft_api.services.redis_cache import redis_service
 from callcraft_api.routers.internal._deps import router, get_current_user_id
 
 
 class CreateSpecRequest(BaseModel):
     name: str = Field(..., description="Call Spec name")
     slug: str = Field(..., description="API slug")
+    project_id: Optional[str] = Field(None, description="Project this spec belongs to")
     description: Optional[str] = Field(None)
     request_schema: Optional[Dict[str, Any]] = Field(None, description="JSON Schema of request payload parameters")
     response_schema: Dict[str, Any] = Field(..., description="JSON Schema of target output")
-    system_prompt: Optional[str] = Field(None)
-    extraction_prompt: Optional[str] = Field(None)
+    positive_prompt: Optional[str] = Field(None, description="Positive prompt instructions")
+    extraction_prompt: Optional[str] = Field(None, description="Positive prompt alias")
+    negative_prompt: Optional[str] = Field(None, description="Negative prompt (prohibitions & constraints)")
+    additional_prompt: Optional[str] = Field(None, description="Default additional prompt user instruction")
+    allow_additional_prompt: bool = Field(True, description="Allow request additional prompt")
     allow_pdf_input: bool = Field(True, description="Allow PDF input files")
     use_external_api_key: bool = Field(True, description="Allow external AI API Key & Model Name on request headers")
     external_api_key: Optional[str] = Field(None)
@@ -32,8 +37,11 @@ class UpdateSpecPayload(BaseModel):
     description: Optional[str] = Field(None)
     request_schema: Optional[Dict[str, Any]] = Field(None)
     response_schema: Optional[Dict[str, Any]] = Field(None)
-    system_prompt: Optional[str] = Field(None)
+    positive_prompt: Optional[str] = Field(None)
     extraction_prompt: Optional[str] = Field(None)
+    negative_prompt: Optional[str] = Field(None)
+    additional_prompt: Optional[str] = Field(None)
+    allow_additional_prompt: Optional[bool] = Field(None)
     use_external_api_key: Optional[bool] = Field(None)
     external_model_name: Optional[str] = Field(None)
     external_api_key: Optional[str] = Field(None)
@@ -49,10 +57,11 @@ class UpdatePublicationRequest(BaseModel):
 
 @router.get("/specs")
 async def list_specs(
+    project_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
-    specs = await Repository.list_call_specs(db, user_id)
+    specs = await Repository.list_call_specs(db, user_id, project_id=project_id)
     return specs
 
 
@@ -78,11 +87,14 @@ async def create_new_spec(
         user_id=user_id,
         name=payload.name,
         slug=slug,
+        project_id=payload.project_id,
         description=payload.description,
         request_schema=payload.request_schema,
         response_schema=payload.response_schema,
-        system_prompt=payload.system_prompt,
-        extraction_prompt=payload.extraction_prompt,
+        positive_prompt=payload.positive_prompt or payload.extraction_prompt,
+        negative_prompt=payload.negative_prompt,
+        additional_prompt=payload.additional_prompt,
+        allow_additional_prompt=payload.allow_additional_prompt,
         use_external_api_key=payload.use_external_api_key,
         external_model_name=payload.external_model_name,
         external_api_key=payload.external_api_key,
@@ -94,6 +106,7 @@ async def create_new_spec(
 @router.post("/specs/{spec_id}/duplicate")
 async def duplicate_spec(
     spec_id: str,
+    project_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
@@ -103,6 +116,12 @@ async def duplicate_spec(
     existing = await Repository.get_call_spec(db, user_id, spec_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Call Spec tidak ditemukan")
+
+    target_project_id = project_id or existing.get("projectId") or existing.get("project_id")
+    if not target_project_id:
+        user_projects = await Repository.list_projects(db, user_id)
+        if user_projects:
+            target_project_id = user_projects[0]["id"]
 
     name = existing["name"]
     slug_val = existing["slug"]
@@ -115,11 +134,14 @@ async def duplicate_spec(
         user_id=user_id,
         name=new_name,
         slug=new_slug,
+        project_id=target_project_id,
         description=existing.get("description"),
         request_schema=existing.get("requestSchema"),
         response_schema=existing.get("responseSchema"),
-        system_prompt=existing.get("systemPrompt"),
-        extraction_prompt=existing.get("extractionPrompt"),
+        positive_prompt=existing.get("positivePrompt") or existing.get("extractionPrompt"),
+        negative_prompt=existing.get("negativePrompt"),
+        additional_prompt=existing.get("additionalPrompt"),
+        allow_additional_prompt=existing.get("allowAdditionalPrompt", True),
         use_external_api_key=existing.get("useExternalApiKey", True),
         external_model_name=existing.get("externalModelName"),
         external_api_key=existing.get("externalApiKey"),
@@ -159,8 +181,10 @@ async def update_spec_by_id(
         description=payload.description,
         request_schema=payload.request_schema,
         response_schema=payload.response_schema,
-        system_prompt=payload.system_prompt,
-        extraction_prompt=payload.extraction_prompt,
+        positive_prompt=payload.positive_prompt or payload.extraction_prompt,
+        negative_prompt=payload.negative_prompt,
+        additional_prompt=payload.additional_prompt,
+        allow_additional_prompt=payload.allow_additional_prompt,
         use_external_api_key=payload.use_external_api_key,
         external_model_name=payload.external_model_name,
         external_api_key=payload.external_api_key,
@@ -168,6 +192,14 @@ async def update_spec_by_id(
     )
     if not spec:
         raise HTTPException(status_code=404, detail="Call Spec not found")
+
+    # Invalidate Redis cache immediately so subsequent executions load the updated spec & schema
+    await redis_service.delete_spec(user_id, spec_id)
+    if spec.get("slug"):
+        await redis_service.delete_spec(user_id, spec["slug"])
+    if payload.slug:
+        await redis_service.delete_spec(user_id, payload.slug)
+
     return spec
 
 
@@ -184,6 +216,7 @@ async def delete_spec_by_id(
     if not success:
         raise HTTPException(status_code=404, detail="Call Spec tidak ditemukan")
 
+    await redis_service.delete_spec(user_id, spec_id)
     return {"message": "Call Spec berhasil dihapus", "id": spec_id}
 
 
@@ -293,7 +326,8 @@ async def update_spec_publication(
                 category=payload.category.lower(),
                 request_schema=safe_spec_data.get("requestSchema"),
                 response_schema=safe_spec_data.get("responseSchema"),
-                system_prompt=safe_spec_data.get("systemPrompt"),
+                positive_prompt=safe_spec_data.get("positivePrompt") or safe_spec_data.get("extractionPrompt"),
+                negative_prompt=safe_spec_data.get("negativePrompt"),
                 is_official=False,
                 is_published=True,
                 fork_count=1,
@@ -314,8 +348,10 @@ async def update_spec_publication(
 
             if "responseSchema" in safe_spec_data:
                 tmpl_obj.response_schema = safe_spec_data["responseSchema"]
-            if "systemPrompt" in safe_spec_data:
-                tmpl_obj.system_prompt = safe_spec_data["systemPrompt"]
+            if "positivePrompt" in safe_spec_data:
+                tmpl_obj.positive_prompt = safe_spec_data["positivePrompt"]
+            if "negativePrompt" in safe_spec_data:
+                tmpl_obj.negative_prompt = safe_spec_data["negativePrompt"]
             tmpl_obj.is_published = True
 
         spec_obj.is_published = True

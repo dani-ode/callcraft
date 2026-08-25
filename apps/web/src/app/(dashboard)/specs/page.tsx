@@ -29,6 +29,7 @@ import { fetchCallSpecs, duplicateCallSpec } from "@/lib/api-client";
 import { CallSpec } from "@/lib/types";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { extractPlainTextFromMarkdown } from "@/components/markdown-editor";
+import { useProject } from "@/context/project-context";
 
 const PAGE_SIZE = 6;
 
@@ -81,6 +82,7 @@ function SlugBadge({ slug }: { slug: string }) {
 }
 
 export default function CallSpecsPage() {
+  const { activeProject } = useProject();
   const [specs, setSpecs] = useState<CallSpec[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -99,7 +101,8 @@ export default function CallSpecsPage() {
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const loadSpecs = () => {
-    fetchCallSpecs().then((data) => {
+    setLoading(true);
+    fetchCallSpecs(activeProject?.id).then((data) => {
       setSpecs(data);
       setLoading(false);
     });
@@ -107,7 +110,7 @@ export default function CallSpecsPage() {
 
   useEffect(() => {
     loadSpecs();
-  }, []);
+  }, [activeProject?.id]);
 
   // Summary Metrics Calculation
   const totalCount = specs.length;
@@ -182,7 +185,7 @@ export default function CallSpecsPage() {
     setDuplicating(true);
 
     try {
-      await duplicateCallSpec(duplicateTarget.id);
+      await duplicateCallSpec(duplicateTarget.id, activeProject?.id);
       setNotification({ message: `Call Spec '${duplicateTarget.name}' berhasil diduplikasi!`, type: "success" });
       setDuplicateTarget(null);
       loadSpecs();

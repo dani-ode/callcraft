@@ -34,6 +34,7 @@ interface FieldListRendererProps {
   onDragStateChange?: (id: string | null) => void;
   selectedFieldId?: string | null;
   onSelectFieldId?: (id: string | null) => void;
+  isRequestSchema?: boolean;
 }
 
 interface DropZoneProps {
@@ -133,6 +134,7 @@ export function FieldListRenderer({
   onDragStateChange,
   selectedFieldId = null,
   onSelectFieldId,
+  isRequestSchema = false,
 }: FieldListRendererProps) {
   const [internalDraggedId, setInternalDraggedId] = useState<string | null>(null);
   const [dragOverFieldId, setDragOverFieldId] = useState<string | null>(null);
@@ -728,8 +730,8 @@ export function FieldListRenderer({
                     </span>
 
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-[#e1b329]/20 text-[#b45309] dark:text-[#ffb443] border border-[#e1b329]/30">
-                      {field.type.toUpperCase()}
-                      {field.type === "array" && field.arrayItemType ? ` <${field.arrayItemType}>` : ""}
+                      {isRequestSchema ? (field.type === "file" ? "FILE" : "TEXT") : field.type.toUpperCase()}
+                      {!isRequestSchema && field.type === "array" && field.arrayItemType ? ` <${field.arrayItemType}>` : ""}
                     </span>
 
                     {isSelected && (
@@ -780,7 +782,7 @@ export function FieldListRenderer({
                       <div className="sm:col-span-4">
                         <label className="block text-[10px] font-extrabold opacity-80 mb-1 text-[#2c1d11] dark:text-slate-200">Data Type</label>
                         <select
-                          value={field.type}
+                          value={isRequestSchema ? (field.type === "file" ? "file" : "text") : field.type}
                           onChange={(e) => {
                             const newType = e.target.value as any;
                             const patch: Partial<SchemaField> = { type: newType };
@@ -790,19 +792,31 @@ export function FieldListRenderer({
                             if (newType === "array" && !field.arrayItemType) {
                               patch.arrayItemType = "string";
                             }
+                            if (newType === "file" && !field.allowedExtensions) {
+                              patch.allowedExtensions = "jpg, png, webp, pdf";
+                            }
                             const updatedRootTree = updateFieldInTree(allRootFields, field.id, patch);
                             onChange(updatedRootTree);
                           }}
                           className={`w-full rounded-xl px-2.5 py-1.5 text-xs font-extrabold focus:outline-none shadow-sm ${getDepthAlternatingInputClasses(depth)}`}
                         >
-                          <option value="string" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">string (Text)</option>
-                          <option value="number" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">number (Float)</option>
-                          <option value="integer" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">integer (Whole Num)</option>
-                          <option value="boolean" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">boolean (True/False)</option>
-                          <option value="date" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">date (YYYY-MM-DD)</option>
-                          <option value="enum" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">enum (Options List)</option>
-                          <option value="object" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">object (Nested Properties)</option>
-                          <option value="array" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">array (List Items)</option>
+                          {isRequestSchema ? (
+                            <>
+                              <option value="text" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">text</option>
+                              <option value="file" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">file</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="string" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">string (Text)</option>
+                              <option value="number" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">number (Float)</option>
+                              <option value="integer" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">integer (Whole Num)</option>
+                              <option value="boolean" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">boolean (True/False)</option>
+                              <option value="date" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">date (YYYY-MM-DD)</option>
+                              <option value="enum" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">enum (Options List)</option>
+                              <option value="object" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">object (Nested Properties)</option>
+                              <option value="array" className="bg-[#ffffff] dark:bg-slate-900 text-[#2c1d11] dark:text-slate-100">array (List Items)</option>
+                            </>
+                          )}
                         </select>
                       </div>
 
@@ -822,19 +836,40 @@ export function FieldListRenderer({
                       </div>
                     </div>
 
-                    {/* Description Input */}
-                    <div>
-                      <input
-                        type="text"
-                        value={field.description || ""}
-                        onChange={(e) => {
-                          const updatedRootTree = updateFieldInTree(allRootFields, field.id, { description: e.target.value });
-                          onChange(updatedRootTree);
-                        }}
-                        className={`w-full rounded-xl px-2.5 py-1.5 text-[11px] focus:outline-none shadow-sm ${getDepthAlternatingInputClasses(depth)}`}
-                        placeholder="Field description/instructions for AI model extraction..."
-                      />
-                    </div>
+                    {/* Description Input (Only for Response Schema) */}
+                    {!isRequestSchema && (
+                      <div>
+                        <input
+                          type="text"
+                          value={field.description || ""}
+                          onChange={(e) => {
+                            const updatedRootTree = updateFieldInTree(allRootFields, field.id, { description: e.target.value });
+                            onChange(updatedRootTree);
+                          }}
+                          className={`w-full rounded-xl px-2.5 py-1.5 text-[11px] focus:outline-none shadow-sm ${getDepthAlternatingInputClasses(depth)}`}
+                          placeholder="Field description/instructions for AI model extraction..."
+                        />
+                      </div>
+                    )}
+
+                    {/* File Allowed Extensions Input */}
+                    {field.type === "file" && (
+                      <div className="pt-1">
+                        <label className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400">
+                          Allowed File Extensions (comma-separated):
+                        </label>
+                        <input
+                          type="text"
+                          value={field.allowedExtensions || "jpg, png, webp, pdf"}
+                          onChange={(e) => {
+                            const updatedRootTree = updateFieldInTree(allRootFields, field.id, { allowedExtensions: e.target.value });
+                            onChange(updatedRootTree);
+                          }}
+                          className="w-full mt-1 bg-[#ffffff] dark:bg-slate-950 border border-indigo-500/50 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-indigo-600 dark:text-indigo-300 focus:outline-none shadow-sm"
+                          placeholder="e.g. jpg, png, webp, pdf"
+                        />
+                      </div>
+                    )}
 
                     {/* Enum Values Input */}
                     {field.type === "enum" && (
@@ -919,6 +954,7 @@ export function FieldListRenderer({
                             onDragStateChange={setDraggedId}
                             selectedFieldId={selectedFieldId}
                             onSelectFieldId={onSelectFieldId}
+                            isRequestSchema={isRequestSchema}
                           />
                         ) : (
                           <div className="py-2 border border-dashed border-[#e1b329]/40 rounded-xl p-2 bg-[#e1b329]/5">

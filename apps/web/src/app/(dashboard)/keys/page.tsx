@@ -34,6 +34,7 @@ import {
   getActiveUserId,
 } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
+import { useProject } from "@/context/project-context";
 import { ApiCredential } from "@/lib/types";
 
 interface ProviderConfig {
@@ -47,8 +48,48 @@ interface ProviderConfig {
   saved: boolean;
 }
 
+const INITIAL_PROVIDERS_STATE: Record<string, ProviderConfig> = {
+  gemini: {
+    code: "gemini",
+    name: "Google Gemini AI",
+    key: "",
+    getKeyUrl: "https://aistudio.google.com/app/apikey",
+    isActive: false,
+    testStatus: "idle",
+    saved: false,
+  },
+  openai: {
+    code: "openai",
+    name: "OpenAI",
+    key: "",
+    getKeyUrl: "https://platform.openai.com/api-keys",
+    isActive: false,
+    testStatus: "idle",
+    saved: false,
+  },
+  anthropic: {
+    code: "anthropic",
+    name: "Anthropic Claude",
+    key: "",
+    getKeyUrl: "https://console.anthropic.com/settings/keys",
+    isActive: false,
+    testStatus: "idle",
+    saved: false,
+  },
+  deepseek: {
+    code: "deepseek",
+    name: "DeepSeek AI",
+    key: "",
+    getKeyUrl: "https://platform.deepseek.com/api_keys",
+    isActive: false,
+    testStatus: "idle",
+    saved: false,
+  },
+};
+
 export default function ApiKeysPage() {
   const { user } = useAuth();
+  const { activeProject } = useProject();
   const userId = user?.id || getActiveUserId();
 
   const [copiedUserId, setCopiedUserId] = useState(false);
@@ -109,92 +150,44 @@ export default function ApiKeysPage() {
   const [isSavingWhitelist, setIsSavingWhitelist] = useState(false);
 
   // Providers State
-  const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
-    gemini: {
-      code: "gemini",
-      name: "Google Gemini AI",
-      key: "AIzaSyDevKey_Gemini_Sample_998877",
-      getKeyUrl: "https://aistudio.google.com/app/apikey",
-      isActive: true,
-      testStatus: "success",
-      testMessage: "Connection verified (Gemini 3.6 Flash / 3.5 Flash)",
-      saved: true,
-    },
-    openai: {
-      code: "openai",
-      name: "OpenAI",
-      key: "sk-proj-DevKey_OpenAI_Sample_112233",
-      getKeyUrl: "https://platform.openai.com/api-keys",
-      isActive: true,
-      testStatus: "success",
-      testMessage: "Connection verified (GPT-5.6 Luna / Terra)",
-      saved: true,
-    },
-    anthropic: {
-      code: "anthropic",
-      name: "Anthropic Claude",
-      key: "",
-      getKeyUrl: "https://console.anthropic.com/settings/keys",
-      isActive: false,
-      testStatus: "idle",
-      saved: false,
-    },
-    mistral: {
-      code: "mistral",
-      name: "Mistral AI",
-      key: "",
-      getKeyUrl: "https://console.mistral.ai/api-keys",
-      isActive: false,
-      testStatus: "idle",
-      saved: false,
-    },
-    deepseek: {
-      code: "deepseek",
-      name: "DeepSeek AI",
-      key: "",
-      getKeyUrl: "https://platform.deepseek.com/api_keys",
-      isActive: false,
-      testStatus: "idle",
-      saved: false,
-    },
-  });
+  const [providers, setProviders] = useState<Record<string, ProviderConfig>>(INITIAL_PROVIDERS_STATE);
 
   // Fetch Live Customer Keys & Encrypted AI Provider Keys from Backend
   useEffect(() => {
     async function loadData() {
       try {
         const [liveKeys, liveProviders] = await Promise.all([
-          fetchApiKeys(),
-          fetchUserAiProviders(),
+          fetchApiKeys(activeProject?.id),
+          fetchUserAiProviders(activeProject?.id),
         ]);
 
         setCustomerKeys(liveKeys || []);
 
-        if (liveProviders && liveProviders.length > 0) {
-          setProviders((prev) => {
-            const updated = { ...prev };
+        setProviders(() => {
+          const updated = { ...INITIAL_PROVIDERS_STATE };
+          if (liveProviders && liveProviders.length > 0) {
             for (const p of liveProviders) {
               const code = p.providerCode.toLowerCase();
               if (updated[code]) {
                 updated[code] = {
                   ...updated[code],
-                  key: p.key || updated[code].key,
+                  key: p.key || "",
                   isActive: p.isActive,
                   saved: true,
                   testStatus: "success",
-                  testMessage: "Key loaded from AES-256-GCM encrypted database store.",
+                  testMessage: "Key loaded from project-isolated encrypted store.",
                 };
               }
             }
-            return updated;
-          });
-        }
+          }
+          return updated;
+        });
       } catch (err) {
         console.warn("Failed to load credentials from API", err);
       }
     }
     loadData();
-  }, []);
+  }, [activeProject?.id]);
 
   // --- IP Whitelist Validation Function ---
   const isValidIpOrCidr = (ip: string): boolean => {
@@ -241,7 +234,7 @@ export default function ApiKeysPage() {
     setGenerateError(null);
 
     try {
-      const res = await createApiKey(newKeyName.trim(), newKeyEnv, newKeyIpList);
+      const res = await createApiKey(newKeyName.trim(), newKeyEnv, newKeyIpList, activeProject?.id);
       const secret = res.secret_key || (res as any).secretKey || `call_sk_live_${Math.random().toString(36).substring(2, 15)}`;
       setCreatedSecret(secret);
       setShowSecretModal(true);
@@ -369,7 +362,7 @@ export default function ApiKeysPage() {
     }));
 
     if (prov.key) {
-      await saveProviderApiKey({ provider: code, apiKey: prov.key });
+      await saveProviderApiKey({ provider: code, apiKey: prov.key, projectId: activeProject?.id });
     }
   };
 
@@ -384,7 +377,7 @@ export default function ApiKeysPage() {
 
     try {
       const res = await verifyProviderApiKey({ provider: code, apiKey: prov.key });
-      await saveProviderApiKey({ provider: code, apiKey: prov.key });
+      await saveProviderApiKey({ provider: code, apiKey: prov.key, projectId: activeProject?.id });
 
       setProviders((prev) => ({
         ...prev,

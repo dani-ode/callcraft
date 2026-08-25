@@ -25,6 +25,7 @@ function LoginForm() {
   const [resendSuccess, setResendSuccess] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [errorHint, setErrorHint] = useState<string | null>(null);
   const { user, isLoading, login } = useAuth();
 
   useEffect(() => {
@@ -63,6 +64,7 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setErrorHint(null);
     setResendSuccess(false);
 
     try {
@@ -70,6 +72,7 @@ function LoginForm() {
       router.push(targetDestination);
     } catch (err: any) {
       setError(err.message || "Email atau password tidak valid.");
+      setErrorHint(err.hint ?? null);
     } finally {
       setLoading(false);
     }
@@ -103,7 +106,13 @@ function LoginForm() {
                 <span>{error}</span>
               </div>
 
-              {(error.includes("belum diverifikasi") || error.includes("verifikasi")) && (
+              {errorHint && (
+                <p className="text-rose-500/80 dark:text-rose-400/80 leading-relaxed pl-6">
+                  {errorHint}
+                </p>
+              )}
+
+              {(error.includes("belum aktif") || error.includes("verifikasi") || error.includes("belum diverifikasi")) && (
                 <div className="pt-1 border-t border-rose-500/20">
                   {resendSuccess ? (
                     <p className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 pt-1">

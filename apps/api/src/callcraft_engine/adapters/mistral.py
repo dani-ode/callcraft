@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import httpx
 from callcraft_engine.adapters.base import BaseAIAdapter
 
@@ -13,7 +13,7 @@ class MistralAdapter(BaseAIAdapter):
         self,
         image_bytes: Optional[bytes],
         mime_type: Optional[str],
-        tool_schema: Dict[str, Any],
+        tool_schema: Union[Dict[str, Any], List[Dict[str, Any]]],
         system_prompt: Optional[str],
         user_prompt: Optional[str],
         api_key: str,
@@ -45,17 +45,20 @@ class MistralAdapter(BaseAIAdapter):
 
         messages.append({"role": "user", "content": user_content})
 
-        func_name = tool_schema.get("name", "extract_structured_data")
-        tools = [{
-            "type": "function",
-            "function": tool_schema,
-        }]
+        tools = []
+        if isinstance(tool_schema, list):
+            for t in tool_schema:
+                fn = t.get("function", t) if isinstance(t, dict) else t
+                tools.append({"type": "function", "function": fn})
+        elif isinstance(tool_schema, dict):
+            fn = tool_schema.get("function", tool_schema)
+            tools.append({"type": "function", "function": fn})
 
         payload = {
             "model": model_identifier if "mistral" in model_identifier or "pixtral" in model_identifier else "mistral-large-latest",
             "messages": messages,
             "tools": tools,
-            "tool_choice": "any",
+            "tool_choice": "any" if len(tools) > 1 else "auto",
         }
 
         headers = {
@@ -78,6 +81,11 @@ class MistralAdapter(BaseAIAdapter):
 
                 message = choices[0].get("message", {})
                 tool_calls = message.get("tool_calls", [])
+                executed_tools = []
+                for tc in tool_calls:
+                    fn = tc.get("function", {})
+                    if fn.get("name"):
+                        executed_tools.append({"name": fn.get("name"), "status": "success"})
 
                 extracted_json = None
                 if tool_calls:
@@ -92,7 +100,10 @@ class MistralAdapter(BaseAIAdapter):
                     try:
                         extracted_json = json.loads(content_str)
                     except Exception:
-                        extracted_json = {"raw_response": content_str}
+                        raise ValueError(f"Mistral API returned non-JSON text output: {content_str[:200]}")
+
+                if isinstance(extracted_json, dict) and executed_tools:
+                    extracted_json["_executed_tools"] = executed_tools
 
                 usage = res_data.get("usage", {})
                 tokens = {

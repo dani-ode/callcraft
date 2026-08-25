@@ -6,30 +6,35 @@ class CoercionError(Exception):
     pass
 
 
-def validate_and_coerce(schema: ResponseSchema, raw_value: Any) -> Dict[str, Any]:
+def validate_and_coerce(schema: ResponseSchema, raw_value: Any, allow_missing_required: bool = False) -> Dict[str, Any]:
     if not isinstance(raw_value, dict):
         raise CoercionError("Root AI payload must be a JSON object")
 
     result_map: Dict[str, Any] = {}
 
+    if "_ai_message" in raw_value:
+        result_map["_ai_message"] = raw_value["_ai_message"]
+    if "_executed_tools" in raw_value:
+        result_map["_executed_tools"] = raw_value["_executed_tools"]
+
     for field_name, field_def in schema.properties.items():
         val = raw_value.get(field_name)
 
         if val is None:
-            if field_def.required:
+            if field_def.required and not allow_missing_required:
                 raise CoercionError(f"Missing required field: {field_name}")
             else:
                 result_map[field_name] = (
                     field_def.default if field_def.default is not None else None
                 )
         else:
-            coerced_val = _coerce_field_value(field_name, field_def, val)
+            coerced_val = _coerce_field_value(field_name, field_def, val, allow_missing_required=allow_missing_required)
             result_map[field_name] = coerced_val
 
     return result_map
 
 
-def _coerce_field_value(field_name: str, field_def: FieldDefinition, val: Any) -> Any:
+def _coerce_field_value(field_name: str, field_def: FieldDefinition, val: Any, allow_missing_required: bool = False) -> Any:
     dtype = field_def.type
 
     if dtype in (
@@ -98,7 +103,7 @@ def _coerce_field_value(field_name: str, field_def: FieldDefinition, val: Any) -
             raise CoercionError(f"Type mismatch for field {field_name}: expected object")
         sub_props = field_def.properties or {}
         sub_schema = ResponseSchema(title=field_name, properties=sub_props)
-        return validate_and_coerce(sub_schema, val)
+        return validate_and_coerce(sub_schema, val, allow_missing_required=allow_missing_required)
 
     elif dtype == PlatformDataType.ARRAY:
         if not isinstance(val, list):
@@ -106,7 +111,7 @@ def _coerce_field_value(field_name: str, field_def: FieldDefinition, val: Any) -
         res_list: List[Any] = []
         item_def = field_def.items or FieldDefinition(type=PlatformDataType.STRING)
         for i, item in enumerate(val):
-            coerced_item = _coerce_field_value(f"{field_name}[{i}]", item_def, item)
+            coerced_item = _coerce_field_value(f"{field_name}[{i}]", item_def, item, allow_missing_required=allow_missing_required)
             res_list.append(coerced_item)
         return res_list
 

@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import httpx
 from callcraft_engine.adapters.base import BaseAIAdapter
 
@@ -13,7 +13,7 @@ class AnthropicAdapter(BaseAIAdapter):
         self,
         image_bytes: Optional[bytes],
         mime_type: Optional[str],
-        tool_schema: Dict[str, Any],
+        tool_schema: Union[Dict[str, Any], List[Dict[str, Any]]],
         system_prompt: Optional[str],
         user_prompt: Optional[str],
         api_key: str,
@@ -23,14 +23,22 @@ class AnthropicAdapter(BaseAIAdapter):
             raise ValueError("Anthropic API Key is missing. Please configure a valid API key in settings or request header.")
 
         url = "https://api.anthropic.com/v1/messages"
-        func_name = tool_schema.get("name", "extract_structured_data")
 
-        # Map Anthropic tool schema (input_schema instead of parameters)
-        anthropic_tool = {
-            "name": func_name,
-            "description": tool_schema.get("description", "Extract structured JSON data"),
-            "input_schema": tool_schema.get("parameters", tool_schema),
-        }
+        tools_list = tool_schema if isinstance(tool_schema, list) else [tool_schema]
+        anthropic_tools = []
+        for ts in tools_list:
+            if isinstance(ts, dict):
+                fn = ts.get("function", ts) if isinstance(ts, dict) else ts
+                f_name = fn.get("name", "extract_structured_data") if isinstance(fn, dict) else "extract_structured_data"
+                f_desc = fn.get("description", "Extract structured JSON data") if isinstance(fn, dict) else "Extract structured JSON data"
+                f_params = fn.get("parameters", fn) if isinstance(fn, dict) else fn
+                anthropic_tools.append({
+                    "name": f_name,
+                    "description": f_desc,
+                    "input_schema": f_params,
+                })
+
+        first_tool_name = anthropic_tools[0]["name"] if anthropic_tools else "extract_structured_data"
 
         user_content = []
         if user_prompt:
@@ -57,8 +65,8 @@ class AnthropicAdapter(BaseAIAdapter):
             "model": model_identifier if "claude" in model_identifier else "claude-3-5-sonnet-20241022",
             "max_tokens": 4096,
             "messages": messages,
-            "tools": [anthropic_tool],
-            "tool_choice": {"type": "tool", "name": func_name},
+            "tools": anthropic_tools,
+            "tool_choice": {"type": "auto"} if len(anthropic_tools) > 1 else {"type": "tool", "name": first_tool_name},
         }
 
         if system_prompt:
@@ -82,18 +90,25 @@ class AnthropicAdapter(BaseAIAdapter):
                 content_blocks = res_data.get("content", [])
 
                 extracted_json = None
+                executed_tools = []
                 for block in content_blocks:
-                    if block.get("type") == "tool_use" and block.get("name") == func_name:
-                        extracted_json = block.get("input", {})
-                        break
+                    if block.get("type") == "tool_use":
+                        executed_tools.append({
+                            "name": block.get("name") or first_tool_name,
+                            "status": "success",
+                        })
+                        if extracted_json is None:
+                            extracted_json = block.get("input", {})
 
                 if extracted_json is None and content_blocks:
-                    # Fallback parse text block as JSON
                     text_block = content_blocks[0].get("text", "")
                     try:
                         extracted_json = json.loads(text_block)
                     except Exception:
-                        extracted_json = {"raw_response": text_block}
+                        raise ValueError(f"Anthropic API returned non-JSON text output: {text_block[:200]}")
+
+                if isinstance(extracted_json, dict) and executed_tools:
+                    extracted_json["_executed_tools"] = executed_tools
 
                 usage = res_data.get("usage", {})
                 tokens = {

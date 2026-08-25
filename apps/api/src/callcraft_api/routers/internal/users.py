@@ -113,7 +113,8 @@ async def get_user_profile(
             "isLiked": t.id in liked_ids,
             "requestSchema": t.request_schema,
             "responseSchema": t.response_schema,
-            "systemPrompt": t.system_prompt,
+            "positivePrompt": t.positive_prompt,
+            "negativePrompt": t.negative_prompt,
             "createdAt": t.created_at.isoformat() if t.created_at else None,
         })
 

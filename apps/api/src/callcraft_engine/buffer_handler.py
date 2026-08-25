@@ -36,20 +36,22 @@ async def process_image_input(image_input: str) -> Tuple[bytes, str]:
 
     # Handle Base64 Data URL or raw Base64 string
     raw_b64 = image_input
-    mime_type = "image/jpeg"
+    mime_type = "application/octet-stream"
 
     if image_input.startswith("data:"):
         header, _, encoded = image_input.partition(",")
-        if "image/png" in header:
-            mime_type = "image/png"
-        elif "image/webp" in header:
-            mime_type = "image/webp"
-        elif "application/pdf" in header:
-            mime_type = "application/pdf"
+        if ";" in header:
+            mime_type = header.split(";")[0].replace("data:", "").strip()
+        elif ":" in header:
+            mime_type = header.replace("data:", "").strip()
         raw_b64 = encoded
 
     try:
         data_bytes = base64.b64decode(raw_b64)
         return data_bytes, mime_type
     except Exception as e:
-        raise BufferHandlerError(f"Failed to decode Base64 string: {e}")
+        raise BufferHandlerError(f"Failed to decode Base64 file payload: {e}")
+
+
+# Alias for general file processing
+process_file_input = process_image_input

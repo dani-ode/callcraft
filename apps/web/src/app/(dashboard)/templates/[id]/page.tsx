@@ -605,14 +605,26 @@ export default function TemplateDetailPage() {
               <MarkdownRenderer content={template.description || ""} />
             </div>
 
-            {template.systemPrompt && (
+            {(template.positivePrompt || template.extractionPrompt) && (
               <div className="space-y-3 pt-4 border-t border-[#edd6bb]/20">
                 <h4 className="text-xs font-extrabold text-slate-900 dark:text-[#edd6bb] uppercase tracking-wider flex items-center gap-2 font-mono">
                   <Code2 className="w-4 h-4 text-[#e1b329]" />
-                  <span>AI System Instructions Prompt</span>
+                  <span>Positive Extraction Prompt</span>
                 </h4>
                 <pre className="p-5 rounded-2xl bg-[#f4efe8] dark:bg-[#0d0907] border border-[#edd6bb]/30 dark:border-[#edd6bb]/15 text-xs font-mono text-slate-800 dark:text-amber-200/90 whitespace-pre-wrap leading-relaxed">
-                  {template.systemPrompt}
+                  {template.positivePrompt || template.extractionPrompt}
+                </pre>
+              </div>
+            )}
+
+            {template.negativePrompt && (
+              <div className="space-y-3 pt-4 border-t border-[#edd6bb]/20">
+                <h4 className="text-xs font-extrabold text-red-600 dark:text-red-400 uppercase tracking-wider flex items-center gap-2 font-mono">
+                  <Code2 className="w-4 h-4 text-red-500" />
+                  <span>Negative Prompt (Constraints & Prohibitions)</span>
+                </h4>
+                <pre className="p-5 rounded-2xl bg-red-500/5 dark:bg-red-950/20 border border-red-500/20 text-xs font-mono text-slate-800 dark:text-red-200 whitespace-pre-wrap leading-relaxed">
+                  {template.negativePrompt}
                 </pre>
               </div>
             )}
@@ -656,12 +668,7 @@ export default function TemplateDetailPage() {
               </button>
             </div>
 
-            {template.toolsConfig?.instruction && (
-              <div className="p-4 rounded-2xl bg-[#e1b329]/10 border border-[#e1b329]/30 text-xs text-[#b8860b] dark:text-[#ffb443] space-y-1">
-                <span className="font-bold uppercase tracking-wider text-[10px] block font-mono">Routing Instruction Prompt:</span>
-                <p className="italic font-medium">{template.toolsConfig.instruction}</p>
-              </div>
-            )}
+
 
             {/* Registered Tools Grid / Cards */}
             <div className="space-y-4">

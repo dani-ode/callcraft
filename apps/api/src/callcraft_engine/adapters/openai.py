@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import httpx
 from callcraft_engine.adapters.base import BaseAIAdapter
 
@@ -13,11 +13,12 @@ class OpenAIAdapter(BaseAIAdapter):
         self,
         image_bytes: Optional[bytes],
         mime_type: Optional[str],
-        tool_schema: Dict[str, Any],
+        tool_schema: Union[Dict[str, Any], List[Dict[str, Any]]],
         system_prompt: Optional[str],
         user_prompt: Optional[str],
         api_key: str,
         model_identifier: str = "gpt-4o",
+        images: Optional[List[Tuple[bytes, str]]] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         if not api_key or not api_key.strip():
             raise ValueError("OpenAI API Key is missing. Please configure a valid API key in settings or request header.")
@@ -33,7 +34,15 @@ class OpenAIAdapter(BaseAIAdapter):
         if user_prompt:
             user_content.append({"type": "text", "text": user_prompt})
 
-        if image_bytes:
+        if images:
+            for img_b, m_t in images:
+                b64_str = base64.b64encode(img_b).decode("utf-8")
+                media = m_t or "image/jpeg"
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media};base64,{b64_str}"},
+                })
+        elif image_bytes:
             b64_str = base64.b64encode(image_bytes).decode("utf-8")
             media = mime_type or "image/jpeg"
             user_content.append({
@@ -46,17 +55,22 @@ class OpenAIAdapter(BaseAIAdapter):
 
         messages.append({"role": "user", "content": user_content})
 
-        func_name = tool_schema.get("name", "extract_structured_data")
-        tools = [{
-            "type": "function",
-            "function": tool_schema,
-        }]
+        tools = []
+        if isinstance(tool_schema, list):
+            for t in tool_schema:
+                fn = t.get("function", t) if isinstance(t, dict) else t
+                tools.append({"type": "function", "function": fn})
+        elif isinstance(tool_schema, dict):
+            fn = tool_schema.get("function", tool_schema)
+            tools.append({"type": "function", "function": fn})
+
+        first_func_name = tools[0]["function"].get("name", "extract_structured_data") if tools and isinstance(tools[0], dict) and isinstance(tools[0].get("function"), dict) else "extract_structured_data"
 
         payload = {
             "model": model_identifier,
             "messages": messages,
             "tools": tools,
-            "tool_choice": {"type": "function", "function": {"name": func_name}},
+            "tool_choice": "auto",
         }
 
         headers = {
@@ -73,14 +87,31 @@ class OpenAIAdapter(BaseAIAdapter):
                     raise ValueError(f"OpenAI API Error [{resp.status_code}]: {err_msg}")
 
                 res_data = resp.json()
-                choice = res_data.get("choices", [])[0]
-                message = choice.get("message", {})
-                tool_calls = message.get("tool_calls", [])
-                if not tool_calls:
-                    raise ValueError("No tool call returned from OpenAI API response.")
+                choice = res_data.get("choices", [])[0] if res_data.get("choices") else {}
+                message = choice.get("message", {}) if isinstance(choice, dict) else {}
+                tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else []
 
-                raw_args_str = tool_calls[0].get("function", {}).get("arguments", "{}")
-                raw_args = json.loads(raw_args_str)
+                executed_tools = []
+                raw_args = {}
+
+                if tool_calls:
+                    for tc in tool_calls:
+                        fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                        if isinstance(fn, dict) and fn.get("name"):
+                            executed_tools.append({"name": fn.get("name"), "status": "success"})
+
+                    raw_args_str = tool_calls[0].get("function", {}).get("arguments", "{}") if isinstance(tool_calls[0], dict) else "{}"
+                    try:
+                        raw_args = json.loads(raw_args_str)
+                    except Exception:
+                        raw_args = {}
+
+                if not isinstance(raw_args, dict):
+                    raw_args = {}
+
+                raw_args["_executed_tools"] = executed_tools
+                if isinstance(message, dict) and message.get("content"):
+                    raw_args["_ai_message"] = str(message.get("content")).strip()
 
                 usage = res_data.get("usage", {})
                 tokens = {

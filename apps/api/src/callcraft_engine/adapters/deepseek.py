@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import httpx
 from callcraft_engine.adapters.base import BaseAIAdapter
 
@@ -13,7 +13,7 @@ class DeepSeekAdapter(BaseAIAdapter):
         self,
         image_bytes: Optional[bytes],
         mime_type: Optional[str],
-        tool_schema: Dict[str, Any],
+        tool_schema: Union[Dict[str, Any], List[Dict[str, Any]]],
         system_prompt: Optional[str],
         user_prompt: Optional[str],
         api_key: str,
@@ -45,17 +45,22 @@ class DeepSeekAdapter(BaseAIAdapter):
 
         messages.append({"role": "user", "content": user_content})
 
-        func_name = tool_schema.get("name", "extract_structured_data")
-        tools = [{
-            "type": "function",
-            "function": tool_schema,
-        }]
+        tools = []
+        if isinstance(tool_schema, list):
+            for t in tool_schema:
+                fn = t.get("function", t) if isinstance(t, dict) else t
+                tools.append({"type": "function", "function": fn})
+        elif isinstance(tool_schema, dict):
+            fn = tool_schema.get("function", tool_schema)
+            tools.append({"type": "function", "function": fn})
+
+        first_func_name = tools[0]["function"].get("name", "extract_structured_data") if tools and isinstance(tools[0], dict) and isinstance(tools[0].get("function"), dict) else "extract_structured_data"
 
         payload = {
             "model": model_identifier if "deepseek" in model_identifier else "deepseek-chat",
             "messages": messages,
             "tools": tools,
-            "tool_choice": {"type": "function", "function": {"name": func_name}},
+            "tool_choice": "auto" if len(tools) > 1 else {"type": "function", "function": {"name": first_func_name}},
         }
 
         headers = {
@@ -78,6 +83,11 @@ class DeepSeekAdapter(BaseAIAdapter):
 
                 message = choices[0].get("message", {})
                 tool_calls = message.get("tool_calls", [])
+                executed_tools = []
+                for tc in tool_calls:
+                    fn = tc.get("function", {})
+                    if fn.get("name"):
+                        executed_tools.append({"name": fn.get("name"), "status": "success"})
 
                 extracted_json = None
                 if tool_calls:
@@ -92,7 +102,10 @@ class DeepSeekAdapter(BaseAIAdapter):
                     try:
                         extracted_json = json.loads(content_str)
                     except Exception:
-                        extracted_json = {"raw_response": content_str}
+                        raise ValueError(f"DeepSeek API returned non-JSON text output: {content_str[:200]}")
+
+                if isinstance(extracted_json, dict) and executed_tools:
+                    extracted_json["_executed_tools"] = executed_tools
 
                 usage = res_data.get("usage", {})
                 tokens = {

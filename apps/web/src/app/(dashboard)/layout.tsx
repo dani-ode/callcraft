@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { useAuth } from "@/context/auth-context";
+import { ProjectProvider } from "@/context/project-context";
 import { Feather } from "lucide-react";
 
 export default function UserDashboardLayout({
@@ -56,12 +57,14 @@ export default function UserDashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground transition-colors duration-200 antialiased w-full">
-      <Sidebar mobileOpen={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)} />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
-        <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto w-full">{children}</main>
+    <ProjectProvider>
+      <div className="flex min-h-screen bg-background text-foreground transition-colors duration-200 antialiased w-full">
+        <Sidebar mobileOpen={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
+          <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto w-full">{children}</main>
+        </div>
       </div>
-    </div>
+    </ProjectProvider>
   );
 }

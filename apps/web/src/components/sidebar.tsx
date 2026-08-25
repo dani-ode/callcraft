@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/auth-context";
 import { useAppInit } from "@/context/app-init-context";
+import { ProjectSwitcher } from "@/components/project-switcher";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -88,6 +89,9 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
             </button>
           )}
         </div>
+
+        {/* Active Project Switcher */}
+        <ProjectSwitcher collapsed={isManuallyCollapsed && !isMobileDrawer} />
 
         {/* Navigation Items */}
         <nav className="space-y-1.5">
