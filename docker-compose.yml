@@ -72,10 +72,10 @@ services:
     container_name: callcraft-web
     restart: always
     ports:
-      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+      - "127.0.0.1:${WEB_PORT:?WEB_PORT is required in .env}:3000"
     environment:
       - NODE_ENV=production
-      - PORT=${WEB_PORT:-3000}
+      - PORT=${WEB_PORT:?WEB_PORT is required in .env}
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required in .env}
       - SERVICE_CLIENT_ID=${SERVICE_CLIENT_ID:?SERVICE_CLIENT_ID is required in .env}
       - SERVICE_CLIENT_SECRET=${SERVICE_CLIENT_SECRET:?SERVICE_CLIENT_SECRET is required in .env}
