@@ -50,28 +50,24 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           password: ${{ secrets.VPS_PASSWORD }}
-          key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
             set -e
             echo "🚀 Starting Callcraft Studio deployment..."
             
             # Navigate to project directory on VPS
-            cd ~/callcraft || cd /var/www/callcraft || cd /home/${{ secrets.VPS_USERNAME }}/callcraft
+            cd ~/callcraft
             
-            # Fetch & pull latest commits from main
+            # Fetch & pull latest commits
             git fetch origin main
             git reset --hard origin/main
             
-            # Rebuild & restart Docker Compose containers
+            # Rebuild & restart Docker Compose services smoothly
             docker compose down --remove-orphans || true
             docker compose up -d --build
             
-            # Run automatic DB migrations & cleanup unused docker assets
+            # Run automatic DB migrations & cleanup
             docker compose exec -T callcraft-api python3 -m callcraft_api.db.init_db || true
             docker image prune -f
-            
-            # Reload Apache if configured
-            sudo systemctl reload apache2 || sudo service apache2 reload || true
             
             echo "✅ Callcraft Studio successfully deployed to VPS!"
