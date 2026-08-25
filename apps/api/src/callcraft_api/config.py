@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "Callcraft Data Plane API"
+    app_name: str
     app_env: str
     port: int
 
@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     postgres_host: str
     postgres_port: int
 
-    redis_host: str = "127.0.0.1"
-    redis_port: int = 6379
+    redis_host: str
+    redis_port: int
     redis_password: str
 
     database_url: Optional[str] = None
