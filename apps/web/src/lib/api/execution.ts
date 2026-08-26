@@ -48,6 +48,7 @@ export async function executeCallcraftApi(payload: {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${cleanApiKey}`,
+    "X-USER-ID": payload.userId,
     "X-CALL-SPEC-ID": cleanSpecId,
     "X-CALL-PUBLIC-KEY": cleanPublicKey,
     "X-CALL-PROVIDER": cleanProvider,
@@ -72,7 +73,7 @@ export async function executeCallcraftApi(payload: {
   if (payload.aiApiKey) reqBody.ai_api_key = payload.aiApiKey;
   if (payload.aiModelName) reqBody.ai_model_name = payload.aiModelName;
 
-  const res = await fetch(`${PYTHON_API_URL}/v1/call/${payload.userId}`, {
+  const res = await fetch(`${PYTHON_API_URL}/v1/call`, {
     method: "POST",
     headers,
     body: JSON.stringify(reqBody),

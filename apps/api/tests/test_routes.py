@@ -18,8 +18,16 @@ async def test_health_check_endpoint():
 @pytest.mark.asyncio
 async def test_public_call_execution_unauthorized():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/v1/call/test_user_id", json={"prompt": "Test"})
+        response = await ac.post("/v1/call", json={"prompt": "Test"}, headers={"X-USER-ID": "test_user_id"})
         assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_public_call_execution_missing_user_id():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/v1/call", json={"prompt": "Test"}, headers={"Authorization": "Bearer call_sk_valid_key"})
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "MISSING_USER_ID"
 
 
 @pytest.mark.asyncio
@@ -135,8 +143,8 @@ async def test_public_call_execution_header_and_spec_fallback():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 # 1. Hit without headers (Fallback to spec's model "gemini-3.6-flash")
                 resp_fallback = await ac.post(
-                    "/v1/call/usr_test123",
-                    headers={"Authorization": "Bearer call_sk_valid_key", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
+                    "/v1/call",
+                    headers={"Authorization": "Bearer call_sk_valid_key", "X-USER-ID": "usr_test123", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
                     json={"prompt": "Extract name"}
                 )
                 assert resp_fallback.status_code == 200
@@ -148,9 +156,10 @@ async def test_public_call_execution_header_and_spec_fallback():
 
                 # 2. Hit with override headers
                 resp_override = await ac.post(
-                    "/v1/call/usr_test123",
+                    "/v1/call",
                     headers={
                         "Authorization": "Bearer call_sk_valid_key",
+                        "X-USER-ID": "usr_test123",
                         "X-CALL-PUBLIC-KEY": "pk_live_test_123",
                         "X-CALL-SPEC-ID": "ktp-parser",
                         "X-AI-API-KEY": "sk-user-custom-key-12345",
@@ -231,9 +240,9 @@ async def test_global_validation_error_envelope():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Send invalid body (variables expecting dict, send integer) to trigger 422
         res = await ac.post(
-            "/v1/call/usr_test123",
+            "/v1/call",
             json={"variables": "invalid_string_not_dict"},
-            headers={"Authorization": "Bearer call_sk_valid_key"},
+            headers={"Authorization": "Bearer call_sk_valid_key", "X-USER-ID": "usr_test123"},
         )
         assert res.status_code == 422
         data = res.json()
@@ -268,8 +277,8 @@ async def test_ai_connection_failure_envelope():
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             res = await ac.post(
-                "/v1/call/usr_test123",
-                headers={"Authorization": "Bearer call_sk_valid_key", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
+                "/v1/call",
+                headers={"Authorization": "Bearer call_sk_valid_key", "X-USER-ID": "usr_test123", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
                 json={"prompt": "Test AI connection failure"},
             )
             assert res.status_code == 502

@@ -10,7 +10,7 @@ router = APIRouter(prefix="/internal/v1", tags=["Internal"])
 
 
 async def get_current_user_id(
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
     user_id: Optional[str] = None,
     db: Optional[AsyncSession] = Depends(get_db_session),
 ) -> str:

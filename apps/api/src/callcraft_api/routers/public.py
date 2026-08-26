@@ -72,12 +72,12 @@ class CallRequestPayload(BaseModel):
     ai_model_name: Optional[str] = Field(default=None, description="External AI Model Name when external key mode is active")
 
 
-@router.post("/call/{user_id}")
+@router.post("/call")
 async def execute_callcraft(
-    user_id: str,
     payload: CallRequestPayload,
     request: Request,
     authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
     x_call_spec_id: Optional[str] = Header(None, alias="X-CALL-SPEC-ID"),
     x_call_public_key: Optional[str] = Header(None, alias="X-CALL-PUBLIC-KEY"),
     x_call_provider: Optional[str] = Header(None, alias="X-CALL-PROVIDER"),
@@ -90,14 +90,19 @@ async def execute_callcraft(
     request_id = f"req_{str(ulid.new())}"
     trace_id = f"trc_{str(ulid.new())[:12]}"
 
-    show_prompt_hdr = (
-        x_call_show_prompt
-        or request.headers.get("x-call-show-prompt")
-        or request.headers.get("x-call_show_prompt")
-        or request.headers.get("X-CALL-SHOW-PROMPT")
-        or request.headers.get("X-CALL_SHOW_PROMPT")
-    )
-    should_show_prompt = bool(show_prompt_hdr and show_prompt_hdr.strip().lower() == "true")
+    if not x_user_id or not x_user_id.strip():
+        return create_error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="MISSING_USER_ID",
+            message="Header 'X-USER-ID' wajib diisi untuk verifikasi identitas user",
+            actionable_step="Sertakan header 'X-USER-ID: <user_id>' pada request API Anda.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    user_id = x_user_id.strip()
+
+    should_show_prompt = bool(x_call_show_prompt and x_call_show_prompt.strip().lower() == "true")
 
     # 1. Authenticate Bearer API Key dynamically against DB credentials (STRICT - NO FALLBACKS)
     if not authorization or not authorization.startswith("Bearer "):
@@ -196,8 +201,8 @@ async def execute_callcraft(
         )
 
     # 3. Model & AI Provider Resolution Flow from Database
-    header_key = x_ai_api_key or payload.ai_api_key
-    header_model = x_ai_model_name or payload.ai_model_name
+    header_key = x_ai_api_key
+    header_model = x_ai_model_name
     spec_model = cached_spec.get("externalModelName")
     use_external_key = cached_spec.get("useExternalApiKey", True)
 

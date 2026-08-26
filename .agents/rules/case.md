@@ -1,6 +1,6 @@
 ---
 trigger: model_decision
-description: json format standard
+description: json case
 ---
 
 Using camelCase for json

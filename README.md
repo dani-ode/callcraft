@@ -21,7 +21,7 @@
 - 🤖 **Dynamic Tool & Function Calling Engine**: Automatically translates user-defined JSON Schemas into official AI Vision *Tool Calling Specs* to guarantee 100% valid JSON responses.
 - 🛡️ **Multi-Tier Security & Authentication**:
   - **Service Auth**: Internal communication between Next.js Server ➔ Python (`/internal/v1/*`).
-  - **Customer Auth**: Public execution API (`/v1/call/{user_id}`) via Bearer API Key (`call_sk_...`).
+  - **Customer Auth**: Public execution API (`/v1/call`) via Bearer API Key (`call_sk_...`) & `X-USER-ID` header.
   - **Admin Auth**: Granular access control based on Role-Based Access Control (**RBAC**).
   - **Security Safeguards**: AES-256-GCM encryption for provider API keys, Argon2id hashing for secret keys, and strict SSRF URL validation.
 
@@ -71,6 +71,7 @@ Ensure your environment meets the following requirements before running the appl
 ### 1. Clone Repository & Environment Setup
 ```bash
 cp .env.example .env
+bun install
 ```
 
 ### 2. Start Infrastructure Services (PostgreSQL & Redis)
@@ -83,27 +84,32 @@ docker-compose up -d callcraft-postgres callcraft-redis
 psql -h 127.0.0.1 -U callcraft_user -d callcraft_db -f migrations/0001_initial_schema.sql
 ```
 
-### 4. Start Python Backend Data Plane API (`apps/api`)
+### 4. Run Both Backend & Frontend (Single-Command Option A)
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python3 -m uvicorn apps.api.main:app --port 8080 --reload
+bun dev
 ```
-*The Data Plane API will be available at `http://127.0.0.1:8080`.*
+*The Data Plane API will run at `http://127.0.0.1:8081` and the Web Dashboard at `http://localhost:3001`.*
 
-### 5. Run Python Pytest Suite
-```bash
-pytest apps/api/tests
-```
+---
 
-### 6. Start Next.js Web Dashboard with Bun (`apps/web`)
-```bash
-cd apps/web
-bun install
-bun run dev
-```
-*The Control Plane Dashboard will be available at `http://localhost:3000`.*
+### Individual Service Commands:
+
+- **Start Python Backend Data Plane API (`apps/api`)**:
+  ```bash
+  bun run dev:api
+  ```
+  *Data Plane API available at `http://127.0.0.1:8081`.*
+
+- **Start Next.js Web Dashboard (`apps/web`)**:
+  ```bash
+  bun run dev:web
+  ```
+  *Control Plane Dashboard available at `http://localhost:3001`.*
+
+- **Run Pytest Backend Test Suite**:
+  ```bash
+  bun run test:api
+  ```
 
 ---
 
@@ -112,8 +118,9 @@ bun run dev
 After creating a Callcraft API specification and generating an API Key in the Dashboard, external applications can execute API calls via HTTP `POST`:
 
 ```bash
-curl -X POST "http://127.0.0.1:8080/v1/call/01HZX89ABCDEF1234567890XYZ" \
+curl -X POST "http://127.0.0.1:8081/v1/call" \
   -H "Authorization: Bearer call_sk_sample_key_1234567890" \
+  -H "X-USER-ID: 01HZX89ABCDEF1234567890XYZ" \
   -H "X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ" \
   -H "Content-Type: application/json" \
   -d '{

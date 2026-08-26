@@ -5,8 +5,15 @@
     "apps/*"
   ],
   "scripts": {
-    "dev:web": "bun --cwd apps/web dev",
-    "build:web": "bun --cwd apps/web build",
-    "test:web": "bun --cwd apps/web test"
+    "dev:web": "dotenv -e .env -- bun --cwd apps/web dev -- -p 3001",
+    "dev:api": "POSTGRES_PORT=5432 REDIS_PORT=6379 PYTHONPATH=apps/api/src:apps/api dotenv -e .env -- .venv/bin/python3 -m uvicorn apps.api.main:app --port 8081 --reload",
+    "dev": "concurrently -n \"api,web\" -c \"cyan,yellow\" \"bun run dev:api\" \"bun run dev:web\"",
+    "build:web": "dotenv -e .env -- bun --cwd apps/web build",
+    "test:web": "bun --cwd apps/web test",
+    "test:api": "POSTGRES_PORT=5432 REDIS_PORT=6379 PYTHONPATH=apps/api/src:apps/api .venv/bin/pytest apps/api/tests"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "dotenv-cli": "^11.0.0"
   }
 }

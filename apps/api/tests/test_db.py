@@ -66,14 +66,14 @@ async def test_init_db_seeding(test_session: AsyncSession):
     assert "medical-prescription-lab-report" in template_codes
 
     # Verify initial call specs
-    specs = await Repository.list_call_specs(test_session, "usr_default_dev_01")
+    specs = await Repository.list_call_specs(test_session, "usr_01HZX01USER0000000000001")
     assert len(specs) >= 3
 
 
 @pytest.mark.asyncio
 async def test_create_and_verify_api_credential(test_session: AsyncSession):
     cred_dict, secret_key = await Repository.create_api_credential(
-        db=test_session, user_id="usr_default_dev_01", name="Test App Key", environment="sandbox"
+        db=test_session, user_id="usr_01HZX01USER0000000000001", name="Test App Key", environment="sandbox"
     )
 
     assert cred_dict["name"] == "Test App Key"
@@ -86,7 +86,7 @@ async def test_create_and_verify_api_credential(test_session: AsyncSession):
     )
     assert verified is not None
     assert verified["id"] == cred_dict["id"]
-    assert verified["user_id"] == "usr_default_dev_01"
+    assert verified["user_id"] == "usr_01HZX01USER0000000000001"
 
     # Verify invalid secret key fails
     invalid = await Repository.verify_api_credential(
@@ -111,7 +111,7 @@ async def test_create_and_fetch_call_spec(test_session: AsyncSession):
     }
     created = await Repository.create_call_spec(
         db=test_session,
-        user_id="usr_default_dev_01",
+        user_id="usr_01HZX01USER0000000000001",
         name="Custom Receipt Spec",
         slug="custom-receipt",
         description="Extract custom receipt fields",
@@ -124,7 +124,7 @@ async def test_create_and_fetch_call_spec(test_session: AsyncSession):
     assert created["status"] == "active"
 
     # Fetch spec by slug
-    fetched = await Repository.get_call_spec(test_session, "usr_default_dev_01", "custom-receipt")
+    fetched = await Repository.get_call_spec(test_session, "usr_01HZX01USER0000000000001", "custom-receipt")
     assert fetched is not None
     assert fetched["name"] == "Custom Receipt Spec"
     assert fetched["responseSchema"] == schema

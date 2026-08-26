@@ -20,6 +20,7 @@ from callcraft_api.db.models import (
     ServiceClient,
     SystemPrompt,
     Template,
+    TemplateComment,
     User,
     UserAiProvider,
     UserUsageDaily,
@@ -27,12 +28,32 @@ from callcraft_api.db.models import (
     user_roles,
 )
 from callcraft_engine.crypto import encrypt_aes_256_gcm, hash_secret_argon2
+from callcraft_api.utils.id_generator import (
+    PREFIX_USER,
+    PREFIX_PROJECT,
+    PREFIX_SPEC,
+    PREFIX_VERSION,
+    PREFIX_CREDENTIAL,
+    PREFIX_PROVIDER,
+    PREFIX_MODEL,
+    PREFIX_USER_PROVIDER,
+    PREFIX_TEMPLATE,
+    PREFIX_COMMENT,
+    PREFIX_REQUEST,
+    PREFIX_USAGE,
+    PREFIX_ROLE,
+    PREFIX_PERMISSION,
+    PREFIX_SERVICE,
+    PREFIX_SYSTEM_PROMPT,
+    PREFIX_APP,
+    generate_id,
+)
 
 logger = logging.getLogger("callcraft.db.init")
 
 
 async def init_db(session: AsyncSession) -> None:
-    """Initializes tables and seeds comprehensive realistic metadata in database."""
+    """Initializes tables and seeds comprehensive realistic metadata in database with standardized Prefixed ULIDs."""
     conn = await session.connection()
     if conn is not None:
         await conn.run_sync(Base.metadata.create_all)
@@ -64,13 +85,13 @@ async def init_db(session: AsyncSession) -> None:
                 await session.rollback()
                 logger.debug(f"Migration statement ignored: {stmt} - {e}")
 
-    # 0. Seed AppInit Settings
-    stmt_app = select(AppInit).where(AppInit.id == "app_01HZX01INIT00000000001")
+    # 0. Seed AppInit Settings (Prefixed ULID: app_...)
+    stmt_app = select(AppInit).where(AppInit.id == "app_01HZX01INIT0000000000001")
     res_app = await session.execute(stmt_app)
     if not res_app.scalar_one_or_none():
         session.add(
             AppInit(
-                id="app_01HZX01INIT00000000001",
+                id="app_01HZX01INIT0000000000001",
                 app_name=settings.app_name,
                 app_icon="Feather",
                 tagline="Multimodal AI Execution Gateway",
@@ -79,14 +100,14 @@ async def init_db(session: AsyncSession) -> None:
             )
         )
 
-    # 1. Seed AI Providers
+    # 1. Seed AI Providers (Prefixed ULID: prv_...)
     providers_data = [
-        ("01HZX01PROVIDER00000000001", "gemini", "Google Gemini AI"),
-        ("01HZX01PROVIDER00000000002", "openai", "OpenAI"),
-        ("01HZX01PROVIDER00000000003", "anthropic", "Anthropic Claude"),
-        ("01HZX01PROVIDER00000000004", "mistral", "Mistral AI"),
-        ("01HZX01PROVIDER00000000005", "deepseek", "DeepSeek AI"),
-        ("01HZX01PROVIDER00000000006", "ocr-engine", "OCR Precision Engines"),
+        ("prv_01HZX01PROVIDER000000001", "gemini", "Google Gemini AI"),
+        ("prv_01HZX01PROVIDER000000002", "openai", "OpenAI"),
+        ("prv_01HZX01PROVIDER000000003", "anthropic", "Anthropic Claude"),
+        ("prv_01HZX01PROVIDER000000004", "mistral", "Mistral AI"),
+        ("prv_01HZX01PROVIDER000000005", "deepseek", "DeepSeek AI"),
+        ("prv_01HZX01PROVIDER000000006", "ocr-engine", "OCR Precision Engines"),
     ]
     provider_map = {}
     for pid, code, name in providers_data:
@@ -100,31 +121,31 @@ async def init_db(session: AsyncSession) -> None:
 
     await session.flush()
 
-    # 2. Seed AI Models (Latest 2026 Models: Tool Calling, Vision, OCR)
+    # 2. Seed AI Models (Prefixed ULID: mdl_...)
     models_data = [
         # Google Gemini
-        ("01HZX01MODEL00000000000001", "gemini", "Gemini 3.6 Flash", "gemini-3.6-flash", True, True, True, 0.000075, 0.000300, True),
-        ("01HZX01MODEL00000000000002", "gemini", "Gemini 3.5 Flash", "gemini-3.5-flash", True, True, True, 0.000060, 0.000240, False),
-        ("01HZX01MODEL00000000000003", "gemini", "Gemini 3.5 Flash Lite", "gemini-3.5-flash-lite", False, True, True, 0.000030, 0.000120, False),
-        ("01HZX01MODEL00000000000004", "gemini", "Gemini 3.1 Flash Lite", "gemini-3.1-flash-lite", False, True, True, 0.000025, 0.000100, False),
+        ("mdl_01HZX01MODEL000000000001", "gemini", "Gemini 3.6 Flash", "gemini-3.6-flash", True, True, True, 0.000075, 0.000300, True),
+        ("mdl_01HZX01MODEL000000000002", "gemini", "Gemini 3.5 Flash", "gemini-3.5-flash", True, True, True, 0.000060, 0.000240, False),
+        ("mdl_01HZX01MODEL000000000003", "gemini", "Gemini 3.5 Flash Lite", "gemini-3.5-flash-lite", False, True, True, 0.000030, 0.000120, False),
+        ("mdl_01HZX01MODEL000000000004", "gemini", "Gemini 3.1 Flash Lite", "gemini-3.1-flash-lite", False, True, True, 0.000025, 0.000100, False),
         # OpenAI
-        ("01HZX01MODEL00000000000005", "openai", "GPT-5.6 Luna", "gpt-5.6-luna", True, True, True, 0.002500, 0.010000, False),
-        ("01HZX01MODEL00000000000006", "openai", "GPT-5.6 Terra", "gpt-5.6-terra", True, True, True, 0.001500, 0.006000, False),
-        ("01HZX01MODEL00000000000007", "openai", "GPT-5.6 Sol", "gpt-5.6-sol", True, True, True, 0.000150, 0.000600, False),
+        ("mdl_01HZX01MODEL000000000005", "openai", "GPT-5.6 Luna", "gpt-5.6-luna", True, True, True, 0.002500, 0.010000, False),
+        ("mdl_01HZX01MODEL000000000006", "openai", "GPT-5.6 Terra", "gpt-5.6-terra", True, True, True, 0.001500, 0.006000, False),
+        ("mdl_01HZX01MODEL000000000007", "openai", "GPT-5.6 Sol", "gpt-5.6-sol", True, True, True, 0.000150, 0.000600, False),
         # Anthropic Claude
-        ("01HZX01MODEL00000000000008", "anthropic", "Claude Opus 5", "claude-opus-5", True, True, True, 0.005000, 0.025000, False),
-        ("01HZX01MODEL00000000000009", "anthropic", "Claude Sonnet 5", "claude-sonnet-5", True, True, True, 0.003000, 0.015000, False),
-        ("01HZX01MODEL00000000000010", "anthropic", "Claude Haiku 4.5", "claude-haiku-4.5", True, True, True, 0.000800, 0.004000, False),
+        ("mdl_01HZX01MODEL000000000008", "anthropic", "Claude Opus 5", "claude-opus-5", True, True, True, 0.005000, 0.025000, False),
+        ("mdl_01HZX01MODEL000000000009", "anthropic", "Claude Sonnet 5", "claude-sonnet-5", True, True, True, 0.003000, 0.015000, False),
+        ("mdl_01HZX01MODEL000000000010", "anthropic", "Claude Haiku 4.5", "claude-haiku-4.5", True, True, True, 0.000800, 0.004000, False),
         # Mistral AI
-        ("01HZX01MODEL00000000000011", "mistral", "Mistral Medium 3.5", "mistral-medium-3.5", True, True, True, 0.000900, 0.002700, False),
-        ("01HZX01MODEL00000000000012", "mistral", "Mistral Small 4", "mistral-small-4", True, True, True, 0.000200, 0.000600, False),
+        ("mdl_01HZX01MODEL000000000011", "mistral", "Mistral Medium 3.5", "mistral-medium-3.5", True, True, True, 0.000900, 0.002700, False),
+        ("mdl_01HZX01MODEL000000000012", "mistral", "Mistral Small 4", "mistral-small-4", True, True, True, 0.000200, 0.000600, False),
         # DeepSeek AI
-        ("01HZX01MODEL00000000000013", "deepseek", "DeepSeek V4 Pro", "deepseek-v4-pro", False, True, True, 0.000280, 0.000560, False),
-        ("01HZX01MODEL00000000000014", "deepseek", "DeepSeek V4 Flash", "deepseek-v4-flash", False, True, True, 0.000100, 0.000200, False),
-        ("01HZX01MODEL00000000000015", "deepseek", "DeepSeek VL2", "deepseek-vl2", True, True, True, 0.000200, 0.000400, False),
-        ("01HZX01MODEL00000000000016", "deepseek", "DeepSeek OCR", "deepseek-ocr", True, False, True, 0.000080, 0.000160, False),
+        ("mdl_01HZX01MODEL000000000013", "deepseek", "DeepSeek V4 Pro", "deepseek-v4-pro", False, True, True, 0.000280, 0.000560, False),
+        ("mdl_01HZX01MODEL000000000014", "deepseek", "DeepSeek V4 Flash", "deepseek-v4-flash", False, True, True, 0.000100, 0.000200, False),
+        ("mdl_01HZX01MODEL000000000015", "deepseek", "DeepSeek VL2", "deepseek-vl2", True, True, True, 0.000200, 0.000400, False),
+        ("mdl_01HZX01MODEL000000000016", "deepseek", "DeepSeek OCR", "deepseek-ocr", True, False, True, 0.000080, 0.000160, False),
         # OCR Engine
-        ("01HZX01MODEL00000000000017", "ocr-engine", "OCR 4.1", "ocr-4.1", True, False, True, 0.000050, 0.000100, False),
+        ("mdl_01HZX01MODEL000000000017", "ocr-engine", "OCR 4.1", "ocr-4.1", True, False, True, 0.000050, 0.000100, False),
     ]
 
     model_map = {}
@@ -151,13 +172,13 @@ async def init_db(session: AsyncSession) -> None:
 
     await session.flush()
 
-    # 3. Seed Roles & Permissions
+    # 3. Seed Roles & Permissions (Prefixed ULID: rol_..., prm_...)
     roles_data = [
-        ("01HZX01ROLE000000000000001", "SUPER_ADMIN", "Super administrator with unrestricted platform access"),
-        ("01HZX01ROLE000000000000002", "ADMIN", "Platform administrator"),
-        ("01HZX01ROLE000000000000003", "SUPPORT", "Support engineer with read-only inspection access"),
-        ("01HZX01ROLE000000000000004", "ANALYST", "Data analyst with usage & log metrics read access"),
-        ("01HZX01ROLE000000000000005", "USER", "Standard developer user"),
+        ("rol_01HZX01ROLE0000000000001", "SUPER_ADMIN", "Super administrator with unrestricted platform access"),
+        ("rol_01HZX01ROLE0000000000002", "ADMIN", "Platform administrator"),
+        ("rol_01HZX01ROLE0000000000003", "SUPPORT", "Support engineer with read-only inspection access"),
+        ("rol_01HZX01ROLE0000000000004", "ANALYST", "Data analyst with usage & log metrics read access"),
+        ("rol_01HZX01ROLE0000000000005", "USER", "Standard developer user"),
     ]
     role_map = {}
     for rid, rname, rdesc in roles_data:
@@ -170,12 +191,12 @@ async def init_db(session: AsyncSession) -> None:
         role_map[rname] = ro.id or rid
 
     perms_data = [
-        ("01HZX01PERM000000000000001", "call.execute", "Execute Callcraft API specs"),
-        ("01HZX01PERM000000000000002", "spec.manage", "Create, update, and delete Callcraft API specs"),
-        ("01HZX01PERM000000000000003", "key.manage", "Create and revoke API keys and AI provider keys"),
-        ("01HZX01PERM000000000000004", "model.manage", "Administer platform AI models and providers"),
-        ("01HZX01PERM000000000000005", "analytics.read", "View platform aggregated usage and request logs"),
-        ("01HZX01PERM000000000000006", "user.manage", "Manage user accounts and role assignments"),
+        ("prm_01HZX01PERM00000000000001", "call.execute", "Execute Callcraft API specs"),
+        ("prm_01HZX01PERM00000000000002", "spec.manage", "Create, update, and delete Callcraft API specs"),
+        ("prm_01HZX01PERM00000000000003", "key.manage", "Create and revoke API keys and AI provider keys"),
+        ("prm_01HZX01PERM00000000000004", "model.manage", "Administer platform AI models and providers"),
+        ("prm_01HZX01PERM00000000000005", "analytics.read", "View platform aggregated usage and request logs"),
+        ("prm_01HZX01PERM00000000000006", "user.manage", "Manage user accounts and role assignments"),
     ]
     for pid, pcode, pdesc in perms_data:
         stmt = select(Permission).where(Permission.code == pcode)
@@ -185,17 +206,17 @@ async def init_db(session: AsyncSession) -> None:
 
     await session.flush()
 
-    # 4. Seed Users & Assign Roles
+    # 4. Seed Users & Assign Roles (Prefixed ULID: usr_...)
     admin_email = settings.admin_email or "dev@callcraft.io"
     admin_password = settings.admin_password or "callcraft_admin_secret_123"
     admin_name = settings.admin_name or "Callcraft Admin"
 
     users_data = [
-        ("usr_default_dev_01", admin_email, admin_password, admin_name, "SUPER_ADMIN"),
-        ("usr_demo_developer_02", "developer@acme.corp", "acme_developer_secret_123", "Alex Rivera", "USER"),
-        ("usr_demo_analyst_03", "analyst@fintech.io", "fintech_analyst_secret_123", "Sarah Chen", "ANALYST"),
-        ("usr_demo_engineer_04", "budi.santoso@idcheck.co.id", "idcheck_budi_secret_123", "Budi Santoso", "USER"),
-        ("usr_demo_health_05", "m.vance@medtech.org", "medtech_vance_secret_123", "Dr. Michael Vance", "USER"),
+        ("usr_01HZX01USER0000000000001", admin_email, admin_password, admin_name, "SUPER_ADMIN"),
+        ("usr_01HZX01USER0000000000002", "developer@acme.corp", "acme_developer_secret_123", "Alex Rivera", "USER"),
+        ("usr_01HZX01USER0000000000003", "analyst@fintech.io", "fintech_analyst_secret_123", "Sarah Chen", "ANALYST"),
+        ("usr_01HZX01USER0000000000004", "budi.santoso@idcheck.co.id", "idcheck_budi_secret_123", "Budi Santoso", "USER"),
+        ("usr_01HZX01USER0000000000005", "m.vance@medtech.org", "medtech_vance_secret_123", "Dr. Michael Vance", "USER"),
     ]
     user_map = {}
     for uid, uemail, upass, uname, urole in users_data:
@@ -216,10 +237,10 @@ async def init_db(session: AsyncSession) -> None:
 
     await session.flush()
 
-    # 5. Seed Service Clients (Primary web service client derived from environment settings)
+    # 5. Seed Service Clients (Prefixed ULID: svc_...)
     service_clients_data = [
-        ("01HZX01SVC000000000000001", settings.service_client_id, "client_nextjs_dashboard_01", settings.service_client_secret, ["spec.manage", "call.execute", "analytics.read"]),
-        ("01HZX01SVC000000000000002", "svc_analytics_worker", "client_analytics_worker_01", "analytics_secret_key_prod_02", ["analytics.read"]),
+        ("svc_01HZX01SVC00000000000001", settings.service_client_id, "client_nextjs_dashboard_01", settings.service_client_secret, ["spec.manage", "call.execute", "analytics.read"]),
+        ("svc_01HZX01SVC00000000000002", "svc_analytics_worker", "client_analytics_worker_01", "analytics_secret_key_prod_02", ["analytics.read"]),
     ]
     for sid, sname, scid, ssecret, sperms in service_clients_data:
         stmt = select(ServiceClient).where(ServiceClient.name == sname)
@@ -236,13 +257,13 @@ async def init_db(session: AsyncSession) -> None:
                 )
             )
 
-    # 5.5 Seed Projects (MUST happen before api_credentials and call_specs)
+    # 5.5 Seed Projects (Prefixed ULID: prj_...)
     projects_data = [
-        ("prj_01HZX01PROJECT000000001", "usr_default_dev_01", "Callcraft Platform", "callcraft-platform", "Proyek utama platform Callcraft — document parsing, identity verification, dan multimodal AI execution suite.", "#e1b329", "Feather"),
-        ("prj_01HZX01PROJECT000000002", "usr_default_dev_01", "Internal Tooling", "internal-tooling", "Alat bantu internal untuk tim Callcraft — expense automation dan receipt extractor.", "#6366f1", "Wrench"),
-        ("prj_01HZX01PROJECT000000003", "usr_demo_developer_02", "Acme Document Suite", "acme-document-suite", "Suite ekstraksi dokumen korporat untuk Acme Corp — invoice, kontrak, dan laporan keuangan.", "#10b981", "Boxes"),
-        ("prj_01HZX01PROJECT000000004", "usr_demo_engineer_04", "IDCheck KYC Engine", "idcheck-kyc-engine", "Mesin KYC berbasis AI untuk validasi identitas nasional Indonesia — e-KTP, SIM, dan Paspor RI.", "#f59e0b", "ShieldCheck"),
-        ("prj_01HZX01PROJECT000000005", "usr_demo_health_05", "MedTech Clinical Suite", "medtech-clinical-suite", "Suite analisis dokumen medis — resep dokter, laporan lab, dan resume rawat inap pasien.", "#ef4444", "Stethoscope"),
+        ("prj_01HZX01PROJECT000000001", "usr_01HZX01USER0000000000001", "Callcraft Platform", "callcraft-platform", "Proyek utama platform Callcraft — document parsing, identity verification, dan multimodal AI execution suite.", "#e1b329", "Feather"),
+        ("prj_01HZX01PROJECT000000002", "usr_01HZX01USER0000000000001", "Internal Tooling", "internal-tooling", "Alat bantu internal untuk tim Callcraft — expense automation dan receipt extractor.", "#6366f1", "Wrench"),
+        ("prj_01HZX01PROJECT000000003", "usr_01HZX01USER0000000000002", "Acme Document Suite", "acme-document-suite", "Suite ekstraksi dokumen korporat untuk Acme Corp — invoice, kontrak, dan laporan keuangan.", "#10b981", "Boxes"),
+        ("prj_01HZX01PROJECT000000004", "usr_01HZX01USER0000000000004", "IDCheck KYC Engine", "idcheck-kyc-engine", "Mesin KYC berbasis AI untuk validasi identitas nasional Indonesia — e-KTP, SIM, dan Paspor RI.", "#f59e0b", "ShieldCheck"),
+        ("prj_01HZX01PROJECT000000005", "usr_01HZX01USER0000000000005", "MedTech Clinical Suite", "medtech-clinical-suite", "Suite analisis dokumen medis — resep dokter, laporan lab, dan resume rawat inap pasien.", "#ef4444", "Stethoscope"),
     ]
     for prj_id, prj_uid, prj_name, prj_slug, prj_desc, prj_color, prj_icon in projects_data:
         stmt = select(Project).where(Project.id == prj_id)
@@ -260,11 +281,11 @@ async def init_db(session: AsyncSession) -> None:
             ))
     await session.flush()
 
-    # 6. Seed API Credentials (with project_id)
+    # 6. Seed API Credentials (Prefixed ULID: crd_...)
     credentials_data = [
-        ("crd_01HZX01KEY00000000001", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "Default Production Key", "pk_live_default_key_01", "call_sk_live_default_dev_key_01", "production"),
-        ("crd_01HZX01KEY00000000002", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "Development Sandbox Key", "pk_test_sandbox_key_01", "call_sk_test_sandbox_dev_key_01", "sandbox"),
-        ("crd_01HZX01KEY00000000003", "usr_demo_developer_02", "prj_01HZX01PROJECT000000003", "Acme Production Gateway Key", "pk_live_acme_key_02", "call_sk_live_acme_gateway_key_02", "production"),
+        ("crd_01HZX01KEY0000000000001", "usr_01HZX01USER0000000000001", "prj_01HZX01PROJECT000000001", "Default Production Key", "pk_live_default_key_01", "call_sk_live_default_dev_key_01", "production"),
+        ("crd_01HZX01KEY0000000000002", "usr_01HZX01USER0000000000001", "prj_01HZX01PROJECT000000001", "Development Sandbox Key", "pk_test_sandbox_key_01", "call_sk_test_sandbox_dev_key_01", "sandbox"),
+        ("crd_01HZX01KEY0000000000003", "usr_01HZX01USER0000000000002", "prj_01HZX01PROJECT000000003", "Acme Production Gateway Key", "pk_live_acme_key_02", "call_sk_live_acme_gateway_key_02", "production"),
     ]
     for cid, uid, prj_id, cname, pkey, skey, cenv in credentials_data:
         stmt = select(ApiCredential).where(ApiCredential.public_key == pkey)
@@ -282,12 +303,12 @@ async def init_db(session: AsyncSession) -> None:
                 )
             )
 
-    # 7. Seed User AI Provider Encrypted Keys (Dynamically encrypted from environment variables)
+    # 7. Seed User AI Provider Encrypted Keys (Prefixed ULID: uap_...)
     user_ai_providers_data = []
     if settings.gemini_api_key:
-        user_ai_providers_data.append(("uap_01HZX01UAP000000000001", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000001", settings.gemini_api_key))
+        user_ai_providers_data.append(("uap_01HZX01UAP0000000000001", "usr_01HZX01USER0000000000001", "prj_01HZX01PROJECT000000001", "prv_01HZX01PROVIDER000000001", settings.gemini_api_key))
     if settings.openai_api_key:
-        user_ai_providers_data.append(("uap_01HZX01UAP000000000002", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000002", settings.openai_api_key))
+        user_ai_providers_data.append(("uap_01HZX01UAP0000000000002", "usr_01HZX01USER0000000000001", "prj_01HZX01PROJECT000000001", "prv_01HZX01PROVIDER000000002", settings.openai_api_key))
 
     for uap_id, uid, prj_id, pid, raw_key in user_ai_providers_data:
         try:
@@ -309,11 +330,11 @@ async def init_db(session: AsyncSession) -> None:
         except Exception as e:
             logger.warning(f"Skipped UserAiProvider seed: {e}")
 
-    # 8. Seed System Prompts
+    # 8. Seed System Prompts (Prefixed ULID: spm_...)
     system_prompts_data = [
-        ("01HZX01SYSPRM0000000000001", "default_tool_calling_system_prompt", "Default Structured Tool Calling Prompt", "You are a high-precision structured data extraction engine. Extract JSON adhering strictly to the provided tool schema. Output valid JSON only."),
-        ("01HZX01SYSPRM0000000000002", "document_ocr_system_prompt", "Document OCR & Legal Extraction Prompt", "Extract clear, verbatim text and structured fields from official identity and legal documents. Do not infer or extrapolate unrepresented information."),
-        ("01HZX01SYSPRM0000000000003", "financial_receipt_system_prompt", "Financial Statement & Receipt Prompt", "Analyze financial documents including invoices, receipts, and bank statements. Extract all line items, tax components, currency codes, vendor identity, and grand total."),
+        ("spm_01HZX01SYSPRM00000000001", "default_tool_calling_system_prompt", "Default Structured Tool Calling Prompt", "You are a high-precision structured data extraction engine. Extract JSON adhering strictly to the provided tool schema. Output valid JSON only."),
+        ("spm_01HZX01SYSPRM00000000002", "document_ocr_system_prompt", "Document OCR & Legal Extraction Prompt", "Extract clear, verbatim text and structured fields from official identity and legal documents. Do not infer or extrapolate unrepresented information."),
+        ("spm_01HZX01SYSPRM00000000003", "financial_receipt_system_prompt", "Financial Statement & Receipt Prompt", "Analyze financial documents including invoices, receipts, and bank statements. Extract all line items, tax components, currency codes, vendor identity, and grand total."),
     ]
     for sp_id, sp_code, sp_name, sp_content in system_prompts_data:
         stmt = select(SystemPrompt).where(SystemPrompt.code == sp_code)
@@ -329,14 +350,13 @@ async def init_db(session: AsyncSession) -> None:
                 )
             )
 
-    # 9. Seed Official Master Templates (Professional Schemas & Specs)
+    # 9. Seed Official Master Templates (Prefixed ULID: tpl_...)
     import random
-    from callcraft_api.db.models import TemplateComment
 
     templates_data = [
         {
-            "id": "tmpl_id_ktp",
-            "user_id": "usr_demo_engineer_04",
+            "id": "tpl_01HZX01TMPL000000000001",
+            "user_id": "usr_01HZX01USER0000000000004",
             "code": "government-issued-identity-document",
             "name": "Government-Issued Identity & License Document Parser Suite",
             "description": "Suite verifikasi dokumen identitas resmi negara (e-KTP Indonesia NIK 16-digit, SIM / Driver License, dan Paspor Republik Indonesia). Dilengkapi dengan 3 spesialisasi Tool Calling otomatis.",
@@ -402,8 +422,8 @@ async def init_db(session: AsyncSession) -> None:
             },
         },
         {
-            "id": "tmpl_retail_receipt",
-            "user_id": "usr_demo_analyst_03",
+            "id": "tpl_01HZX01TMPL000000000002",
+            "user_id": "usr_01HZX01USER0000000000003",
             "code": "financial-receipt-invoice-suite",
             "name": "Financial Receipt, B2B Invoice & Bank Statement Suite",
             "description": "Suite otomatisasi akuntansi dan verifikasi bukti transaksi finansial retail (Struk Kasir/Kwitansi), Faktur Pajak/Corporate Tagihan B2B, dan Laporan Rekening Koran Bank.",
@@ -492,8 +512,8 @@ async def init_db(session: AsyncSession) -> None:
             },
         },
         {
-            "id": "tmpl_medical_prescription",
-            "user_id": "usr_demo_health_05",
+            "id": "tpl_01HZX01TMPL000000000003",
+            "user_id": "usr_01HZX01USER0000000000005",
             "code": "medical-prescription-lab-report",
             "name": "Medical Diagnostics, Doctor Prescription & Clinical Lab Suite",
             "description": "Analisis medis terstruktur untuk Resep Obat Dokter, Laporan Laboratorium Medis/Hasil Tes Darah, dan Resume Medis Pasien Rawat Inap.",
@@ -597,7 +617,7 @@ async def init_db(session: AsyncSession) -> None:
         ("Sarah Chen (Co-Founder)", 4, "Sangat efisien untuk pengolahan dokumen Purchase Order korporasi."),
     ]
 
-    users_for_comments = ["usr_default_dev_01", "usr_demo_developer_02", "usr_demo_analyst_03", "usr_demo_engineer_04", "usr_demo_health_05"]
+    users_for_comments = ["usr_01HZX01USER0000000000001", "usr_01HZX01USER0000000000002", "usr_01HZX01USER0000000000003", "usr_01HZX01USER0000000000004", "usr_01HZX01USER0000000000005"]
 
     for tmpl in templates_data:
         likes_count = random.randint(40, 60)
@@ -615,7 +635,7 @@ async def init_db(session: AsyncSession) -> None:
             session.add(
                 Template(
                     id=tmpl["id"],
-                    user_id=tmpl.get("user_id", "usr_default_dev_01"),
+                    user_id=tmpl.get("user_id", "usr_01HZX01USER0000000000001"),
                     code=tmpl["code"],
                     name=tmpl["name"],
                     description=tmpl["description"],
@@ -639,7 +659,7 @@ async def init_db(session: AsyncSession) -> None:
             await session.flush()
 
             for idx, (aname, crating, ctext) in enumerate(selected_comments):
-                cid = f"cmt_{tmpl['code']}_{idx+1}"
+                cid = f"cmt_01HZX01CMT{idx+1:017d}"
                 stmt_c = select(TemplateComment).where(TemplateComment.id == cid)
                 res_c = await session.execute(stmt_c)
                 if not res_c.scalar_one_or_none():
@@ -656,13 +676,13 @@ async def init_db(session: AsyncSession) -> None:
 
     await session.flush()
 
-    # 10. Seed Call Specs & Spec Versions
+    # 10. Seed Call Specs & Spec Versions (Prefixed ULID: spc_..., spv_...)
     specs_data = [
         (
-            "spc_01HZX01SPEC0000000001",
-            "usr_default_dev_01",
+            "spc_01HZX01SPEC000000000001",
+            "usr_01HZX01USER0000000000001",
             "prj_01HZX01PROJECT000000001",
-            "tmpl_id_ktp",
+            "tpl_01HZX01TMPL000000000001",
             "Government Identity Document Verification",
             "ktp-parser",
             "Suite verifikasi KTP, SIM, dan Paspor resmi Republik Indonesia",
@@ -670,10 +690,10 @@ async def init_db(session: AsyncSession) -> None:
             "gemini-3.6-flash",
         ),
         (
-            "spc_01HZX01SPEC0000000002",
-            "usr_default_dev_01",
+            "spc_01HZX01SPEC000000000002",
+            "usr_01HZX01USER0000000000001",
             "prj_01HZX01PROJECT000000002",
-            "tmpl_retail_receipt",
+            "tpl_01HZX01TMPL000000000002",
             "Financial Receipt & Invoice Suite",
             "receipt-extractor",
             "Multi-currency corporate receipt, invoice & bank statement scanner spec",
@@ -681,10 +701,10 @@ async def init_db(session: AsyncSession) -> None:
             "gemini-3.6-flash",
         ),
         (
-            "spc_01HZX01SPEC0000000003",
-            "usr_default_dev_01",
+            "spc_01HZX01SPEC000000000003",
+            "usr_01HZX01USER0000000000001",
             "prj_01HZX01PROJECT000000001",
-            "tmpl_medical_prescription",
+            "tpl_01HZX01TMPL000000000003",
             "Medical Prescription Scanner",
             "prescription-parser",
             "Clinical prescription, lab test diagnostic & discharge resume extractor spec",
@@ -719,7 +739,7 @@ async def init_db(session: AsyncSession) -> None:
             session.add(spec_obj)
             await session.flush()
 
-        ver_id = f"ver_{sid[4:]}"
+        ver_id = f"spv_01HZX01VERSION{sid[-10:]}"
         stmt_ver = select(CallSpecVersion).where(CallSpecVersion.id == ver_id)
         res_ver = await session.execute(stmt_ver)
         if not res_ver.scalar_one_or_none():
@@ -741,14 +761,14 @@ async def init_db(session: AsyncSession) -> None:
 
     await session.flush()
 
-    # 11. Seed API Request Audit Logs
+    # 11. Seed API Request Audit Logs (Prefixed ULID: req_...)
     now = datetime.now(timezone.utc)
     logs_data = [
-        ("req_01HZX01REQ000000000001", "req_live_01HZX01AAA99", "usr_default_dev_01", "spc_01HZX01SPEC0000000001", "ver_01HZX01SPEC0000000001", "crd_01HZX01KEY00000000001", "gemini", "gemini-3.6-flash", "SUCCESS", 200, "url", 154200, 420, 680, 140, 820, 0.000093, "198.51.100.42", "python-requests/2.31.0", now - timedelta(minutes=10)),
-        ("req_01HZX01REQ000000000002", "req_live_01HZX01BBB88", "usr_default_dev_01", "spc_01HZX01SPEC0000000002", "ver_01HZX01SPEC0000000002", "crd_01HZX01KEY00000000001", "gemini", "gemini-3.6-flash", "SUCCESS", 200, "base64", 285400, 850, 1250, 310, 1560, 0.000186, "198.51.100.42", "Node/v20.11.0", now - timedelta(minutes=45)),
-        ("req_01HZX01REQ000000000003", "req_live_01HZX01CCC77", "usr_default_dev_01", "spc_01HZX01SPEC0000000003", "ver_01HZX01SPEC0000000003", "crd_01HZX01KEY00000000001", "openai", "gpt-5.6-luna", "SUCCESS", 200, "url", 98400, 640, 890, 180, 1070, 0.004025, "203.0.113.15", "curl/7.88.1", now - timedelta(hours=2)),
-        ("req_01HZX01REQ000000000004", "req_live_01HZX01DDD66", "usr_default_dev_01", "spc_01HZX01SPEC0000000001", "ver_01HZX01SPEC0000000001", "crd_01HZX01KEY00000000001", "gemini", "gemini-3.6-flash", "VALIDATION_ERROR", 422, "base64", 12000, 45, 0, 0, 0, 0.000000, "198.51.100.42", "python-requests/2.31.0", now - timedelta(hours=5)),
-        ("req_01HZX01REQ000000000005", "req_live_01HZX01EEE55", "usr_default_dev_01", "spc_01HZX01SPEC0000000002", "ver_01HZX01SPEC0000000002", "crd_01HZX01KEY00000000001", "anthropic", "claude-sonnet-5", "SUCCESS", 200, "url", 310500, 1120, 1420, 260, 1680, 0.008160, "172.56.21.9", "Go-http-client/1.1", now - timedelta(hours=12)),
+        ("req_01HZX01REQ0000000000001", "req_live_01HZX01AAA99", "usr_01HZX01USER0000000000001", "spc_01HZX01SPEC000000000001", "spv_01HZX01VERSION0000000001", "crd_01HZX01KEY0000000000001", "gemini", "gemini-3.6-flash", "SUCCESS", 200, "url", 154200, 420, 680, 140, 820, 0.000093, "198.51.100.42", "python-requests/2.31.0", now - timedelta(minutes=10)),
+        ("req_01HZX01REQ0000000000002", "req_live_01HZX01BBB88", "usr_01HZX01USER0000000000001", "spc_01HZX01SPEC000000000002", "spv_01HZX01VERSION0000000002", "crd_01HZX01KEY0000000000001", "gemini", "gemini-3.6-flash", "SUCCESS", 200, "base64", 285400, 850, 1250, 310, 1560, 0.000186, "198.51.100.42", "Node/v20.11.0", now - timedelta(minutes=45)),
+        ("req_01HZX01REQ0000000000003", "req_live_01HZX01CCC77", "usr_01HZX01USER0000000000001", "spc_01HZX01SPEC000000000003", "spv_01HZX01VERSION0000000003", "crd_01HZX01KEY0000000000001", "openai", "gpt-5.6-luna", "SUCCESS", 200, "url", 98400, 640, 890, 180, 1070, 0.004025, "203.0.113.15", "curl/7.88.1", now - timedelta(hours=2)),
+        ("req_01HZX01REQ0000000000004", "req_live_01HZX01DDD66", "usr_01HZX01USER0000000000001", "spc_01HZX01SPEC000000000001", "spv_01HZX01VERSION0000000001", "crd_01HZX01KEY0000000000001", "gemini", "gemini-3.6-flash", "VALIDATION_ERROR", 422, "base64", 12000, 45, 0, 0, 0, 0.000000, "198.51.100.42", "python-requests/2.31.0", now - timedelta(hours=5)),
+        ("req_01HZX01REQ0000000000005", "req_live_01HZX01EEE55", "usr_01HZX01USER0000000000001", "spc_01HZX01SPEC000000000002", "spv_01HZX01VERSION0000000002", "crd_01HZX01KEY0000000000001", "anthropic", "claude-sonnet-5", "SUCCESS", 200, "url", 310500, 1120, 1420, 260, 1680, 0.008160, "172.56.21.9", "Go-http-client/1.1", now - timedelta(hours=12)),
     ]
 
     for log_id, req_id, log_uid, spec_id, ver_id, cred_id, pcode, mident, st, hst, itype, isize, ptime, ptok, ctok, ttok, cost, ip, ua, log_created in logs_data:
@@ -783,34 +803,34 @@ async def init_db(session: AsyncSession) -> None:
                     )
                 )
 
-    # 12. Seed User Daily Usage Aggregates
+    # 12. Seed User Daily Usage Aggregates (Prefixed ULID: usg_...)
     today = date.today()
     usage_records = [
-        ("usr_default_dev_01", 6, 120, 115, 5, 142000, 0.042500),
-        ("usr_default_dev_01", 5, 145, 142, 3, 185000, 0.058200),
-        ("usr_default_dev_01", 4, 98, 95, 3, 118000, 0.035100),
-        ("usr_default_dev_01", 3, 210, 204, 6, 276000, 0.089400),
-        ("usr_default_dev_01", 2, 180, 175, 5, 230000, 0.071200),
-        ("usr_default_dev_01", 1, 260, 255, 5, 340000, 0.114500),
-        ("usr_default_dev_01", 0, 84, 82, 2, 105000, 0.032800),
+        ("usr_01HZX01USER0000000000001", 6, 120, 115, 5, 142000, 0.042500),
+        ("usr_01HZX01USER0000000000001", 5, 145, 142, 3, 185000, 0.058200),
+        ("usr_01HZX01USER0000000000001", 4, 98, 95, 3, 118000, 0.035100),
+        ("usr_01HZX01USER0000000000001", 3, 210, 204, 6, 276000, 0.089400),
+        ("usr_01HZX01USER0000000000001", 2, 180, 175, 5, 230000, 0.071200),
+        ("usr_01HZX01USER0000000000001", 1, 260, 255, 5, 340000, 0.114500),
+        ("usr_01HZX01USER0000000000001", 0, 84, 82, 2, 105000, 0.032800),
 
-        ("usr_demo_developer_02", 6, 45, 43, 2, 58000, 0.018500),
-        ("usr_demo_developer_02", 5, 62, 60, 2, 82000, 0.026400),
-        ("usr_demo_developer_02", 4, 88, 85, 3, 112000, 0.035800),
-        ("usr_demo_developer_02", 3, 105, 102, 3, 134000, 0.043100),
-        ("usr_demo_developer_02", 2, 130, 128, 2, 168000, 0.054200),
-        ("usr_demo_developer_02", 1, 175, 170, 5, 225000, 0.072600),
-        ("usr_demo_developer_02", 0, 52, 50, 2, 64000, 0.020500),
+        ("usr_01HZX01USER0000000000002", 6, 45, 43, 2, 58000, 0.018500),
+        ("usr_01HZX01USER0000000000002", 5, 62, 60, 2, 82000, 0.026400),
+        ("usr_01HZX01USER0000000000002", 4, 88, 85, 3, 112000, 0.035800),
+        ("usr_01HZX01USER0000000000002", 3, 105, 102, 3, 134000, 0.043100),
+        ("usr_01HZX01USER0000000000002", 2, 130, 128, 2, 168000, 0.054200),
+        ("usr_01HZX01USER0000000000002", 1, 175, 170, 5, 225000, 0.072600),
+        ("usr_01HZX01USER0000000000002", 0, 52, 50, 2, 64000, 0.020500),
     ]
 
-    for u_uid, days_ago, req_tot, req_succ, req_fail, tok_tot, cost_tot in usage_records:
+    for idx, (u_uid, days_ago, req_tot, req_succ, req_fail, tok_tot, cost_tot) in enumerate(usage_records):
         u_date = today - timedelta(days=days_ago)
         stmt = select(UserUsageDaily).where(UserUsageDaily.user_id == u_uid, UserUsageDaily.usage_date == u_date)
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
             session.add(
                 UserUsageDaily(
-                    id=f"usg_{days_ago}_{str(ulid.new())[:20]}",
+                    id=f"usg_01HZX01USG{idx+1:017d}",
                     user_id=u_uid,
                     usage_date=u_date,
                     total_requests=req_tot,

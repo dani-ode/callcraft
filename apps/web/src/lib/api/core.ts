@@ -53,7 +53,7 @@ export function getAuthHeaders(): Record<string, string> {
   const userId = getActiveUserId();
   return {
     "Content-Type": "application/json",
-    "X-User-Id": sanitizeHeaderValue(userId),
+    "X-USER-ID": sanitizeHeaderValue(userId),
   };
 }
 

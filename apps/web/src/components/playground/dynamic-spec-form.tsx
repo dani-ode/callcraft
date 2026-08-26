@@ -252,7 +252,7 @@ export function DynamicSpecForm({
   };
 
   const activeUserId = userId || getActiveUserId();
-  const endpointUrl = `${PYTHON_API_URL}/v1/call/${activeUserId}`;
+  const endpointUrl = `${PYTHON_API_URL}/v1/call`;
 
   const requestFields: SchemaField[] = requestSchema && typeof requestSchema === "object"
     ? jsonSchemaToSchemaFields(requestSchema)
@@ -272,6 +272,7 @@ export function DynamicSpecForm({
   const curlHeaderLines = [
     `curl -X POST "${endpointUrl}"`,
     `  -H "Content-Type: application/json"`,
+    `  -H "X-USER-ID: ${activeUserId}"`,
     `  -H "X-CALL-SPEC-ID: ${specSlug || specId}"`,
     `  -H "X-CALL-PUBLIC-KEY: ${maskedPublicKey}"`,
     `  -H "Authorization: Bearer ${maskedBearerToken}"`,
@@ -397,6 +398,7 @@ export function DynamicSpecForm({
         {/* POSTMAN TAB 2: HEADERS */}
         {activeRequestTab === "headers" && (
           <RequestHeadersTab
+            userId={activeUserId}
             specId={specId}
             specSlug={specSlug}
             publicKey={publicKey}

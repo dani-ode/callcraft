@@ -32,24 +32,23 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install Frontend Dependencies & Type Check
+      - name: Install Monorepo Dependencies & Type Check
         run: |
-          cd apps/web
           bun install
-          bun run tsc --noEmit
+          bun run build:web
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Install Backend Dependencies & Run Pytest
         env:
           APP_NAME: CallCraft
           APP_ENV: testing
-          PORT: 8080
-          WEB_PORT: 3000
+          PORT: 8081
+          WEB_PORT: 3001
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: test_db
@@ -66,7 +65,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pytest
+          PYTHONPATH=apps/api/src:apps/api pytest apps/api/tests
 
   deploy:
     name: Deploy to VPS

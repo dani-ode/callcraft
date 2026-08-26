@@ -748,8 +748,9 @@ export default function TemplateDetailPage() {
             <div className="space-y-3">
               <span className="text-xs font-bold text-slate-900 dark:text-[#edd6bb] block">Contoh HTTP cURL Request:</span>
               <pre className="p-6 rounded-2xl bg-[#0d0907] border border-[#edd6bb]/20 text-xs font-mono text-emerald-400 leading-relaxed overflow-x-auto">
-{`curl -X POST http://localhost:8080/v1/call/usr_demo \\
+{`curl -X POST http://localhost:8080/v1/call \\
   -H "Authorization: Bearer call_sk_live_..." \\
+  -H "X-USER-ID: usr_demo" \\
   -H "X-CALL-SPEC-ID: ${template.code}" \\
   -F "file=@document.pdf"`}
               </pre>

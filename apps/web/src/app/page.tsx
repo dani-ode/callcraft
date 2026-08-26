@@ -228,8 +228,9 @@ export default function LandingPage() {
             <div className="bg-[#120e0b] dark:bg-[#120e0b] bg-[#f5ebe0] p-4 rounded-2xl border border-[#edd6bb]/15 space-y-2 overflow-x-auto">
               <span className="text-[10px] text-[#8b7e6d] font-bold">// HTTP Request with PDF Stream & External Key</span>
               <pre className="text-[#edd6bb] text-[11px] leading-relaxed">
-{`curl -X POST http://localhost:8080/v1/call/usr_demo \\
+{`curl -X POST http://localhost:8080/v1/call \\
   -H "Authorization: Bearer call_sk_live_9988..." \\
+  -H "X-USER-ID: usr_demo" \\
   -H "X-CALL-SPEC-ID: invoice-extractor" \\
   -H "X-AI-API-KEY: sk-proj-ext-key-99" \\
   -H "X-AI-MODEL-NAME: gpt-4o" \\

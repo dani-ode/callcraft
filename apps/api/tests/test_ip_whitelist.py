@@ -69,9 +69,9 @@ async def test_route_ip_whitelist_enforcement():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             # 1. Request from non-whitelisted IP (203.0.113.50) via X-Forwarded-For -> expect 403 Forbidden
             res = await ac.post(
-                "/v1/call/usr_test",
+                "/v1/call",
                 json={"prompt": "test"},
-                headers={"Authorization": "Bearer call_sk_live_test", "X-CALL-PUBLIC-KEY": "pk_live_test", "X-Forwarded-For": "203.0.113.50", "X-CALL-SPEC-ID": "ktp-parser"},
+                headers={"Authorization": "Bearer call_sk_live_test", "X-USER-ID": "usr_test", "X-CALL-PUBLIC-KEY": "pk_live_test", "X-Forwarded-For": "203.0.113.50", "X-CALL-SPEC-ID": "ktp-parser"},
             )
             assert res.status_code == 403
             assert "tidak terdaftar" in res.json()["error"]["message"]
@@ -80,9 +80,9 @@ async def test_route_ip_whitelist_enforcement():
             with patch("callcraft_api.services.redis_cache.redis_service.get_spec", new_callable=AsyncMock) as mock_redis:
                 mock_redis.return_value = {"id": "spec_1", "slug": "ktp-parser", "use_external_api_key": False}
                 res_allowed = await ac.post(
-                    "/v1/call/usr_test",
+                    "/v1/call",
                     json={"prompt": "test"},
-                    headers={"Authorization": "Bearer call_sk_live_test", "X-CALL-PUBLIC-KEY": "pk_live_test", "X-Forwarded-For": "10.0.0.15", "X-CALL-SPEC-ID": "ktp-parser"},
+                    headers={"Authorization": "Bearer call_sk_live_test", "X-USER-ID": "usr_test", "X-CALL-PUBLIC-KEY": "pk_live_test", "X-Forwarded-For": "10.0.0.15", "X-CALL-SPEC-ID": "ktp-parser"},
                 )
                 # Should pass IP check (status != 403)
                 assert res_allowed.status_code != 403

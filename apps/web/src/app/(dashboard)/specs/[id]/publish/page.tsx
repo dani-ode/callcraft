@@ -70,7 +70,7 @@ export default function SpecPublicationPage() {
       setCategory(data.template?.category || "finance");
       setDescription(
         data.template?.description ||
-          `# ${data.spec.name}\n\n## Description\n${data.spec.description || 'High-precision Callcraft AI vision extraction specification.'}\n\n## Target Output Schema\nExecute this Call Spec directly using the Callcraft data plane gateway.\n\n## Example Request\n\`\`\`bash\ncurl -X POST http://localhost:8080/v1/call/usr_demo \\\n  -H "Authorization: Bearer call_sk_live_..." \\\n  -H "X-CALL-SPEC-ID: ${data.spec.slug}"\n\`\`\``
+          `# ${data.spec.name}\n\n## Description\n${data.spec.description || 'High-precision Callcraft AI vision extraction specification.'}\n\n## Target Output Schema\nExecute this Call Spec directly using the Callcraft data plane gateway.\n\n## Example Request\n\`\`\`bash\ncurl -X POST http://localhost:8081/v1/call \\\n  -H "Authorization: Bearer call_sk_live_..." \\\n  -H "X-USER-ID: usr_demo" \\\n  -H "X-CALL-SPEC-ID: ${data.spec.slug}"\n\`\`\``
       );
     } catch (err: any) {
       setNotification({ message: err.message || "Failed to load publication settings", type: "error" });

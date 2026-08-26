@@ -1,6 +1,6 @@
 # Specifications — API Endpoints Reference
 
-This document presents the complete REST API contract specifications for **Callcraft**, divided into 3 primary categories: **Internal Management API** (`/internal/v1/*`), **Public Customer Data Plane API** (`/v1/call/{user_id}`), and **Admin Platform API** (`/admin/v1/*`).
+This document presents the complete REST API contract specifications for **Callcraft**, divided into 3 primary categories: **Internal Management API** (`/internal/v1/*`), **Public Customer Data Plane API** (`/v1/call`), and **Admin Platform API** (`/admin/v1/*`).
 
 ---
 
@@ -8,13 +8,14 @@ This document presents the complete REST API contract specifications for **Callc
 
 The primary channel for external customer applications to execute dynamic multimodal AI processing.
 
-### `POST /v1/call/{user_id}`
+### `POST /v1/call`
 
 Executes dynamic multimodal AI processing based on the specified `X-CALL-SPEC-ID`.
 
 #### Request Headers:
 ```http
 Authorization: Bearer call_sk_sample_key_1234567890
+X-USER-ID: 01HZX89ABCDEF1234567890XYZ
 X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
 X-Request-ID: req_882391005_abc
 X-Correlation-ID: trc_5599201

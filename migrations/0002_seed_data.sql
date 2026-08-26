@@ -1,138 +1,139 @@
 -- =============================================================================
 -- SEED DATA FOR CALLCRAFT PLATFORM (COMPLETE REALISTIC MULTIMODAL DATASET)
 -- Includes Projects architecture — all user-owned resources belong to a project
+-- Standardized with Enterprise Prefixed ULID (<prefix>_<26_character_ulid>)
 -- =============================================================================
 
--- 1. SEED AI PROVIDERS
+-- 1. SEED AI PROVIDERS (prv_...)
 INSERT INTO ai_providers (id, code, name, is_active) VALUES
-('01HZX01PROVIDER00000000001', 'gemini', 'Google Gemini AI', true),
-('01HZX01PROVIDER00000000002', 'openai', 'OpenAI', true),
-('01HZX01PROVIDER00000000003', 'anthropic', 'Anthropic Claude', true),
-('01HZX01PROVIDER00000000004', 'mistral', 'Mistral AI', true),
-('01HZX01PROVIDER00000000005', 'deepseek', 'DeepSeek AI', true),
-('01HZX01PROVIDER00000000006', 'ocr-engine', 'OCR Precision Engines', true)
+('prv_01HZX01PROVIDER000000001', 'gemini', 'Google Gemini AI', true),
+('prv_01HZX01PROVIDER000000002', 'openai', 'OpenAI', true),
+('prv_01HZX01PROVIDER000000003', 'anthropic', 'Anthropic Claude', true),
+('prv_01HZX01PROVIDER000000004', 'mistral', 'Mistral AI', true),
+('prv_01HZX01PROVIDER000000005', 'deepseek', 'DeepSeek AI', true),
+('prv_01HZX01PROVIDER000000006', 'ocr-engine', 'OCR Precision Engines', true)
 ON CONFLICT (code) DO NOTHING;
 
--- 2. SEED AI MODELS (LATEST 2026 RELEASES: TOOL CALLING, VISION, OCR)
+-- 2. SEED AI MODELS (mdl_...)
 INSERT INTO ai_models (id, provider_id, name, model_identifier, supports_image, supports_tool_calling, supports_structured_output, cost_per_1k_prompt_tokens, cost_per_1k_completion_tokens, is_default, is_active) VALUES
 -- Google Gemini
-('01HZX01MODEL00000000000001', '01HZX01PROVIDER00000000001', 'Gemini 3.6 Flash', 'gemini-3.6-flash', true, true, true, 0.000075, 0.000300, true, true),
-('01HZX01MODEL00000000000002', '01HZX01PROVIDER00000000001', 'Gemini 3.5 Flash', 'gemini-3.5-flash', true, true, true, 0.000060, 0.000240, false, true),
-('01HZX01MODEL00000000000003', '01HZX01PROVIDER00000000001', 'Gemini 3.5 Flash Lite', 'gemini-3.5-flash-lite', false, true, true, 0.000030, 0.000120, false, true),
-('01HZX01MODEL00000000000004', '01HZX01PROVIDER00000000001', 'Gemini 3.1 Flash Lite', 'gemini-3.1-flash-lite', false, true, true, 0.000025, 0.000100, false, true),
+('mdl_01HZX01MODEL000000000001', 'prv_01HZX01PROVIDER000000001', 'Gemini 3.6 Flash', 'gemini-3.6-flash', true, true, true, 0.000075, 0.000300, true, true),
+('mdl_01HZX01MODEL000000000002', 'prv_01HZX01PROVIDER000000001', 'Gemini 3.5 Flash', 'gemini-3.5-flash', true, true, true, 0.000060, 0.000240, false, true),
+('mdl_01HZX01MODEL000000000003', 'prv_01HZX01PROVIDER000000001', 'Gemini 3.5 Flash Lite', 'gemini-3.5-flash-lite', false, true, true, 0.000030, 0.000120, false, true),
+('mdl_01HZX01MODEL000000000004', 'prv_01HZX01PROVIDER000000001', 'Gemini 3.1 Flash Lite', 'gemini-3.1-flash-lite', false, true, true, 0.000025, 0.000100, false, true),
 
 -- OpenAI
-('01HZX01MODEL00000000000005', '01HZX01PROVIDER00000000002', 'GPT-5.6 Luna', 'gpt-5.6-luna', true, true, true, 0.002500, 0.010000, false, true),
-('01HZX01MODEL00000000000006', '01HZX01PROVIDER00000000002', 'GPT-5.6 Terra', 'gpt-5.6-terra', true, true, true, 0.001500, 0.006000, false, true),
-('01HZX01MODEL00000000000007', '01HZX01PROVIDER00000000002', 'GPT-5.6 Sol', 'gpt-5.6-sol', true, true, true, 0.000150, 0.000600, false, true),
+('mdl_01HZX01MODEL000000000005', 'prv_01HZX01PROVIDER000000002', 'GPT-5.6 Luna', 'gpt-5.6-luna', true, true, true, 0.002500, 0.010000, false, true),
+('mdl_01HZX01MODEL000000000006', 'prv_01HZX01PROVIDER000000002', 'GPT-5.6 Terra', 'gpt-5.6-terra', true, true, true, 0.001500, 0.006000, false, true),
+('mdl_01HZX01MODEL000000000007', 'prv_01HZX01PROVIDER000000002', 'GPT-5.6 Sol', 'gpt-5.6-sol', true, true, true, 0.000150, 0.000600, false, true),
 
 -- Anthropic Claude
-('01HZX01MODEL00000000000008', '01HZX01PROVIDER00000000003', 'Claude Opus 5', 'claude-opus-5', true, true, true, 0.005000, 0.025000, false, true),
-('01HZX01MODEL00000000000009', '01HZX01PROVIDER00000000003', 'Claude Sonnet 5', 'claude-sonnet-5', true, true, true, 0.003000, 0.015000, false, true),
-('01HZX01MODEL00000000000010', '01HZX01PROVIDER00000000003', 'Claude Haiku 4.5', 'claude-haiku-4.5', true, true, true, 0.000800, 0.004000, false, true),
+('mdl_01HZX01MODEL000000000008', 'prv_01HZX01PROVIDER000000003', 'Claude Opus 5', 'claude-opus-5', true, true, true, 0.005000, 0.025000, false, true),
+('mdl_01HZX01MODEL000000000009', 'prv_01HZX01PROVIDER000000003', 'Claude Sonnet 5', 'claude-sonnet-5', true, true, true, 0.003000, 0.015000, false, true),
+('mdl_01HZX01MODEL000000000010', 'prv_01HZX01PROVIDER000000003', 'Claude Haiku 4.5', 'claude-haiku-4.5', true, true, true, 0.000800, 0.004000, false, true),
 
 -- Mistral AI
-('01HZX01MODEL00000000000011', '01HZX01PROVIDER00000000004', 'Mistral Medium 3.5', 'mistral-medium-3.5', true, true, true, 0.000900, 0.002700, false, true),
-('01HZX01MODEL00000000000012', '01HZX01PROVIDER00000000004', 'Mistral Small 4', 'mistral-small-4', true, true, true, 0.000200, 0.000600, false, true),
+('mdl_01HZX01MODEL000000000011', 'prv_01HZX01PROVIDER000000004', 'Mistral Medium 3.5', 'mistral-medium-3.5', true, true, true, 0.000900, 0.002700, false, true),
+('mdl_01HZX01MODEL000000000012', 'prv_01HZX01PROVIDER000000004', 'Mistral Small 4', 'mistral-small-4', true, true, true, 0.000200, 0.000600, false, true),
 
 -- DeepSeek AI
-('01HZX01MODEL00000000000013', '01HZX01PROVIDER00000000005', 'DeepSeek V4 Pro', 'deepseek-v4-pro', false, true, true, 0.000280, 0.000560, false, true),
-('01HZX01MODEL00000000000014', '01HZX01PROVIDER00000000005', 'DeepSeek V4 Flash', 'deepseek-v4-flash', false, true, true, 0.000100, 0.000200, false, true),
-('01HZX01MODEL00000000000015', '01HZX01PROVIDER00000000005', 'DeepSeek VL2', 'deepseek-vl2', true, true, true, 0.000200, 0.000400, false, true),
-('01HZX01MODEL00000000000016', '01HZX01PROVIDER00000000005', 'DeepSeek OCR', 'deepseek-ocr', true, false, true, 0.000080, 0.000160, false, true),
+('mdl_01HZX01MODEL000000000013', 'prv_01HZX01PROVIDER000000005', 'DeepSeek V4 Pro', 'deepseek-v4-pro', false, true, true, 0.000280, 0.000560, false, true),
+('mdl_01HZX01MODEL000000000014', 'prv_01HZX01PROVIDER000000005', 'DeepSeek V4 Flash', 'deepseek-v4-flash', false, true, true, 0.000100, 0.000200, false, true),
+('mdl_01HZX01MODEL000000000015', 'prv_01HZX01PROVIDER000000005', 'DeepSeek VL2', 'deepseek-vl2', true, true, true, 0.000200, 0.000400, false, true),
+('mdl_01HZX01MODEL000000000016', 'prv_01HZX01PROVIDER000000005', 'DeepSeek OCR', 'deepseek-ocr', true, false, true, 0.000080, 0.000160, false, true),
 
 -- OCR Engines
-('01HZX01MODEL00000000000017', '01HZX01PROVIDER00000000006', 'OCR 4.1', 'ocr-4.1', true, false, true, 0.000050, 0.000100, false, true)
+('mdl_01HZX01MODEL000000000017', 'prv_01HZX01PROVIDER000000006', 'OCR 4.1', 'ocr-4.1', true, false, true, 0.000050, 0.000100, false, true)
 ON CONFLICT DO NOTHING;
 
--- 3. SEED ROLES & PERMISSIONS
+-- 3. SEED ROLES & PERMISSIONS (rol_..., prm_...)
 INSERT INTO roles (id, name, description) VALUES
-('01HZX01ROLE000000000000001', 'SUPER_ADMIN', 'Super administrator with unrestricted platform access'),
-('01HZX01ROLE000000000000002', 'ADMIN', 'Platform administrator'),
-('01HZX01ROLE000000000000003', 'SUPPORT', 'Support engineer with read-only inspection access'),
-('01HZX01ROLE000000000000004', 'ANALYST', 'Data analyst with usage & log metrics read access'),
-('01HZX01ROLE000000000000005', 'USER', 'Standard developer user')
+('rol_01HZX01ROLE0000000000001', 'SUPER_ADMIN', 'Super administrator with unrestricted platform access'),
+('rol_01HZX01ROLE0000000000002', 'ADMIN', 'Platform administrator'),
+('rol_01HZX01ROLE0000000000003', 'SUPPORT', 'Support engineer with read-only inspection access'),
+('rol_01HZX01ROLE0000000000004', 'ANALYST', 'Data analyst with usage & log metrics read access'),
+('rol_01HZX01ROLE0000000000005', 'USER', 'Standard developer user')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO permissions (id, code, description) VALUES
-('01HZX01PERM000000000000001', 'call.execute', 'Execute Callcraft API specs'),
-('01HZX01PERM000000000000002', 'spec.manage', 'Create, update, and delete Callcraft API specs'),
-('01HZX01PERM000000000000003', 'key.manage', 'Create and revoke API keys and AI provider keys'),
-('01HZX01PERM000000000000004', 'model.manage', 'Administer platform AI models and providers'),
-('01HZX01PERM000000000000005', 'analytics.read', 'View platform aggregated usage and request logs'),
-('01HZX01PERM000000000000006', 'user.manage', 'Manage user accounts and role assignments')
+('prm_01HZX01PERM00000000000001', 'call.execute', 'Execute Callcraft API specs'),
+('prm_01HZX01PERM00000000000002', 'spec.manage', 'Create, update, and delete Callcraft API specs'),
+('prm_01HZX01PERM00000000000003', 'key.manage', 'Create and revoke API keys and AI provider keys'),
+('prm_01HZX01PERM00000000000004', 'model.manage', 'Administer platform AI models and providers'),
+('prm_01HZX01PERM00000000000005', 'analytics.read', 'View platform aggregated usage and request logs'),
+('prm_01HZX01PERM00000000000006', 'user.manage', 'Manage user accounts and role assignments')
 ON CONFLICT (code) DO NOTHING;
 
 -- Map Role Permissions
 INSERT INTO role_permissions (role_id, permission_id) VALUES
 -- SUPER_ADMIN (All permissions)
-('01HZX01ROLE000000000000001', '01HZX01PERM000000000000001'),
-('01HZX01ROLE000000000000001', '01HZX01PERM000000000000002'),
-('01HZX01ROLE000000000000001', '01HZX01PERM000000000000003'),
-('01HZX01ROLE000000000000001', '01HZX01PERM000000000000004'),
-('01HZX01ROLE000000000000001', '01HZX01PERM000000000000005'),
-('01HZX01ROLE000000000000001', '01HZX01PERM000000000000006'),
+('rol_01HZX01ROLE0000000000001', 'prm_01HZX01PERM00000000000001'),
+('rol_01HZX01ROLE0000000000001', 'prm_01HZX01PERM00000000000002'),
+('rol_01HZX01ROLE0000000000001', 'prm_01HZX01PERM00000000000003'),
+('rol_01HZX01ROLE0000000000001', 'prm_01HZX01PERM00000000000004'),
+('rol_01HZX01ROLE0000000000001', 'prm_01HZX01PERM00000000000005'),
+('rol_01HZX01ROLE0000000000001', 'prm_01HZX01PERM00000000000006'),
 -- ADMIN
-('01HZX01ROLE000000000000002', '01HZX01PERM000000000000001'),
-('01HZX01ROLE000000000000002', '01HZX01PERM000000000000002'),
-('01HZX01ROLE000000000000002', '01HZX01PERM000000000000003'),
-('01HZX01ROLE000000000000002', '01HZX01PERM000000000000004'),
-('01HZX01ROLE000000000000002', '01HZX01PERM000000000000005'),
+('rol_01HZX01ROLE0000000000002', 'prm_01HZX01PERM00000000000001'),
+('rol_01HZX01ROLE0000000000002', 'prm_01HZX01PERM00000000000002'),
+('rol_01HZX01ROLE0000000000002', 'prm_01HZX01PERM00000000000003'),
+('rol_01HZX01ROLE0000000000002', 'prm_01HZX01PERM00000000000004'),
+('rol_01HZX01ROLE0000000000002', 'prm_01HZX01PERM00000000000005'),
 -- USER
-('01HZX01ROLE000000000000005', '01HZX01PERM000000000000001'),
-('01HZX01ROLE000000000000005', '01HZX01PERM000000000000002'),
-('01HZX01ROLE000000000000005', '01HZX01PERM000000000000003')
+('rol_01HZX01ROLE0000000000005', 'prm_01HZX01PERM00000000000001'),
+('rol_01HZX01ROLE0000000000005', 'prm_01HZX01PERM00000000000002'),
+('rol_01HZX01ROLE0000000000005', 'prm_01HZX01PERM00000000000003')
 ON CONFLICT DO NOTHING;
 
--- 4. SEED USERS
+-- 4. SEED USERS (usr_...)
 INSERT INTO users (id, email, password_hash, full_name, status, email_verified_at) VALUES
-('usr_default_dev_01', 'dev@callcraft.io', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Callcraft Admin', 'active', CURRENT_TIMESTAMP),
-('usr_demo_developer_02', 'developer@acme.corp', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Alex Rivera', 'active', CURRENT_TIMESTAMP),
-('usr_demo_analyst_03', 'analyst@fintech.io', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Sarah Chen', 'active', CURRENT_TIMESTAMP),
-('usr_demo_engineer_04', 'budi.santoso@idcheck.co.id', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Budi Santoso', 'active', CURRENT_TIMESTAMP),
-('usr_demo_health_05', 'm.vance@medtech.org', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Dr. Michael Vance', 'active', CURRENT_TIMESTAMP)
+('usr_01HZX01USER0000000000001', 'dev@callcraft.io', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Callcraft Admin', 'active', CURRENT_TIMESTAMP),
+('usr_01HZX01USER0000000000002', 'developer@acme.corp', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Alex Rivera', 'active', CURRENT_TIMESTAMP),
+('usr_01HZX01USER0000000000003', 'analyst@fintech.io', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Sarah Chen', 'active', CURRENT_TIMESTAMP),
+('usr_01HZX01USER0000000000004', 'budi.santoso@idcheck.co.id', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Budi Santoso', 'active', CURRENT_TIMESTAMP),
+('usr_01HZX01USER0000000000005', 'm.vance@medtech.org', '$argon2id$v=19$m=65536,t=3,p=4$koJPkmQFPcTZ/P3UQIUj5Q$xCnPP62OVevT5gna/XGPsUZbkjgzAbKTW/yD3fhkrmc', 'Dr. Michael Vance', 'active', CURRENT_TIMESTAMP)
 ON CONFLICT (email) DO NOTHING;
 
 -- Map User Roles
 INSERT INTO user_roles (user_id, role_id) VALUES
-('usr_default_dev_01', '01HZX01ROLE000000000000001'),
-('usr_demo_developer_02', '01HZX01ROLE000000000000005'),
-('usr_demo_analyst_03', '01HZX01ROLE000000000000004'),
-('usr_demo_engineer_04', '01HZX01ROLE000000000000005'),
-('usr_demo_health_05', '01HZX01ROLE000000000000005')
+('usr_01HZX01USER0000000000001', 'rol_01HZX01ROLE0000000000001'),
+('usr_01HZX01USER0000000000002', 'rol_01HZX01ROLE0000000000005'),
+('usr_01HZX01USER0000000000003', 'rol_01HZX01ROLE0000000000004'),
+('usr_01HZX01USER0000000000004', 'rol_01HZX01ROLE0000000000005'),
+('usr_01HZX01USER0000000000005', 'rol_01HZX01ROLE0000000000005')
 ON CONFLICT DO NOTHING;
 
--- 5. SEED SERVICE CLIENTS
+-- 5. SEED SERVICE CLIENTS (svc_...)
 INSERT INTO service_clients (id, name, client_id, secret_hash, status, permissions) VALUES
-('01HZX01SVC000000000000001', 'svc_nextjs_main', 'client_nextjs_dashboard_01', '$argon2id$v=19$m=65536,t=3,p=4$gBfzPPlzukMMux6Jeplb2A$9Lps4oqHwAPvPovugfMmPt69i7UEiqwaGw6rrGHr554', 'active', '["spec.manage", "call.execute", "analytics.read"]'::jsonb),
-('01HZX01SVC000000000000002', 'svc_analytics_worker', 'client_analytics_worker_01', '$argon2id$v=19$m=65536,t=3,p=4$gBfzPPlzukMMux6Jeplb2A$9Lps4oqHwAPvPovugfMmPt69i7UEiqwaGw6rrGHr554', 'active', '["analytics.read"]'::jsonb)
+('svc_01HZX01SVC00000000000001', 'svc_nextjs_main', 'client_nextjs_dashboard_01', '$argon2id$v=19$m=65536,t=3,p=4$gBfzPPlzukMMux6Jeplb2A$9Lps4oqHwAPvPovugfMmPt69i7UEiqwaGw6rrGHr554', 'active', '["spec.manage", "call.execute", "analytics.read"]'::jsonb),
+('svc_01HZX01SVC00000000000002', 'svc_analytics_worker', 'client_analytics_worker_01', '$argon2id$v=19$m=65536,t=3,p=4$gBfzPPlzukMMux6Jeplb2A$9Lps4oqHwAPvPovugfMmPt69i7UEiqwaGw6rrGHr554', 'active', '["analytics.read"]'::jsonb)
 ON CONFLICT (name) DO NOTHING;
 
--- 6. SEED USER AI PROVIDERS (ENCRYPTED KEYS)
+-- 6. SEED USER AI PROVIDERS (uap_...)
 INSERT INTO user_ai_providers (id, user_id, project_id, provider_id, encrypted_api_key, key_nonce, is_active) VALUES
-('uap_01HZX01UAP000000000001', 'usr_default_dev_01', 'prj_01HZX01PROJECT000000001', '01HZX01PROVIDER00000000001', '1a333d00482090e1940d4c8baf1161b0d540455cc4b2ea7e0b0a4378ae6c014b8710a6ca6b24eb007c4dc703b780', 'b6ce5db49831083cfef26d9b', true),
-('uap_01HZX01UAP000000000002', 'usr_default_dev_01', 'prj_01HZX01PROJECT000000001', '01HZX01PROVIDER00000000002', '1a333d00482090e1940d4c8baf1161b0d540455cc4b2ea7e0b0a4378ae6c014b8710a6ca6b24eb007c4dc703b780', 'b6ce5db49831083cfef26d9b', true)
+('uap_01HZX01UAP0000000000001', 'usr_01HZX01USER0000000000001', 'prj_01HZX01PROJECT000000001', 'prv_01HZX01PROVIDER000000001', '1a333d00482090e1940d4c8baf1161b0d540455cc4b2ea7e0b0a4378ae6c014b8710a6ca6b24eb007c4dc703b780', 'b6ce5db49831083cfef26d9b', true),
+('uap_01HZX01UAP0000000000002', 'usr_01HZX01USER0000000000001', 'prj_01HZX01PROJECT000000001', 'prv_01HZX01PROVIDER000000002', '1a333d00482090e1940d4c8baf1161b0d540455cc4b2ea7e0b0a4378ae6c014b8710a6ca6b24eb007c4dc703b780', 'b6ce5db49831083cfef26d9b', true)
 ON CONFLICT DO NOTHING;
 
--- 7. SEED SYSTEM PROMPTS
+-- 7. SEED SYSTEM PROMPTS (spm_...)
 INSERT INTO system_prompts (id, code, name, content, is_active) VALUES
-('01HZX01SYSPRM0000000000001', 'default_tool_calling_system_prompt', 'Default Structured Tool Calling Prompt', 'You are a high-precision structured data extraction engine. Extract JSON adhering strictly to the provided tool schema. Output valid JSON only.', true),
-('01HZX01SYSPRM0000000000002', 'document_ocr_system_prompt', 'Document OCR & Legal Extraction Prompt', 'Extract clear, verbatim text and structured fields from official identity and legal documents. Do not infer or extrapolate unrepresented information.', true),
-('01HZX01SYSPRM0000000000003', 'financial_receipt_system_prompt', 'Financial Statement & Receipt Prompt', 'Analyze financial documents including invoices, receipts, and bank statements. Extract all line items, tax components, currency codes, vendor identity, and grand total.', true)
+('spm_01HZX01SYSPRM00000000001', 'default_tool_calling_system_prompt', 'Default Structured Tool Calling Prompt', 'You are a high-precision structured data extraction engine. Extract JSON adhering strictly to the provided tool schema. Output valid JSON only.', true),
+('spm_01HZX01SYSPRM00000000002', 'document_ocr_system_prompt', 'Document OCR & Legal Extraction Prompt', 'Extract clear, verbatim text and structured fields from official identity and legal documents. Do not infer or extrapolate unrepresented information.', true),
+('spm_01HZX01SYSPRM00000000003', 'financial_receipt_system_prompt', 'Financial Statement & Receipt Prompt', 'Analyze financial documents including invoices, receipts, and bank statements. Extract all line items, tax components, currency codes, vendor identity, and grand total.', true)
 ON CONFLICT (code) DO NOTHING;
 
--- 8. SEED PROJECTS (Must be created BEFORE call_specs and api_credentials)
+-- 8. SEED PROJECTS (prj_...)
 INSERT INTO projects (id, user_id, name, slug, description, color, icon, status) VALUES
-('prj_01HZX01PROJECT000000001', 'usr_default_dev_01', 'Callcraft Platform', 'callcraft-platform', 'Proyek utama platform Callcraft — document parsing, identity verification, dan multimodal AI execution suite.', '#e1b329', 'Feather', 'active'),
-('prj_01HZX01PROJECT000000002', 'usr_default_dev_01', 'Internal Tooling', 'internal-tooling', 'Alat bantu internal untuk tim Callcraft — expense automation dan receipt extractor.', '#6366f1', 'Wrench', 'active'),
-('prj_01HZX01PROJECT000000003', 'usr_demo_developer_02', 'Acme Document Suite', 'acme-document-suite', 'Suite ekstraksi dokumen korporat untuk Acme Corp — invoice, kontrak, dan laporan keuangan.', '#10b981', 'Boxes', 'active'),
-('prj_01HZX01PROJECT000000004', 'usr_demo_engineer_04', 'IDCheck KYC Engine', 'idcheck-kyc-engine', 'Mesin KYC berbasis AI untuk validasi identitas nasional Indonesia — e-KTP, SIM, dan Paspor RI.', '#f59e0b', 'ShieldCheck', 'active'),
-('prj_01HZX01PROJECT000000005', 'usr_demo_health_05', 'MedTech Clinical Suite', 'medtech-clinical-suite', 'Suite analisis dokumen medis — resep dokter, laporan lab, dan resume rawat inap pasien.', '#ef4444', 'Stethoscope', 'active')
+('prj_01HZX01PROJECT000000001', 'usr_01HZX01USER0000000000001', 'Callcraft Platform', 'callcraft-platform', 'Proyek utama platform Callcraft — document parsing, identity verification, dan multimodal AI execution suite.', '#e1b329', 'Feather', 'active'),
+('prj_01HZX01PROJECT000000002', 'usr_01HZX01USER0000000000001', 'Internal Tooling', 'internal-tooling', 'Alat bantu internal untuk tim Callcraft — expense automation dan receipt extractor.', '#6366f1', 'Wrench', 'active'),
+('prj_01HZX01PROJECT000000003', 'usr_01HZX01USER0000000000002', 'Acme Document Suite', 'acme-document-suite', 'Suite ekstraksi dokumen korporat untuk Acme Corp — invoice, kontrak, dan laporan keuangan.', '#10b981', 'Boxes', 'active'),
+('prj_01HZX01PROJECT000000004', 'usr_01HZX01USER0000000000004', 'IDCheck KYC Engine', 'idcheck-kyc-engine', 'Mesin KYC berbasis AI untuk validasi identitas nasional Indonesia — e-KTP, SIM, dan Paspor RI.', '#f59e0b', 'ShieldCheck', 'active'),
+('prj_01HZX01PROJECT000000005', 'usr_01HZX01USER0000000000005', 'MedTech Clinical Suite', 'medtech-clinical-suite', 'Suite analisis dokumen medis — resep dokter, laporan lab, dan resume rawat inap pasien.', '#ef4444', 'Stethoscope', 'active')
 ON CONFLICT DO NOTHING;
 
--- 9. SEED OFFICIAL MASTER TEMPLATES
+-- 9. SEED OFFICIAL MASTER TEMPLATES (tpl_...)
 INSERT INTO templates (id, user_id, code, name, description, category, categories, request_schema, response_schema, positive_prompt, negative_prompt, additional_prompt, allow_additional_prompt, tools_config, is_official) VALUES
-('tmpl_01HZX01TMPL0000000001', 'usr_demo_engineer_04', 'government-issued-identity-document', 'Government-Issued Identity & License Document Parser Suite', 'Suite verifikasi dokumen identitas resmi negara (e-KTP Indonesia NIK 16-digit, SIM / Driver License, dan Paspor Republik Indonesia). Dilengkapi dengan 3 spesialisasi Tool Calling otomatis.', 'identity', '["identity", "ocr", "kyc", "government"]'::jsonb, 
+('tpl_01HZX01TMPL000000000001', 'usr_01HZX01USER0000000000004', 'government-issued-identity-document', 'Government-Issued Identity & License Document Parser Suite', 'Suite verifikasi dokumen identitas resmi negara (e-KTP Indonesia NIK 16-digit, SIM / Driver License, dan Paspor Republik Indonesia). Dilengkapi dengan 3 spesialisasi Tool Calling otomatis.', 'identity', '["identity", "ocr", "kyc", "government"]'::jsonb, 
 '{"properties": {"identity_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Identity document image or PDF file"}}, "required": ["identity_document"]}'::jsonb,
 '{"properties": {"documentType": {"type": "string", "required": true}, "documentNumber": {"type": "string", "required": true}, "fullName": {"type": "string", "required": true}, "dateOfBirth": {"type": "string", "required": true}, "gender": {"type": "string", "required": true}, "address": {"type": "object", "required": true, "properties": {"street": {"type": "string", "required": false}, "rtRw": {"type": "string", "required": false}, "subdistrict": {"type": "string", "required": false}, "district": {"type": "string", "required": false}, "city": {"type": "string", "required": true}, "province": {"type": "string", "required": true}}}, "expiryDate": {"type": "string", "required": false}, "nationality": {"type": "string", "required": true}}}'::jsonb,
 'Ekstrak data terstruktur kartu e-KTP Indonesia, SIM, atau Paspor RI dengan presisi tinggi.',
@@ -140,7 +141,7 @@ INSERT INTO templates (id, user_id, code, name, description, category, categorie
 'Opsional: Instruksi tambahan dari user...', true,
 '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia (NIK 16-digit, Nama Lengkap, Tempat/Tgl Lahir, Jenis Kelamin, Golongan Darah, Alamat Lengkap, RT/RW, Kel/Desa, Kecamatan, Agama, Status Perkawinan, Pekerjaan, Kewarganegaraan, Masa Berlaku).", "agentRole": "Indonesian Identity & KYC Verification Specialist", "textContext": "Khusus dokumen e-KTP (Kartu Tanda Penduduk) Republik Indonesia.", "includeImageContext": false}, {"name": "extract_driver_license_permit", "description": "Ekstraksi data terstruktur Surat Izin Mengemudi (SIM) / Driver License (Nomor SIM, Golongan SIM A/B1/B2/C/D, Nama Pemilik, Tempat/Tgl Lahir, Tinggi Badan, Pekerjaan, Alamat, Kab/Kota, Masa Berlaku).", "agentRole": "Driver License Inspection Specialist", "textContext": "Khusus dokumen SIM (Surat Izin Mengemudi) Republik Indonesia atau International Driver Permit.", "includeImageContext": false}, {"name": "extract_republic_indonesia_passport", "description": "Ekstraksi lengkap Paspor Republik Indonesia (Jenis Paspor, Kode Negara IDN, Nomor Paspor, Nama Lengkap, Kewarganegaraan, Tanggal Lahir, Jenis Kelamin, Tempat Dikeluarkan, Tanggal Dikeluarkan, Tanggal Habis Berlaku, Nomor Registrasi, Machine Readable Zone / MRZ Line 1 & Line 2).", "agentRole": "Immigration & International Travel Document Inspector", "textContext": "Khusus dokumen Paspor Resmi Republik Indonesia (Elektronik / Non-Elektronik).", "includeImageContext": false}]}'::jsonb, true),
 
-('tmpl_01HZX01TMPL0000000002', 'usr_demo_analyst_03', 'financial-receipt-invoice-suite', 'Financial Receipt, B2B Invoice & Bank Statement Suite', 'Suite otomatisasi akuntansi dan verifikasi bukti transaksi finansial retail (Struk Kasir/Kwitansi), Faktur Pajak/Corporate Tagihan B2B, dan Laporan Rekening Koran Bank.', 'finance', '["finance", "retail", "accounting", "expenses"]'::jsonb,
+('tpl_01HZX01TMPL000000000002', 'usr_01HZX01USER0000000000003', 'financial-receipt-invoice-suite', 'Financial Receipt, B2B Invoice & Bank Statement Suite', 'Suite otomatisasi akuntansi dan verifikasi bukti transaksi finansial retail (Struk Kasir/Kwitansi), Faktur Pajak/Corporate Tagihan B2B, dan Laporan Rekening Koran Bank.', 'finance', '["finance", "retail", "accounting", "expenses"]'::jsonb,
 '{"properties": {"receipt_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Receipt or invoice image or PDF file"}, "currency_override": {"type": "text", "description": "3-letter ISO code"}}, "required": ["receipt_document"]}'::jsonb,
 '{"properties": {"transactionType": {"type": "string", "required": true}, "merchantOrVendor": {"type": "object", "required": true, "properties": {"name": {"type": "string", "required": true}, "taxIdNpwp": {"type": "string", "required": false}, "address": {"type": "string", "required": false}}}, "transactionDetails": {"type": "object", "required": true, "properties": {"invoiceOrReceiptNumber": {"type": "string", "required": true}, "date": {"type": "string", "required": true}, "currency": {"type": "string", "required": true}}}, "lineItems": {"type": "array", "required": true, "items": {"type": "object", "properties": {"itemName": {"type": "string", "required": true}, "quantity": {"type": "number", "required": true}, "unitPrice": {"type": "number", "required": true}, "totalPrice": {"type": "number", "required": true}}}}, "financialSummary": {"type": "object", "required": true, "properties": {"subtotal": {"type": "number", "required": true}, "taxPpnAmount": {"type": "number", "required": false}, "grandTotal": {"type": "number", "required": true}}}}}'::jsonb,
 'Ekstrak rincian transaksi kasir retail, faktur B2B corporate, atau mutasi rekening koran bank.',
@@ -148,7 +149,7 @@ INSERT INTO templates (id, user_id, code, name, description, category, categorie
 'Opsional: Instruksi tambahan dari user...', true,
 '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk kasir toko/restoran (Nama Merchant, Tanggal Transaksi, Line Items Rincian Barang, Subtotal, Tax/PPN, Service Charge, Total Bayar, Metode Pembayaran).", "agentRole": "Retail Expense Audit Agent", "textContext": "Untuk struk kasir toko, minimarket, kwitansi, dan resto.", "includeImageContext": false}, {"name": "extract_corporate_tax_invoice", "description": "Ekstraksi faktur pajak dan tagihan B2B corporate (Invoice Number, Vendor Name, Buyer Company, NPWP, Invoice Date, Due Date, Tax Amount, Line Items, Total Amount).", "agentRole": "Corporate Accounts Payable Auditor", "textContext": "Untuk dokumen invoice tagihan B2B dan faktur pajak.", "includeImageContext": false}, {"name": "extract_bank_account_statement", "description": "Ekstraksi Laporan Mutasi Rekening Koran Bank (Nama Bank, Nama Pemilik Rekening, Nomor Rekening / IBAN, Periode Laporan, Saldo Awal, Total Debet, Total Kredit, Saldo Akhir, Rincian Baris Mutasi [Tanggal, Uraian Keterangan Transaksi, Saldo Debet/Kredit, Running Balance]).", "agentRole": "Bank Statement Reconciliation & Financial Audit Specialist", "textContext": "Khusus dokumen rekening koran bank (BCA, Mandiri, BRI, BNI, CIMB, atau Internasional).", "includeImageContext": false}]}'::jsonb, true),
 
-('tmpl_01HZX01TMPL0000000003', 'usr_demo_health_05', 'medical-prescription-lab-report', 'Medical Diagnostics, Doctor Prescription & Clinical Lab Suite', 'Analisis medis terstruktur untuk Resep Obat Dokter, Laporan Laboratorium Medis/Hasil Tes Darah, dan Resume Medis Pasien Rawat Inap.', 'medical', '["medical", "diagnostics", "healthcare", "pharma"]'::jsonb,
+('tpl_01HZX01TMPL000000000003', 'usr_01HZX01USER0000000000005', 'medical-prescription-lab-report', 'Medical Diagnostics, Doctor Prescription & Clinical Lab Suite', 'Analisis medis terstruktur untuk Resep Obat Dokter, Laporan Laboratorium Medis/Hasil Tes Darah, dan Resume Medis Pasien Rawat Inap.', 'medical', '["medical", "diagnostics", "healthcare", "pharma"]'::jsonb,
 '{"properties": {"medical_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Medical document or lab result file"}, "patient_id_override": {"type": "text", "description": "Internal Medical Record ID"}}, "required": ["medical_document"]}'::jsonb,
 '{"properties": {"medicalDocumentType": {"type": "string", "required": true}, "patientInfo": {"type": "object", "required": true, "properties": {"fullName": {"type": "string", "required": true}, "medicalRecordNumber": {"type": "string", "required": false}}}, "healthcareFacility": {"type": "object", "required": true, "properties": {"facilityName": {"type": "string", "required": true}, "practitionerDoctorName": {"type": "string", "required": true}, "date": {"type": "string", "required": true}}}, "prescribedMedications": {"type": "array", "required": false, "items": {"type": "object", "properties": {"drugName": {"type": "string", "required": true}, "dosage": {"type": "string", "required": true}, "instructionsSigna": {"type": "string", "required": true}}}}, "labTestResults": {"type": "array", "required": false, "items": {"type": "object", "properties": {"testParameter": {"type": "string", "required": true}, "resultValue": {"type": "string", "required": true}, "unit": {"type": "string", "required": false}, "referenceRange": {"type": "string", "required": false}, "flag": {"type": "string", "required": false}}}}}}'::jsonb,
 'Ekstrak data resep dokter, laporan laboratorium medis, atau ringkasan pasien pulang rawat inap.',
@@ -157,56 +158,56 @@ INSERT INTO templates (id, user_id, code, name, description, category, categorie
 '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi lembar resep obat dokter (Nama Pasien, Umur, Nama Dokter, Tanggal Resep, Daftar Obat, Dosis & Signa Aturan Pakai).", "agentRole": "Clinical Pharmacology Specialist", "textContext": "Untuk resep obat dari dokter, klinik, dan apotek.", "includeImageContext": false}, {"name": "extract_medical_lab_result", "description": "Ekstraksi laporan lab medis (Nama Pasien, Tanggal Tes, Nama Fasilitas Medis, Parameter Tes Lab, Nilai Hasil, Nilai Rujukan Normal).", "agentRole": "Clinical Diagnostics Inspector", "textContext": "Untuk hasil pemeriksaan laboratorium darah, tes urine, dan diagnostik medis.", "includeImageContext": false}, {"name": "extract_clinical_discharge_resume", "description": "Ekstraksi resume medis / Ringkasan Pasien Pulang (Nama Pasien, Tanggal Masuk RS, Tanggal Keluar RS, Diagnosa Utama ICD-10, Diagnosa Sekunder, Prosedur Medis, Kondisi Pulang).", "agentRole": "Hospital Medical Record Auditor & Clinical Summary Specialist", "textContext": "Khusus lembar resume medis dan ringkasan perawatan rawat inap rumah sakit.", "includeImageContext": false}]}'::jsonb, true)
 ON CONFLICT (code) DO NOTHING;
 
--- 10. SEED API CREDENTIALS (with project_id)
+-- 10. SEED API CREDENTIALS (crd_...)
 INSERT INTO api_credentials (id, user_id, project_id, name, public_key, secret_key_hash, environment) VALUES
-('crd_01HZX01KEY00000000001', 'usr_default_dev_01', 'prj_01HZX01PROJECT000000001', 'Default Production Key', 'pk_live_default_key_01', '$argon2id$v=19$m=65536,t=3,p=4$gBfzPPlzukMMux6Jeplb2A$9Lps4oqHwAPvPovugfMmPt69i7UEiqwaGw6rrGHr554', 'production'),
-('crd_01HZX01KEY00000000002', 'usr_default_dev_01', 'prj_01HZX01PROJECT000000001', 'Development Sandbox Key', 'pk_test_sandbox_key_01', '$argon2id$v=19$m=65536,t=3,p=4$+6XwYgMRHtHsTNOql4MNIw$iyioWCvkAGfQCV+eWe3QKZyU2srfiBElA+QLkENuTmI', 'sandbox'),
-('crd_01HZX01KEY00000000003', 'usr_demo_developer_02', 'prj_01HZX01PROJECT000000003', 'Acme Production Gateway Key', 'pk_live_acme_key_02', '$argon2id$v=19$m=65536,t=3,p=4$y1NghfbjaIt6ph8q0BVvGA$7R6G3PE2utMxPxCnf0ItCTzEAao1p7Em7Vo0ELIk0FU', 'production')
+('crd_01HZX01KEY0000000000001', 'usr_01HZX01USER0000000000001', 'prj_01HZX01PROJECT000000001', 'Default Production Key', 'pk_live_default_key_01', '$argon2id$v=19$m=65536,t=3,p=4$gBfzPPlzukMMux6Jeplb2A$9Lps4oqHwAPvPovugfMmPt69i7UEiqwaGw6rrGHr554', 'production'),
+('crd_01HZX01KEY0000000000002', 'usr_01HZX01USER0000000000001', 'prj_01HZX01PROJECT000000001', 'Development Sandbox Key', 'pk_test_sandbox_key_01', '$argon2id$v=19$m=65536,t=3,p=4$+6XwYgMRHtHsTNOql4MNIw$iyioWCvkAGfQCV+eWe3QKZyU2srfiBElA+QLkENuTmI', 'sandbox'),
+('crd_01HZX01KEY0000000000003', 'usr_01HZX01USER0000000000002', 'prj_01HZX01PROJECT000000003', 'Acme Production Gateway Key', 'pk_live_acme_key_02', '$argon2id$v=19$m=65536,t=3,p=4$y1NghfbjaIt6ph8q0BVvGA$7R6G3PE2utMxPxCnf0ItCTzEAao1p7Em7Vo0ELIk0FU', 'production')
 ON CONFLICT (public_key) DO NOTHING;
 
--- 11. SEED CALL SPECS (with project_id)
+-- 11. SEED CALL SPECS (spc_...)
 INSERT INTO call_specs (id, user_id, project_id, template_id, name, slug, description, active_version_number, status, use_external_api_key, external_model_name, tools_config) VALUES
-('spc_01HZX01SPEC0000000001', 'usr_default_dev_01', 'prj_01HZX01PROJECT000000001', 'tmpl_01HZX01TMPL0000000001', 'Government Identity Document Verification', 'ktp-parser', 'Suite verifikasi KTP, SIM, dan Paspor resmi Republik Indonesia', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "instruction": "Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen identitas resmi yang terdeteksi (e-KTP Indonesia vs SIM vs Paspor RI).", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia (NIK 16-digit, Nama Lengkap, Tempat/Tgl Lahir, Jenis Kelamin, Golongan Darah, Alamat Lengkap, RT/RW, Kel/Desa, Kecamatan, Agama, Status Perkawinan, Pekerjaan, Kewarganegaraan, Masa Berlaku).", "agentRole": "Indonesian Identity & KYC Verification Specialist"}, {"name": "extract_driver_license_permit", "description": "Ekstraksi data terstruktur Surat Izin Mengemudi (SIM) / Driver License (Nomor SIM, Golongan SIM A/B1/B2/C/D, Nama Pemilik, Tempat/Tgl Lahir, Tinggi Badan, Pekerjaan, Alamat, Kab/Kota, Masa Berlaku).", "agentRole": "Driver License Inspection Specialist"}, {"name": "extract_republic_indonesia_passport", "description": "Ekstraksi lengkap Paspor Republik Indonesia (Jenis Paspor, Kode Negara IDN, Nomor Paspor, Nama Lengkap, Kewarganegaraan, Tanggal Lahir, Jenis Kelamin, Tempat Dikeluarkan, Tanggal Dikeluarkan, Tanggal Habis Berlaku, Nomor Registrasi, Machine Readable Zone / MRZ Line 1 & Line 2).", "agentRole": "Immigration & International Travel Document Inspector"}]}'::jsonb),
-('spc_01HZX01SPEC0000000002', 'usr_default_dev_01', 'prj_01HZX01PROJECT000000002', 'tmpl_01HZX01TMPL0000000002', 'Financial Receipt & Invoice Suite', 'receipt-extractor', 'Multi-currency corporate receipt, invoice & bank statement scanner spec', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "instruction": "Pilih 1 tool_call yang paling sesuai dengan tipe transaksi finansial (Struk Kasir Retail vs Faktur Tagihan Corporate Invoice B2B vs Laporan Mutasi Rekening Koran Bank).", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk kasir toko/restoran (Nama Merchant, Tanggal Transaksi, Line Items Rincian Barang, Subtotal, Tax/PPN, Service Charge, Total Bayar, Metode Pembayaran).", "agentRole": "Retail Expense Audit Agent"}, {"name": "extract_corporate_tax_invoice", "description": "Ekstraksi faktur pajak dan tagihan B2B corporate (Invoice Number, Vendor Name, Buyer Company, NPWP, Invoice Date, Due Date, Tax Amount, Line Items, Total Amount).", "agentRole": "Corporate Accounts Payable Auditor"}, {"name": "extract_bank_account_statement", "description": "Ekstraksi Laporan Mutasi Rekening Koran Bank (Nama Bank, Nama Pemilik Rekening, Nomor Rekening / IBAN, Periode Laporan, Saldo Awal, Total Debet, Total Kredit, Saldo Akhir, Rincian Baris Mutasi [Tanggal, Uraian Keterangan Transaksi, Saldo Debet/Kredit, Running Balance]).", "agentRole": "Bank Statement Reconciliation & Financial Audit Specialist"}]}'::jsonb),
-('spc_01HZX01SPEC0000000003', 'usr_default_dev_01', 'prj_01HZX01PROJECT000000001', 'tmpl_01HZX01TMPL0000000003', 'Medical Prescription Scanner', 'prescription-parser', 'Clinical prescription, lab test diagnostic & discharge resume extractor spec', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "instruction": "Pilih 1 tool_call yang paling sesuai dengan dokumen kesehatan (Resep Dokter vs Laporan Hasil Lab Medis vs Resume Medis Pasien Rawat Inap).", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi lembar resep obat dokter (Nama Pasien, Umur, Nama Dokter, Tanggal Resep, Daftar Obat, Dosis & Signa Aturan Pakai).", "agentRole": "Clinical Pharmacology Specialist"}, {"name": "extract_medical_lab_result", "description": "Ekstraksi laporan lab medis (Nama Pasien, Tanggal Tes, Nama Fasilitas Medis, Parameter Tes Lab, Nilai Hasil, Nilai Rujukan Normal).", "agentRole": "Clinical Diagnostics Inspector"}, {"name": "extract_clinical_discharge_resume", "description": "Ekstraksi resume medis / Ringkasan Pasien Pulang (Nama Pasien, Tanggal Masuk RS, Tanggal Keluar RS, Diagnosa Utama ICD-10, Diagnosa Sekunder, Prosedur Medis, Kondisi Pulang).", "agentRole": "Hospital Medical Record Auditor & Clinical Summary Specialist"}]}'::jsonb)
+('spc_01HZX01SPEC000000000001', 'usr_01HZX01USER0000000000001', 'prj_01HZX01PROJECT000000001', 'tpl_01HZX01TMPL000000000001', 'Government Identity Document Verification', 'ktp-parser', 'Suite verifikasi KTP, SIM, dan Paspor resmi Republik Indonesia', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "instruction": "Pilih 1 tool_call yang paling sesuai berdasarkan jenis dokumen identitas resmi yang terdeteksi (e-KTP Indonesia vs SIM vs Paspor RI).", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia (NIK 16-digit, Nama Lengkap, Tempat/Tgl Lahir, Jenis Kelamin, Golongan Darah, Alamat Lengkap, RT/RW, Kel/Desa, Kecamatan, Agama, Status Perkawinan, Pekerjaan, Kewarganegaraan, Masa Berlaku).", "agentRole": "Indonesian Identity & KYC Verification Specialist"}, {"name": "extract_driver_license_permit", "description": "Ekstraksi data terstruktur Surat Izin Mengemudi (SIM) / Driver License (Nomor SIM, Golongan SIM A/B1/B2/C/D, Nama Pemilik, Tempat/Tgl Lahir, Tinggi Badan, Pekerjaan, Alamat, Kab/Kota, Masa Berlaku).", "agentRole": "Driver License Inspection Specialist"}, {"name": "extract_republic_indonesia_passport", "description": "Ekstraksi lengkap Paspor Republik Indonesia (Jenis Paspor, Kode Negara IDN, Nomor Paspor, Nama Lengkap, Kewarganegaraan, Tanggal Lahir, Jenis Kelamin, Tempat Dikeluarkan, Tanggal Dikeluarkan, Tanggal Habis Berlaku, Nomor Registrasi, Machine Readable Zone / MRZ Line 1 & Line 2).", "agentRole": "Immigration & International Travel Document Inspector"}]}'::jsonb),
+('spc_01HZX01SPEC000000000002', 'usr_01HZX01USER0000000000001', 'prj_01HZX01PROJECT000000002', 'tpl_01HZX01TMPL000000000002', 'Financial Receipt & Invoice Suite', 'receipt-extractor', 'Multi-currency corporate receipt, invoice & bank statement scanner spec', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "instruction": "Pilih 1 tool_call yang paling sesuai dengan tipe transaksi finansial (Struk Kasir Retail vs Faktur Tagihan Corporate Invoice B2B vs Laporan Mutasi Rekening Koran Bank).", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk kasir toko/restoran (Nama Merchant, Tanggal Transaksi, Line Items Rincian Barang, Subtotal, Tax/PPN, Service Charge, Total Bayar, Metode Pembayaran).", "agentRole": "Retail Expense Audit Agent"}, {"name": "extract_corporate_tax_invoice", "description": "Ekstraksi faktur pajak dan tagihan B2B corporate (Invoice Number, Vendor Name, Buyer Company, NPWP, Invoice Date, Due Date, Tax Amount, Line Items, Total Amount).", "agentRole": "Corporate Accounts Payable Auditor"}, {"name": "extract_bank_account_statement", "description": "Ekstraksi Laporan Mutasi Rekening Koran Bank (Nama Bank, Nama Pemilik Rekening, Nomor Rekening / IBAN, Periode Laporan, Saldo Awal, Total Debet, Total Kredit, Saldo Akhir, Rincian Baris Mutasi [Tanggal, Uraian Keterangan Transaksi, Saldo Debet/Kredit, Running Balance]).", "agentRole": "Bank Statement Reconciliation & Financial Audit Specialist"}]}'::jsonb),
+('spc_01HZX01SPEC000000000003', 'usr_01HZX01USER0000000000001', 'prj_01HZX01PROJECT000000001', 'tpl_01HZX01TMPL000000000003', 'Medical Prescription Scanner', 'prescription-parser', 'Clinical prescription, lab test diagnostic & discharge resume extractor spec', 1, 'active', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "instruction": "Pilih 1 tool_call yang paling sesuai dengan dokumen kesehatan (Resep Dokter vs Laporan Hasil Lab Medis vs Resume Medis Pasien Rawat Inap).", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi lembar resep obat dokter (Nama Pasien, Umur, Nama Dokter, Tanggal Resep, Daftar Obat, Dosis & Signa Aturan Pakai).", "agentRole": "Clinical Pharmacology Specialist"}, {"name": "extract_medical_lab_result", "description": "Ekstraksi laporan lab medis (Nama Pasien, Tanggal Tes, Nama Fasilitas Medis, Parameter Tes Lab, Nilai Hasil, Nilai Rujukan Normal).", "agentRole": "Clinical Diagnostics Inspector"}, {"name": "extract_clinical_discharge_resume", "description": "Ekstraksi resume medis / Ringkasan Pasien Pulang (Nama Pasien, Tanggal Masuk RS, Tanggal Keluar RS, Diagnosa Utama ICD-10, Diagnosa Sekunder, Prosedur Medis, Kondisi Pulang).", "agentRole": "Hospital Medical Record Auditor & Clinical Summary Specialist"}]}'::jsonb)
 ON CONFLICT (user_id, slug) DO NOTHING;
 
--- 12. SEED CALL SPEC VERSIONS
+-- 12. SEED CALL SPEC VERSIONS (spv_...)
 INSERT INTO call_spec_versions (id, call_spec_id, version_number, request_schema, response_schema, positive_prompt, negative_prompt, additional_prompt, allow_additional_prompt, preferred_model_id, use_external_api_key, external_model_name, tools_config) VALUES
-('ver_01HZX01SPEC0000000001', 'spc_01HZX01SPEC0000000001', 1, '{"properties": {"identity_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Identity document image or PDF file"}}, "required": ["identity_document"]}'::jsonb, '{"properties": {"documentType": {"type": "string", "required": true}, "fullName": {"type": "string", "required": true}}}'::jsonb, 'Ekstrak data terstruktur kartu e-KTP Indonesia, SIM, atau Paspor RI dengan presisi tinggi.', 'Dilarang mengarang data jika informasi tidak tertera di gambar. Dilarang mengeksekusi tool_call jika dokumen bukan merupakan dokumen identitas resmi negara seperti e-KTP, SIM, atau Paspor RI.', 'Opsional: Instruksi tambahan dari user...', true, '01HZX01MODEL00000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia.", "agentRole": "Indonesian Identity & KYC Verification Specialist"}, {"name": "extract_driver_license_permit", "description": "Ekstraksi data terstruktur SIM.", "agentRole": "Driver License Inspection Specialist"}, {"name": "extract_republic_indonesia_passport", "description": "Ekstraksi Paspor RI.", "agentRole": "Immigration & International Travel Document Inspector"}]}'::jsonb),
-('ver_01HZX01SPEC0000000002', 'spc_01HZX01SPEC0000000002', 1, '{"properties": {"receipt_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Receipt or invoice image or PDF file"}, "currency_override": {"type": "text", "description": "3-letter ISO code"}}, "required": ["receipt_document"]}'::jsonb, '{"properties": {"merchantName": {"type": "string", "required": true}, "totalPaid": {"type": "number", "required": true}}}'::jsonb, 'Ekstrak rincian transaksi kasir retail, faktur B2B corporate, atau mutasi rekening koran bank.', 'Jangan rekayasa angka atau jumlah pembayaran. Dilarang mengeksekusi tool_call jika dokumen bukan merupakan bukti transaksi keuangan yang valid.', 'Opsional: Instruksi tambahan dari user...', true, '01HZX01MODEL00000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk kasir.", "agentRole": "Retail Expense Audit Agent"}, {"name": "extract_corporate_tax_invoice", "description": "Ekstraksi faktur B2B.", "agentRole": "Corporate Accounts Payable Auditor"}, {"name": "extract_bank_account_statement", "description": "Ekstraksi rekening koran.", "agentRole": "Bank Statement Reconciliation & Financial Audit Specialist"}]}'::jsonb),
-('ver_01HZX01SPEC0000000003', 'spc_01HZX01SPEC0000000003', 1, '{"properties": {"medical_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Medical document or lab result file"}, "patient_id_override": {"type": "text", "description": "Internal Medical Record ID"}}, "required": ["medical_document"]}'::jsonb, '{"properties": {"patientName": {"type": "string", "required": true}, "doctorName": {"type": "string", "required": true}}}'::jsonb, 'Ekstrak data resep dokter, laporan laboratorium medis, atau ringkasan pasien pulang rawat inap.', 'Dilarang mengasumsikan dosis obat atau hasil lab yang tidak tertera pada dokumen.', 'Opsional: Instruksi tambahan dari user...', true, '01HZX01MODEL00000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi resep dokter.", "agentRole": "Clinical Pharmacology Specialist"}, {"name": "extract_medical_lab_result", "description": "Ekstraksi laporan lab.", "agentRole": "Clinical Diagnostics Inspector"}, {"name": "extract_clinical_discharge_resume", "description": "Ekstraksi resume rawat inap.", "agentRole": "Hospital Medical Record Auditor & Clinical Summary Specialist"}]}'::jsonb)
+('spv_01HZX01VERSION0000000001', 'spc_01HZX01SPEC000000000001', 1, '{"properties": {"identity_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Identity document image or PDF file"}}, "required": ["identity_document"]}'::jsonb, '{"properties": {"documentType": {"type": "string", "required": true}, "fullName": {"type": "string", "required": true}}}'::jsonb, 'Ekstrak data terstruktur kartu e-KTP Indonesia, SIM, atau Paspor RI dengan presisi tinggi.', 'Dilarang mengarang data jika informasi tidak tertera di gambar. Dilarang mengeksekusi tool_call jika dokumen bukan merupakan dokumen identitas resmi negara seperti e-KTP, SIM, atau Paspor RI.', 'Opsional: Instruksi tambahan dari user...', true, 'mdl_01HZX01MODEL000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_indonesian_ktp_identity", "description": "Ekstraksi data terstruktur kartu e-KTP Indonesia.", "agentRole": "Indonesian Identity & KYC Verification Specialist"}, {"name": "extract_driver_license_permit", "description": "Ekstraksi data terstruktur SIM.", "agentRole": "Driver License Inspection Specialist"}, {"name": "extract_republic_indonesia_passport", "description": "Ekstraksi Paspor RI.", "agentRole": "Immigration & International Travel Document Inspector"}]}'::jsonb),
+('spv_01HZX01VERSION0000000002', 'spc_01HZX01SPEC000000000002', 1, '{"properties": {"receipt_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Receipt or invoice image or PDF file"}, "currency_override": {"type": "text", "description": "3-letter ISO code"}}, "required": ["receipt_document"]}'::jsonb, '{"properties": {"merchantName": {"type": "string", "required": true}, "totalPaid": {"type": "number", "required": true}}}'::jsonb, 'Ekstrak rincian transaksi kasir retail, faktur B2B corporate, atau mutasi rekening koran bank.', 'Jangan rekayasa angka atau jumlah pembayaran. Dilarang mengeksekusi tool_call jika dokumen bukan merupakan bukti transaksi keuangan yang valid.', 'Opsional: Instruksi tambahan dari user...', true, 'mdl_01HZX01MODEL000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_retail_store_receipt", "description": "Ekstraksi struk kasir.", "agentRole": "Retail Expense Audit Agent"}, {"name": "extract_corporate_tax_invoice", "description": "Ekstraksi faktur B2B.", "agentRole": "Corporate Accounts Payable Auditor"}, {"name": "extract_bank_account_statement", "description": "Ekstraksi rekening koran.", "agentRole": "Bank Statement Reconciliation & Financial Audit Specialist"}]}'::jsonb),
+('spv_01HZX01VERSION0000000003', 'spc_01HZX01SPEC000000000003', 1, '{"properties": {"medical_document": {"type": "file", "allowedExtensions": ["jpg", "png", "webp", "pdf"], "description": "Medical document or lab result file"}, "patient_id_override": {"type": "text", "description": "Internal Medical Record ID"}}, "required": ["medical_document"]}'::jsonb, '{"properties": {"patientName": {"type": "string", "required": true}, "doctorName": {"type": "string", "required": true}}}'::jsonb, 'Ekstrak data resep dokter, laporan laboratorium medis, atau ringkasan pasien pulang rawat inap.', 'Dilarang mengasumsikan dosis obat atau hasil lab yang tidak tertera pada dokumen.', 'Opsional: Instruksi tambahan dari user...', true, 'mdl_01HZX01MODEL000000000001', true, 'gemini-3.6-flash', '{"enabled": true, "toolChoice": "auto", "tools": [{"name": "extract_doctor_prescription", "description": "Ekstraksi resep dokter.", "agentRole": "Clinical Pharmacology Specialist"}, {"name": "extract_medical_lab_result", "description": "Ekstraksi laporan lab.", "agentRole": "Clinical Diagnostics Inspector"}, {"name": "extract_clinical_discharge_resume", "description": "Ekstraksi resume rawat inap.", "agentRole": "Hospital Medical Record Auditor & Clinical Summary Specialist"}]}'::jsonb)
 ON CONFLICT (call_spec_id, version_number) DO NOTHING;
 
--- 13. SEED API REQUEST AUDIT LOGS
+-- 13. SEED API REQUEST AUDIT LOGS (req_...)
 INSERT INTO api_requests (id, request_id, user_id, call_spec_id, call_spec_version_id, credential_id, provider_id, model_id, status, http_status, input_type, input_size_bytes, processing_time_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, client_ip, user_agent, created_at) VALUES
-('req_01HZX01REQ000000000001', 'req_live_01HZX01AAA99', 'usr_default_dev_01', 'spc_01HZX01SPEC0000000001', 'ver_01HZX01SPEC0000000001', 'crd_01HZX01KEY00000000001', '01HZX01PROVIDER00000000001', '01HZX01MODEL00000000000001', 'completed', 200, 'url', 154200, 420, 680, 140, 820, 0.000093, '198.51.100.42', 'python-requests/2.31.0', CURRENT_TIMESTAMP - INTERVAL '10 minutes'),
-('req_01HZX01REQ000000000002', 'req_live_01HZX01BBB88', 'usr_default_dev_01', 'spc_01HZX01SPEC0000000002', 'ver_01HZX01SPEC0000000002', 'crd_01HZX01KEY00000000001', '01HZX01PROVIDER00000000001', '01HZX01MODEL00000000000001', 'completed', 200, 'base64', 285400, 850, 1250, 310, 1560, 0.000186, '198.51.100.42', 'Node/v20.11.0', CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
-('req_01HZX01REQ000000000003', 'req_live_01HZX01CCC77', 'usr_default_dev_01', 'spc_01HZX01SPEC0000000003', 'ver_01HZX01SPEC0000000003', 'crd_01HZX01KEY00000000001', '01HZX01PROVIDER00000000001', '01HZX01MODEL00000000000001', 'completed', 200, 'url', 98400, 640, 890, 180, 1070, 0.004025, '203.0.113.15', 'curl/7.88.1', CURRENT_TIMESTAMP - INTERVAL '2 hours'),
-('req_01HZX01REQ000000000004', 'req_live_01HZX01DDD66', 'usr_default_dev_01', 'spc_01HZX01SPEC0000000001', 'ver_01HZX01SPEC0000000001', 'crd_01HZX01KEY00000000001', '01HZX01PROVIDER00000000001', '01HZX01MODEL00000000000001', 'failed', 422, 'base64', 12000, 45, 0, 0, 0, 0.000000, '198.51.100.42', 'python-requests/2.31.0', CURRENT_TIMESTAMP - INTERVAL '5 hours'),
-('req_01HZX01REQ000000000005', 'req_live_01HZX01EEE55', 'usr_default_dev_01', 'spc_01HZX01SPEC0000000002', 'ver_01HZX01SPEC0000000002', 'crd_01HZX01KEY00000000001', '01HZX01PROVIDER00000000001', '01HZX01MODEL00000000000001', 'completed', 200, 'url', 310500, 1120, 1420, 260, 1680, 0.008160, '172.56.21.9', 'Go-http-client/1.1', CURRENT_TIMESTAMP - INTERVAL '12 hours')
+('req_01HZX01REQ0000000000001', 'req_live_01HZX01AAA99', 'usr_01HZX01USER0000000000001', 'spc_01HZX01SPEC000000000001', 'spv_01HZX01VERSION0000000001', 'crd_01HZX01KEY0000000000001', 'prv_01HZX01PROVIDER000000001', 'mdl_01HZX01MODEL000000000001', 'completed', 200, 'url', 154200, 420, 680, 140, 820, 0.000093, '198.51.100.42', 'python-requests/2.31.0', CURRENT_TIMESTAMP - INTERVAL '10 minutes'),
+('req_01HZX01REQ0000000000002', 'req_live_01HZX01BBB88', 'usr_01HZX01USER0000000000001', 'spc_01HZX01SPEC000000000002', 'spv_01HZX01VERSION0000000002', 'crd_01HZX01KEY0000000000001', 'prv_01HZX01PROVIDER000000001', 'mdl_01HZX01MODEL000000000001', 'completed', 200, 'base64', 285400, 850, 1250, 310, 1560, 0.000186, '198.51.100.42', 'Node/v20.11.0', CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+('req_01HZX01REQ0000000000003', 'req_live_01HZX01CCC77', 'usr_01HZX01USER0000000000001', 'spc_01HZX01SPEC000000000003', 'spv_01HZX01VERSION0000000003', 'crd_01HZX01KEY0000000000001', 'prv_01HZX01PROVIDER000000002', 'mdl_01HZX01MODEL000000000005', 'completed', 200, 'url', 98400, 640, 890, 180, 1070, 0.004025, '203.0.113.15', 'curl/7.88.1', CURRENT_TIMESTAMP - INTERVAL '2 hours'),
+('req_01HZX01REQ0000000000004', 'req_live_01HZX01DDD66', 'usr_01HZX01USER0000000000001', 'spc_01HZX01SPEC000000000001', 'spv_01HZX01VERSION0000000001', 'crd_01HZX01KEY0000000000001', 'prv_01HZX01PROVIDER000000001', 'mdl_01HZX01MODEL000000000001', 'failed', 422, 'base64', 12000, 45, 0, 0, 0, 0.000000, '198.51.100.42', 'python-requests/2.31.0', CURRENT_TIMESTAMP - INTERVAL '5 hours'),
+('req_01HZX01REQ0000000000005', 'req_live_01HZX01EEE55', 'usr_01HZX01USER0000000000001', 'spc_01HZX01SPEC000000000002', 'spv_01HZX01VERSION0000000002', 'crd_01HZX01KEY0000000000001', 'prv_01HZX01PROVIDER000000003', 'mdl_01HZX01MODEL000000000009', 'completed', 200, 'url', 310500, 1120, 1420, 260, 1680, 0.008160, '172.56.21.9', 'Go-http-client/1.1', CURRENT_TIMESTAMP - INTERVAL '12 hours')
 ON CONFLICT (request_id) DO NOTHING;
 
--- 14. SEED USER DAILY USAGE ANALYTICS
+-- 14. SEED USER DAILY USAGE ANALYTICS (usg_...)
 INSERT INTO user_usage_daily (id, user_id, usage_date, total_requests, successful_requests, failed_requests, total_tokens, total_cost_usd) VALUES
-('usg_01HZX01USG000000000001', 'usr_default_dev_01', CURRENT_DATE - INTERVAL '6 days', 120, 115, 5, 142000, 0.042500),
-('usg_01HZX01USG000000000002', 'usr_default_dev_01', CURRENT_DATE - INTERVAL '5 days', 145, 142, 3, 185000, 0.058200),
-('usg_01HZX01USG000000000003', 'usr_default_dev_01', CURRENT_DATE - INTERVAL '4 days', 98, 95, 3, 118000, 0.035100),
-('usg_01HZX01USG000000000004', 'usr_default_dev_01', CURRENT_DATE - INTERVAL '3 days', 210, 204, 6, 276000, 0.089400),
-('usg_01HZX01USG000000000005', 'usr_default_dev_01', CURRENT_DATE - INTERVAL '2 days', 180, 175, 5, 230000, 0.071200),
-('usg_01HZX01USG000000000006', 'usr_default_dev_01', CURRENT_DATE - INTERVAL '1 day', 260, 255, 5, 340000, 0.114500),
-('usg_01HZX01USG000000000007', 'usr_default_dev_01', CURRENT_DATE, 84, 82, 2, 105000, 0.032800),
+('usg_01HZX01USG0000000000001', 'usr_01HZX01USER0000000000001', CURRENT_DATE - INTERVAL '6 days', 120, 115, 5, 142000, 0.042500),
+('usg_01HZX01USG0000000000002', 'usr_01HZX01USER0000000000001', CURRENT_DATE - INTERVAL '5 days', 145, 142, 3, 185000, 0.058200),
+('usg_01HZX01USG0000000000003', 'usr_01HZX01USER0000000000001', CURRENT_DATE - INTERVAL '4 days', 98, 95, 3, 118000, 0.035100),
+('usg_01HZX01USG0000000000004', 'usr_01HZX01USER0000000000001', CURRENT_DATE - INTERVAL '3 days', 210, 204, 6, 276000, 0.089400),
+('usg_01HZX01USG0000000000005', 'usr_01HZX01USER0000000000001', CURRENT_DATE - INTERVAL '2 days', 180, 175, 5, 230000, 0.071200),
+('usg_01HZX01USG0000000000006', 'usr_01HZX01USER0000000000001', CURRENT_DATE - INTERVAL '1 day', 260, 255, 5, 340000, 0.114500),
+('usg_01HZX01USG0000000000007', 'usr_01HZX01USER0000000000001', CURRENT_DATE, 84, 82, 2, 105000, 0.032800),
 
-('usg_01HZX01USG000000000008', 'usr_demo_developer_02', CURRENT_DATE - INTERVAL '6 days', 45, 43, 2, 58000, 0.018500),
-('usg_01HZX01USG000000000009', 'usr_demo_developer_02', CURRENT_DATE - INTERVAL '5 days', 62, 60, 2, 82000, 0.026400),
-('usg_01HZX01USG000000000010', 'usr_demo_developer_02', CURRENT_DATE - INTERVAL '4 days', 88, 85, 3, 112000, 0.035800),
-('usg_01HZX01USG000000000011', 'usr_demo_developer_02', CURRENT_DATE - INTERVAL '3 days', 105, 102, 3, 134000, 0.043100),
-('usg_01HZX01USG000000000012', 'usr_demo_developer_02', CURRENT_DATE - INTERVAL '2 days', 130, 128, 2, 168000, 0.054200),
-('usg_01HZX01USG000000000013', 'usr_demo_developer_02', CURRENT_DATE - INTERVAL '1 day', 175, 170, 5, 225000, 0.072600),
-('usg_01HZX01USG000000000014', 'usr_demo_developer_02', CURRENT_DATE, 52, 50, 2, 64000, 0.020500)
+('usg_01HZX01USG0000000000008', 'usr_01HZX01USER0000000000002', CURRENT_DATE - INTERVAL '6 days', 45, 43, 2, 58000, 0.018500),
+('usg_01HZX01USG0000000000009', 'usr_01HZX01USER0000000000002', CURRENT_DATE - INTERVAL '5 days', 62, 60, 2, 82000, 0.026400),
+('usg_01HZX01USG0000000000010', 'usr_01HZX01USER0000000000002', CURRENT_DATE - INTERVAL '4 days', 88, 85, 3, 112000, 0.035800),
+('usg_01HZX01USG0000000000011', 'usr_01HZX01USER0000000000002', CURRENT_DATE - INTERVAL '3 days', 105, 102, 3, 134000, 0.043100),
+('usg_01HZX01USG0000000000012', 'usr_01HZX01USER0000000000002', CURRENT_DATE - INTERVAL '2 days', 130, 128, 2, 168000, 0.054200),
+('usg_01HZX01USG0000000000013', 'usr_01HZX01USER0000000000002', CURRENT_DATE - INTERVAL '1 day', 175, 170, 5, 225000, 0.072600),
+('usg_01HZX01USG0000000000014', 'usr_01HZX01USER0000000000002', CURRENT_DATE, 52, 50, 2, 64000, 0.020500)
 ON CONFLICT (user_id, usage_date) DO NOTHING;
 
--- 15. SEED APP INIT SETTINGS
+-- 15. SEED APP INIT SETTINGS (app_...)
 INSERT INTO app_init (id, app_name, app_icon, tagline, description, favicon_url, disable_landing_page, default_registration_status, require_email_verification) VALUES
-('app_01HZX01INIT00000000001', 'Callcraft', 'Feather', 'Multimodal AI Execution Gateway', 'Dynamic AI Tool Calling, Structured JSON Coercion, and Multimodal API Gateway.', '/favicon.ico', false, 'pending_verification', true)
+('app_01HZX01INIT0000000000001', 'Callcraft', 'Feather', 'Multimodal AI Execution Gateway', 'Dynamic AI Tool Calling, Structured JSON Coercion, and Multimodal API Gateway.', '/favicon.ico', false, 'pending_verification', true)
 ON CONFLICT (id) DO NOTHING;

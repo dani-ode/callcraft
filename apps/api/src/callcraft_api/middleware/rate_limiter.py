@@ -18,8 +18,8 @@ class TokenBucketRateLimiterMiddleware(BaseHTTPMiddleware):
         self.rate_limit_per_minute = rate_limit_per_minute
 
     async def dispatch(self, request: Request, call_next):
-        # Only rate limit customer data plane calls `/v1/call/*`
-        if request.url.path.startswith("/v1/call/"):
+        # Only rate limit customer data plane calls `/v1/call`
+        if request.url.path == "/v1/call" or request.url.path.startswith("/v1/call/"):
             auth_header = request.headers.get("Authorization")
             api_key = auth_header.replace("Bearer ", "").strip() if auth_header and auth_header.startswith("Bearer ") else "anonymous"
 

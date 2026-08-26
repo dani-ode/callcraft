@@ -99,7 +99,7 @@ export function ExecutionSettings({
         <div>
           <label className="text-xs font-semibold opacity-90">API Slug Identifier</label>
           <div className="flex items-center mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs">
-            <span className="opacity-40 font-mono text-[11px] select-none">/v1/call/</span>
+            <span className="opacity-40 font-mono text-[11px] select-none">X-CALL-SPEC-ID:&nbsp;</span>
             <input
               type="text"
               value={specSlug}
