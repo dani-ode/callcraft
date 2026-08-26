@@ -106,8 +106,8 @@ jobs:
             docker compose down --remove-orphans || true
             docker compose up -d --build
             
-            # Run automatic DB migrations & cleanup
-            docker compose exec -T callcraft-api python3 -m callcraft_api.db.init_db || true
+            # Automatic DB seeding disabled in CI/CD. Execute manually on VPS when needed:
+            # docker compose exec -T callcraft-api python3 -m callcraft_api.db.init_db
             docker image prune -f
             
             echo "✅ Callcraft Studio successfully deployed to VPS!"
