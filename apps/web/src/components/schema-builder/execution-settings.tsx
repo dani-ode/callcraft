@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sliders, Bot, ShieldCheck, AlertTriangle, ExternalLink, Key } from "lucide-react";
+import { fetchAiModels, AiModelItem } from "@/lib/api-client";
 
 interface ExecutionSettingsProps {
   specName: string;
@@ -44,12 +46,43 @@ export function ExecutionSettings({
   setUseExternalApiKey,
   currentProviderStatus,
 }: ExecutionSettingsProps) {
+  const [dbModels, setDbModels] = useState<AiModelItem[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAiModels()
+      .then((models) => {
+        setDbModels(models);
+        if (models.length > 0 && !selectedModel) {
+          const defaultModel = models.find((m) => m.isDefault) || models[0];
+          setSelectedModel(defaultModel.modelIdentifier);
+        }
+        setModelsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load dynamic AI models from DB:", err);
+        setModelsLoading(false);
+      });
+  }, []);
+
+  const groupedModels = dbModels.reduce((acc, model) => {
+    const pName = model.providerName || "Other Providers";
+    if (!acc[pName]) acc[pName] = [];
+    acc[pName].push(model);
+    return acc;
+  }, {} as Record<string, AiModelItem[]>);
+
   return (
-    <div className="space-y-5">
-      <h3 className="text-sm font-bold flex items-center gap-2">
-        <Sliders className="w-4 h-4 text-[#e1b329]" />
-        <span>Call Spec Config & AI Model</span>
-      </h3>
+    <div className="p-4 space-y-5 text-slate-900 dark:text-slate-100 font-sans">
+      <div className="flex items-center justify-between pb-3 border-b border-[#edd6bb]/20">
+        <h3 className="text-sm font-bold flex items-center gap-2">
+          <Sliders className="w-4 h-4 text-[#e1b329]" />
+          <span>Execution Configuration</span>
+        </h3>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#e1b329]/15 text-[#e1b329] font-mono font-bold">
+          LIVE ENGINE
+        </span>
+      </div>
 
       <div className="space-y-4">
         <div>
@@ -59,30 +92,30 @@ export function ExecutionSettings({
             value={specName}
             onChange={(e) => setSpecName(e.target.value)}
             className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#e1b329]"
-            placeholder="e.g. Identity Document Parser"
+            placeholder="e.g. Identity KTP Extractor"
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold opacity-90">API Endpoint Slug</label>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs font-mono opacity-60 shrink-0">/v1/call/</span>
+          <label className="text-xs font-semibold opacity-90">API Slug Identifier</label>
+          <div className="flex items-center mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs">
+            <span className="opacity-40 font-mono text-[11px] select-none">/v1/call/</span>
             <input
               type="text"
               value={specSlug}
-              onChange={(e) => setSpecSlug(e.target.value)}
-              className="w-full glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#e1b329]"
-              placeholder="ktp-parser"
+              onChange={(e) => setSpecSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
+              className="bg-transparent border-none p-0 focus:outline-none w-full font-mono text-xs text-[#e1b329] font-bold"
+              placeholder="identity-ktp-extractor"
             />
           </div>
         </div>
 
-        {/* API Key Credentials Option Toggle */}
+        {/* Dynamic External API Key / Platform Credentials Toggle */}
         <div className="p-3.5 rounded-xl glass-panel border border-[#edd6bb]/20 space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 cursor-pointer">
               <Key className="w-3.5 h-3.5 text-[#e1b329]" />
-              <span>Allow Caller API Key & Model Override</span>
+              <span>Allow Dynamic Header API Keys</span>
             </label>
             <input
               type="checkbox"
@@ -104,41 +137,12 @@ export function ExecutionSettings({
           </p>
         </div>
 
-        {/* Request Additional Prompt Toggle */}
-        <div className="p-3.5 rounded-xl glass-panel border border-[#edd6bb]/20 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 cursor-pointer">
-              <Bot className="w-3.5 h-3.5 text-[#e1b329]" />
-              <span>Request Additional Prompt (User Instruction)</span>
-            </label>
-            <input
-              type="checkbox"
-              checked={allowAdditionalPrompt}
-              onChange={(e) => setAllowAdditionalPrompt?.(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 text-[#e1b329] focus:ring-[#e1b329] bg-slate-900 cursor-pointer"
-            />
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-            {allowAdditionalPrompt ? (
-              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                ✓ Aktif: Pemanggil API dapat menyertakan bidang <code className="font-mono">&quot;prompt&quot;</code> sebagai instruksi tambahan per request.
-              </span>
-            ) : (
-              <span className="text-rose-600 dark:text-rose-400 font-medium">
-                🚫 Nonaktif: Bidang instruksi pengguna tidak diaktifkan pada spesifikasi ini.
-              </span>
-            )}
-          </p>
-        </div>
-
         {/* Provider Credential Status Indicator */}
         <div className="p-3 rounded-xl bg-[#fdfaf5] dark:bg-slate-900/60 border border-[#edd6bb]/30 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Bot className="w-4 h-4 text-[#e1b329]" />
             <div>
-              <span className="text-xs font-semibold block text-slate-800 dark:text-slate-200">
-                Primary Provider: Gemini AI
-              </span>
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200">AI Provider Binding</div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                 {currentProviderStatus.label}
               </span>
@@ -157,29 +161,23 @@ export function ExecutionSettings({
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
             className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#e1b329]"
+            disabled={modelsLoading}
           >
-            <optgroup label="Google Gemini (Recommended)">
-              <option value="gemini-3.6-flash" className="bg-slate-900">Gemini 3.6 Flash (Fastest Structured OCR)</option>
-              <option value="gemini-1.5-flash" className="bg-slate-900">Gemini 1.5 Flash (Default)</option>
-              <option value="gemini-1.5-pro" className="bg-slate-900">Gemini 1.5 Pro (Complex Reasoning)</option>
-              <option value="gemini-2.0-flash-exp" className="bg-slate-900">Gemini 2.0 Flash Experimental</option>
-            </optgroup>
-            <optgroup label="OpenAI (Setup Required in API Keys menu)">
-              <option value="gpt-4o-mini" className="bg-slate-900">GPT-4o Mini (Cost efficient)</option>
-              <option value="gpt-4o" className="bg-slate-900">GPT-4o (Vision Multimodal)</option>
-            </optgroup>
-            <optgroup label="Anthropic Claude (Setup Required in API Keys menu)">
-              <option value="claude-3-5-sonnet-20241022" className="bg-slate-900">Claude 3.5 Sonnet</option>
-              <option value="claude-3-haiku-20240307" className="bg-slate-900">Claude 3 Haiku</option>
-            </optgroup>
-            <optgroup label="Mistral AI (Setup Required in API Keys menu)">
-              <option value="pixtral-12b" className="bg-slate-900">Pixtral 12B (Vision OCR)</option>
-              <option value="mistral-small-4" className="bg-slate-900">Mistral Small 4</option>
-            </optgroup>
-            <optgroup label="DeepSeek & OCR (Setup Required in API Keys menu)">
-              <option value="deepseek-vl2" className="bg-slate-900">DeepSeek VL2 (Multimodal Vision)</option>
-              <option value="deepseek-v4-pro" className="bg-slate-900">DeepSeek V4 Pro</option>
-            </optgroup>
+            {modelsLoading ? (
+              <option className="bg-slate-900">Memuat AI Models dari database...</option>
+            ) : dbModels.length === 0 ? (
+              <option className="bg-slate-900">Tidak ada AI model aktif di database</option>
+            ) : (
+              Object.entries(groupedModels).map(([providerName, modelList]) => (
+                <optgroup key={providerName} label={providerName}>
+                  {modelList.map((m) => (
+                    <option key={m.id} value={m.modelIdentifier} className="bg-slate-900">
+                      {m.name} ({m.modelIdentifier}) {m.isDefault ? "★ Default" : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ))
+            )}
           </select>
         </div>
 
@@ -196,22 +194,6 @@ export function ExecutionSettings({
             placeholder="Specific extraction instructions for this API spec..."
           />
         </div>
-
-        {allowAdditionalPrompt && (
-          <div>
-            <label className="text-xs font-semibold opacity-90 flex items-center justify-between text-sky-600 dark:text-sky-400">
-              <span>Default Additional Prompt (User Instruction)</span>
-              <span className="text-[10px] font-bold">User Override Instructions</span>
-            </label>
-            <textarea
-              rows={2}
-              value={additionalPrompt}
-              onChange={(e) => setAdditionalPrompt?.(e.target.value)}
-              className="w-full mt-1.5 glass-panel border border-sky-500/25 rounded-xl p-3 text-xs focus:outline-none focus:border-sky-500 leading-relaxed font-sans"
-              placeholder="Opsional: Instruksi tambahan dari user..."
-            />
-          </div>
-        )}
 
         <div>
           <label className="text-xs font-semibold opacity-90 flex items-center justify-between text-red-600 dark:text-red-400">

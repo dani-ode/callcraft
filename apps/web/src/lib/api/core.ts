@@ -1,4 +1,7 @@
-export const PYTHON_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080";
+export const PYTHON_API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_URL) {
+  console.error("NEXT_PUBLIC_API_URL is missing. Please set NEXT_PUBLIC_API_URL in environment configuration.");
+}
 
 export function getActiveUserId(): string {
   if (typeof window !== "undefined") {

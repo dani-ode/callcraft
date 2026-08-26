@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Bell, ShieldCheck, BookOpen, ExternalLink, Copy, Check, Fingerprint, LogOut, Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/context/auth-context";
-import { getActiveUserId } from "@/lib/api-client";
+import { getActiveUserId, PYTHON_API_URL } from "@/lib/api/core";
 
 interface HeaderProps {
   onOpenMobileSidebar?: () => void;
@@ -14,6 +14,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
   const [copiedUserId, setCopiedUserId] = useState(false);
   const { user, logout } = useAuth();
   const userId = user?.id || getActiveUserId();
+  const docsUrl = PYTHON_API_URL ? `${PYTHON_API_URL}/docs` : "/docs";
 
   const handleCopyUserId = () => {
     navigator.clipboard.writeText(userId);
@@ -41,7 +42,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
       {/* User Actions & System Badges */}
       <div className="flex items-center gap-2 sm:gap-4">
         <a
-          href="http://127.0.0.1:8080/docs"
+          href={docsUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel hover:bg-[#e1b329]/15 text-xs font-semibold border border-[#edd6bb]/20 hover:border-[#e1b329]/50 transition-all"

@@ -20,11 +20,13 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/context/auth-context";
 import { useAppInit } from "@/context/app-init-context";
+import { PYTHON_API_URL } from "@/lib/api/core";
 
 export default function LandingPage() {
   const { user, isLoading } = useAuth();
   const { appInit, AppIconComponent, isCustomImageIcon, isLoading: loadingSettings } = useAppInit();
   const router = useRouter();
+  const docsUrl = PYTHON_API_URL ? `${PYTHON_API_URL}/docs` : "/docs";
 
   useEffect(() => {
     if (!loadingSettings && appInit.disableLandingPage && !isLoading) {
@@ -69,7 +71,7 @@ export default function LandingPage() {
           <a href="#features" className="hover:text-[#e1b329] transition-colors">Features</a>
           <a href="#code-demo" className="hover:text-[#e1b329] transition-colors">Live API Demo</a>
           <a
-            href="http://127.0.0.1:8080/docs"
+            href={docsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-[#e1b329] transition-colors"

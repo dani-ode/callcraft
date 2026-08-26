@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Key, Shield, Eye, EyeOff, Zap, CheckCircle2, XCircle, RefreshCw, Power, ExternalLink, Check } from "lucide-react";
-import { verifyProviderApiKey } from "@/lib/api-client";
+import { useEffect, useState } from "react";
+import { Key, Shield, Eye, EyeOff, Zap, CheckCircle2, XCircle, RefreshCw, Power, ExternalLink, Check, Loader2 } from "lucide-react";
+import { verifyProviderApiKey, fetchAiProviders, AiProviderItem } from "@/lib/api-client";
 
 interface ProviderConfig {
   code: string;
@@ -15,58 +15,43 @@ interface ProviderConfig {
   saved: boolean;
 }
 
+const PROVIDER_KEY_URLS: Record<string, string> = {
+  gemini: "https://aistudio.google.com/app/apikey",
+  openai: "https://platform.openai.com/api-keys",
+  anthropic: "https://console.anthropic.com/settings/keys",
+  mistral: "https://console.mistral.ai/api-keys",
+  deepseek: "https://platform.deepseek.com/api_keys",
+  "ocr-engine": "https://callcraft.io/docs/ocr",
+};
+
 export default function AdminProvidersPage() {
   const [visibleProviderKeys, setVisibleProviderKeys] = useState<Record<string, boolean>>({});
+  const [providers, setProviders] = useState<Record<string, ProviderConfig>>({});
+  const [loading, setLoading] = useState(true);
 
-  const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
-    gemini: {
-      code: "gemini",
-      name: "Google Gemini AI",
-      key: "AIzaSyDevKey_Gemini_Sample_998877",
-      getKeyUrl: "https://aistudio.google.com/app/apikey",
-      isActive: true,
-      testStatus: "success",
-      testMessage: "Connection verified (Gemini 3.6 Flash / 3.5 Flash)",
-      saved: true,
-    },
-    openai: {
-      code: "openai",
-      name: "OpenAI",
-      key: "sk-proj-DevKey_OpenAI_Sample_112233",
-      getKeyUrl: "https://platform.openai.com/api-keys",
-      isActive: true,
-      testStatus: "success",
-      testMessage: "Connection verified (GPT-5.6 Luna / Terra)",
-      saved: true,
-    },
-    anthropic: {
-      code: "anthropic",
-      name: "Anthropic Claude",
-      key: "",
-      getKeyUrl: "https://console.anthropic.com/settings/keys",
-      isActive: false,
-      testStatus: "idle",
-      saved: false,
-    },
-    mistral: {
-      code: "mistral",
-      name: "Mistral AI",
-      key: "",
-      getKeyUrl: "https://console.mistral.ai/api-keys",
-      isActive: false,
-      testStatus: "idle",
-      saved: false,
-    },
-    deepseek: {
-      code: "deepseek",
-      name: "DeepSeek AI",
-      key: "",
-      getKeyUrl: "https://platform.deepseek.com/api_keys",
-      isActive: false,
-      testStatus: "idle",
-      saved: false,
-    },
-  });
+  useEffect(() => {
+    fetchAiProviders()
+      .then((data) => {
+        const provMap: Record<string, ProviderConfig> = {};
+        for (const p of data) {
+          provMap[p.code] = {
+            code: p.code,
+            name: p.name,
+            key: "",
+            getKeyUrl: PROVIDER_KEY_URLS[p.code] || "https://callcraft.io",
+            isActive: p.isActive,
+            testStatus: "idle",
+            saved: false,
+          };
+        }
+        setProviders(provMap);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load providers:", err);
+        setLoading(false);
+      });
+  }, []);
 
   const handleKeyChange = (code: string, newKey: string) => {
     setProviders((prev) => ({
@@ -173,8 +158,14 @@ export default function AdminProvidersPage() {
         </div>
       </div>
 
-      <div className="space-y-4">
-        {Object.values(providers).map((prov) => {
+      {loading ? (
+        <div className="py-16 text-center text-slate-400 flex items-center justify-center gap-2">
+          <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+          <span>Memuat AI Providers dari database...</span>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.values(providers).map((prov) => {
           const isVisible = visibleProviderKeys[prov.code] || false;
           return (
             <div
@@ -291,7 +282,8 @@ export default function AdminProvidersPage() {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

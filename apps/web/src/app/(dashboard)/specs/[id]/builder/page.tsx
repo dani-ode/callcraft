@@ -533,7 +533,6 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
                     </label>
                   </div>
                 )}
-
                 {currentFieldList.length > 0 ? (
                   <FieldListRenderer
                     fields={currentFieldList}

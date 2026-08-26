@@ -7,3 +7,4 @@ export * from "./providers";
 export * from "./users";
 export * from "./execution";
 export * from "./projects";
+export * from "./models";

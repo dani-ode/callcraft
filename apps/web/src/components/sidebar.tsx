@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/auth-context";
 import { useAppInit } from "@/context/app-init-context";
 import { ProjectSwitcher } from "@/components/project-switcher";
+import { PYTHON_API_URL } from "@/lib/api/core";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -27,7 +28,7 @@ const navigation = [
   { name: "Playground", href: "/playground", icon: Play },
   { name: "Templates", href: "/templates", icon: Layers },
   { name: "API Keys", href: "/keys", icon: Key },
-  { name: "API Docs", href: "http://127.0.0.1:8080/docs", icon: BookOpen, external: true },
+  { name: "API Docs", href: PYTHON_API_URL ? `${PYTHON_API_URL}/docs` : "/docs", icon: BookOpen, external: true },
 ];
 
 interface SidebarProps {
