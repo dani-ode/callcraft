@@ -11,3 +11,4 @@ from callcraft_api.routers.internal import templates  # noqa: F401
 from callcraft_api.routers.internal import keys     # noqa: F401
 from callcraft_api.routers.internal import users    # noqa: F401
 from callcraft_api.routers.internal import projects  # noqa: F401
+from callcraft_api.routers.internal import models    # noqa: F401

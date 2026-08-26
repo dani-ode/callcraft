@@ -38,59 +38,31 @@ async def init_db(session: AsyncSession) -> None:
         await conn.run_sync(Base.metadata.create_all)
 
         # Execute column migrations safely for Postgres & SQLite
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN bio TEXT;"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT;"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN github_url VARCHAR(255);"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN website_url VARCHAR(255);"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN company VARCHAR(255);"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN location VARCHAR(255);"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(50);"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE users ADD COLUMN email_verification_token VARCHAR(255);"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE app_init ADD COLUMN default_registration_status VARCHAR(50) DEFAULT 'pending_verification';"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE app_init ADD COLUMN require_email_verification BOOLEAN DEFAULT TRUE;"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE templates ADD COLUMN tools_config JSONB DEFAULT '{}'::jsonb;"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE call_specs ADD COLUMN tools_config JSONB DEFAULT '{}'::jsonb;"))
-        except Exception:
-            pass
-        try:
-            await session.execute(text("ALTER TABLE call_spec_versions ADD COLUMN tools_config JSONB DEFAULT '{}'::jsonb;"))
-        except Exception:
-            pass
-        await session.commit()
+        alter_statements = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS github_url VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS website_url VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS company VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(255);",
+            "ALTER TABLE app_init ADD COLUMN IF NOT EXISTS default_registration_status VARCHAR(50) DEFAULT 'pending_verification';",
+            "ALTER TABLE app_init ADD COLUMN IF NOT EXISTS require_email_verification BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE templates ADD COLUMN IF NOT EXISTS tools_config JSONB DEFAULT '{}'::jsonb;",
+            "ALTER TABLE call_specs ADD COLUMN IF NOT EXISTS tools_config JSONB DEFAULT '{}'::jsonb;",
+            "ALTER TABLE call_spec_versions ADD COLUMN IF NOT EXISTS tools_config JSONB DEFAULT '{}'::jsonb;",
+            "ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS project_id VARCHAR(255);",
+            "ALTER TABLE user_ai_providers ADD COLUMN IF NOT EXISTS project_id VARCHAR(255);",
+            "ALTER TABLE call_specs ADD COLUMN IF NOT EXISTS project_id VARCHAR(255);",
+        ]
+        for stmt in alter_statements:
+            try:
+                await session.execute(text(stmt))
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                logger.debug(f"Migration statement ignored: {stmt} - {e}")
 
     # 0. Seed AppInit Settings
     stmt_app = select(AppInit).where(AppInit.id == "app_01HZX01INIT00000000001")
@@ -99,7 +71,7 @@ async def init_db(session: AsyncSession) -> None:
         session.add(
             AppInit(
                 id="app_01HZX01INIT00000000001",
-                app_name="Callcraft",
+                app_name=settings.app_name,
                 app_icon="Feather",
                 tagline="Multimodal AI Execution Gateway",
                 description="Convert PDF and image streams into strictly validated JSON payloads using Google Gemini and OpenAI.",
@@ -214,8 +186,12 @@ async def init_db(session: AsyncSession) -> None:
     await session.flush()
 
     # 4. Seed Users & Assign Roles
+    admin_email = settings.admin_email or "dev@callcraft.io"
+    admin_password = settings.admin_password or "callcraft_admin_secret_123"
+    admin_name = settings.admin_name or "Callcraft Admin"
+
     users_data = [
-        ("usr_default_dev_01", "dev@callcraft.io", "callcraft_admin_secret_123", "Callcraft Admin", "SUPER_ADMIN"),
+        ("usr_default_dev_01", admin_email, admin_password, admin_name, "SUPER_ADMIN"),
         ("usr_demo_developer_02", "developer@acme.corp", "acme_developer_secret_123", "Alex Rivera", "USER"),
         ("usr_demo_analyst_03", "analyst@fintech.io", "fintech_analyst_secret_123", "Sarah Chen", "ANALYST"),
         ("usr_demo_engineer_04", "budi.santoso@idcheck.co.id", "idcheck_budi_secret_123", "Budi Santoso", "USER"),
@@ -240,9 +216,9 @@ async def init_db(session: AsyncSession) -> None:
 
     await session.flush()
 
-    # 5. Seed Service Clients
+    # 5. Seed Service Clients (Primary web service client derived from environment settings)
     service_clients_data = [
-        ("01HZX01SVC000000000000001", "svc_nextjs_main", "client_nextjs_dashboard_01", "nextjs_secret_key_prod_01", ["spec.manage", "call.execute", "analytics.read"]),
+        ("01HZX01SVC000000000000001", settings.service_client_id, "client_nextjs_dashboard_01", settings.service_client_secret, ["spec.manage", "call.execute", "analytics.read"]),
         ("01HZX01SVC000000000000002", "svc_analytics_worker", "client_analytics_worker_01", "analytics_secret_key_prod_02", ["analytics.read"]),
     ]
     for sid, sname, scid, ssecret, sperms in service_clients_data:
@@ -306,11 +282,13 @@ async def init_db(session: AsyncSession) -> None:
                 )
             )
 
-    # 7. Seed User AI Provider Encrypted Keys (with project_id)
-    user_ai_providers_data = [
-        ("uap_01HZX01UAP000000000001", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000001", settings.gemini_api_key or "AIzaSyDummyGeminiKey_12345"),
-        ("uap_01HZX01UAP000000000002", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000002", settings.openai_api_key or "sk-proj-DummyOpenAIKey_12345"),
-    ]
+    # 7. Seed User AI Provider Encrypted Keys (Dynamically encrypted from environment variables)
+    user_ai_providers_data = []
+    if settings.gemini_api_key:
+        user_ai_providers_data.append(("uap_01HZX01UAP000000000001", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000001", settings.gemini_api_key))
+    if settings.openai_api_key:
+        user_ai_providers_data.append(("uap_01HZX01UAP000000000002", "usr_default_dev_01", "prj_01HZX01PROJECT000000001", "01HZX01PROVIDER00000000002", settings.openai_api_key))
+
     for uap_id, uid, prj_id, pid, raw_key in user_ai_providers_data:
         try:
             enc_key, nonce = encrypt_aes_256_gcm(raw_key, settings.master_encryption_key)
@@ -741,9 +719,13 @@ async def init_db(session: AsyncSession) -> None:
             session.add(spec_obj)
             await session.flush()
 
+        ver_id = f"ver_{sid[4:]}"
+        stmt_ver = select(CallSpecVersion).where(CallSpecVersion.id == ver_id)
+        res_ver = await session.execute(stmt_ver)
+        if not res_ver.scalar_one_or_none():
             session.add(
                 CallSpecVersion(
-                    id=f"ver_{sid[4:]}",
+                    id=ver_id,
                     call_spec_id=spec_obj.id,
                     version_number=1,
                     request_schema=matched_tmpl.get("request_schema"),
@@ -756,6 +738,8 @@ async def init_db(session: AsyncSession) -> None:
                     tools_config=tools_cfg,
                 )
             )
+
+    await session.flush()
 
     # 11. Seed API Request Audit Logs
     now = datetime.now(timezone.utc)
@@ -771,30 +755,33 @@ async def init_db(session: AsyncSession) -> None:
         stmt = select(ApiRequest).where(ApiRequest.request_id == req_id)
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
-            session.add(
-                ApiRequest(
-                    id=log_id,
-                    request_id=req_id,
-                    user_id=log_uid,
-                    call_spec_id=spec_id,
-                    call_spec_version_id=ver_id,
-                    credential_id=cred_id,
-                    provider_id=provider_map.get(pcode),
-                    model_id=model_map.get(mident),
-                    status=st,
-                    http_status=hst,
-                    input_type=itype,
-                    input_size_bytes=isize,
-                    processing_time_ms=ptime,
-                    prompt_tokens=ptok,
-                    completion_tokens=ctok,
-                    total_tokens=ttok,
-                    estimated_cost_usd=cost,
-                    client_ip=ip,
-                    user_agent=ua,
-                    created_at=log_created,
+            stmt_vcheck = select(CallSpecVersion.id).where(CallSpecVersion.id == ver_id)
+            res_vcheck = await session.execute(stmt_vcheck)
+            if res_vcheck.scalar_one_or_none():
+                session.add(
+                    ApiRequest(
+                        id=log_id,
+                        request_id=req_id,
+                        user_id=log_uid,
+                        call_spec_id=spec_id,
+                        call_spec_version_id=ver_id,
+                        credential_id=cred_id,
+                        provider_id=provider_map.get(pcode),
+                        model_id=model_map.get(mident),
+                        status=st,
+                        http_status=hst,
+                        input_type=itype,
+                        input_size_bytes=isize,
+                        processing_time_ms=ptime,
+                        prompt_tokens=ptok,
+                        completion_tokens=ctok,
+                        total_tokens=ttok,
+                        estimated_cost_usd=cost,
+                        client_ip=ip,
+                        user_agent=ua,
+                        created_at=log_created,
+                    )
                 )
-            )
 
     # 12. Seed User Daily Usage Aggregates
     today = date.today()

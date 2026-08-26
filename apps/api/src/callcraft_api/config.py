@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     service_client_id: str
     service_client_secret: str
 
+    admin_email: Optional[str] = None
+    admin_password: Optional[str] = None
+    admin_name: Optional[str] = None
+
     gemini_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
 

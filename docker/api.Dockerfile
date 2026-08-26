@@ -18,8 +18,5 @@ COPY --from=builder /install /usr/local
 COPY apps/api /app/apps/api
 
 ENV PYTHONPATH=/app/apps/api/src
-ENV PORT=8080
 
-EXPOSE 8080
-
-CMD ["python", "-m", "uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "exec uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

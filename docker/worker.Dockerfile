@@ -16,7 +16,8 @@ WORKDIR /app
 
 COPY --from=builder /install /usr/local
 COPY apps/worker /app/apps/worker
+COPY apps/api /app/apps/api
 
-ENV PYTHONPATH=/app/apps/worker
+ENV PYTHONPATH=/app/apps/worker:/app/apps/api/src
 
 CMD ["python", "apps/worker/main.py"]

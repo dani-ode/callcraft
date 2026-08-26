@@ -102,8 +102,9 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             
-            # Rebuild & restart Docker Compose services smoothly
+            # Rebuild & restart Docker Compose services smoothly (force remove leftover containers if any)
             docker compose down --remove-orphans || true
+            docker rm -f callcraft-redis callcraft-postgres callcraft-api callcraft-worker callcraft-web 2>/dev/null || true
             docker compose up -d --build
             
             # Automatic DB seeding disabled in CI/CD. Execute manually on VPS when needed:
