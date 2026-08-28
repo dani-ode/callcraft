@@ -59,7 +59,7 @@ Phase 6: Dockerization, Apache VPS Deployment & E2E Audit
 - [x] **3.2. Implement AI Provider Adapters**:
   - **Gemini Adapter**: Google AI Studio REST API / SDK integration supporting Structured Output Tool Calling.
   - **OpenAI Adapter**: GPT-4o Chat Completions API integration with `tools` function calling specs.
-  - **Anthropic / DeepSeek Adapters**: Multi-provider support for structured JSON generation.
+  - **Anthropic / DeepSeek / Mistral Adapters**: Multi-provider support for structured JSON generation and multi-image binary payload handling (`images: List[Tuple[bytes, str]]`).
 - [x] **3.3. Implement Tool Generator, Post-Processing Validator & Auto-Retry Loop**:
   - Build converter transforming user `response_schema` into standard JSON Tool Calling Specs.
   - Implement Pydantic validation & *Type Coercion Engine* (String to Date, Number string to Int, Enum validation).

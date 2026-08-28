@@ -18,6 +18,7 @@ class DeepSeekAdapter(BaseAIAdapter):
         user_prompt: Optional[str],
         api_key: str,
         model_identifier: str = "deepseek-v4-pro",
+        images: Optional[List[Tuple[bytes, str]]] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         if not api_key or not api_key.strip():
             raise ValueError("DeepSeek AI API Key is missing. Please configure a valid API key in settings or request header.")
@@ -32,7 +33,15 @@ class DeepSeekAdapter(BaseAIAdapter):
         if user_prompt:
             user_content.append({"type": "text", "text": user_prompt})
 
-        if image_bytes:
+        if images:
+            for img_b, m_t in images:
+                b64_str = base64.b64encode(img_b).decode("utf-8")
+                media = m_t or "image/jpeg"
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media};base64,{b64_str}"},
+                })
+        elif image_bytes:
             b64_str = base64.b64encode(image_bytes).decode("utf-8")
             media = mime_type or "image/jpeg"
             user_content.append({
