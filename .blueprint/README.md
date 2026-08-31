@@ -1,95 +1,129 @@
-# Callcraft — Software Architecture Blueprint & Technical Specifications
+# Callcraft — Architecture Blueprint
 
-Welcome to the **Callcraft** architecture documentation repository. This document set serves as the official single source of truth, developed based on the complete architecture and technical design discussions in **`qna-1.md` through `qna-7.md`** within the `.blueprint/question-and-answer/` directory.
+> **Status:** Mixed — each document declares its own
+> **Source of truth:** the code, always; see [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md)
+> **Last verified against code:** 2026-08-31 (commit `0ab3d71`)
 
----
+**Callcraft** is a dynamic multimodal AI execution engine. Users design an API specification — a
+dynamic request schema, a structured response schema, prompts, and a model preference — and
+Callcraft executes it against an AI vision/LLM provider, returning JSON that conforms to the schema
+they defined.
 
-## 📌 Executive Summary
-
-**Callcraft** is an AI-powered **Dynamic Multimodal AI Execution Engine**. It empowers users to design custom API specifications, define dynamic input schemas (*request schema*) and structured output schemas (*response schema*), and execute high-speed data extraction and processing by leveraging state-of-the-art AI Vision & LLM models (such as Google Gemini, OpenAI GPT-4o, Anthropic Claude, and DeepSeek).
-
-### Key Architectural Principles (Derived from Q&A 1-7):
-1. **Stateless Privacy-First Data Processing (Q&A 3)**: No documents, image files (Base64 or URL downloads), or sensitive raw extraction outputs are saved to persistent storage (*disk*, MinIO, S3, or database). Data and images live exclusively inside RAM buffers during execution and are immediately dropped from memory after the request cycle completes.
-2. **Separated Control Plane & Data Plane (Q&A 2 & Q&A 4)**:
-   - **Control Plane (`Next.js` with Bun - `app.yourdomain.com`)**: Visual GUI dashboard for users and administrators to manage API specs, input templates, AI provider credentials, and monitoring metadata logs.
-   - **Data Plane (`Python / FastAPI` - `api.yourdomain.com`)**: High-performance API Gateway and Execution Engine receiving dynamic execution traffic directly from external customer applications without passing through Next.js.
-3. **Multi-AI Vision & Dynamic Tool/Function Calling (Q&A 1)**: Converts user-defined input/output JSON Schemas into official AI model tool/function calling declarations (Gemini, OpenAI, etc.) to guarantee 100% precise output JSON structures.
-4. **Multi-Tier Authorization & Security (Q&A 5)**: Strict separation of 3 authentication pathways: Service Client (`/internal/v1/*`), Customer Application Key (`/v1/call/{user_id}`), and Admin RBAC (`/admin/v1/*`).
-5. **Host Apache Reverse Proxy + Docker (Q&A 4)**: Integrates Apache Web Server on Ubuntu Host VPS with Docker Compose containers (`Next.js + Bun`, `Python FastAPI API`, `Python Worker`, `PostgreSQL`, `Redis`).
-6. **Future-Proof Envelope Pattern & Correlation IDs (Q&A 6)**: Wraps all Data Plane responses in standardized `meta`, `data` (or `error`), `execution_trace`, and `metrics` JSON envelopes. Employs `request_id` and `trace_id` for idempotency, distributed tracing, and support for both synchronous and asynchronous execution modes.
-7. **Structured Actionable Error Handling & Graceful Degradation (Q&A 7)**: Provides standardized error envelopes with uppercase error codes (`code`), human-readable messages, itemized `details`, and `actionable_step` recommendations. Implements internal auto-retry loops (1-2 attempts) for AI hallucinations and supports `partial_success` for multi-tool workflows.
+This folder holds the architecture and specification set. It is not a copy of the code; it explains
+the shape of the system, the decisions behind that shape, and where the two currently diverge.
 
 ---
 
-## 📁 Blueprint Documentation Structure
+## Start here
 
-This architecture documentation is divided into the following comprehensive modules:
+| If you want to… | Read |
+| :--- | :--- |
+| Understand the system in 10 minutes | [architecture/system-overview.md](architecture/system-overview.md) |
+| Know what is actually built vs. designed | **[IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md)** |
+| Call the public API | [specifications/api-endpoints.md](specifications/api-endpoints.md) + [specifications/envelope-contract.md](specifications/envelope-contract.md) |
+| Change the execution engine | [architecture/execution-engine.md](architecture/execution-engine.md) |
+| Change the dashboard | [architecture/control-plane-web.md](architecture/control-plane-web.md) |
+| Understand a past decision | [decisions/](decisions/README.md) |
+| Know what to work on next | [roadmap/open-gaps.md](roadmap/open-gaps.md) |
+| Write or edit a document here | [CONVENTIONS.md](CONVENTIONS.md) |
+| Look up a term | [GLOSSARY.md](GLOSSARY.md) |
+
+---
+
+## Document map
 
 ```text
 .blueprint/
-├── README.md                                  # Master index & blueprint overview
-├── question-and-answer/                       # Raw architectural Q&A files (qna-1.md to qna-7.md)
-│   ├── qna-1.md                               # Prompt spec, AI keys, visual builder, admin monitoring
-│   ├── qna-2.md                               # Monorepo architecture & component separation
-│   ├── qna-3.md                               # Stateless RAM-only image & payload processing
-│   ├── qna-4.md                               # Control plane vs Data plane, VPS Apache Host + Docker
-│   ├── qna-5.md                               # Multi-tier auth (Service vs Customer vs Admin RBAC)
-│   ├── qna-6.md                               # Correlation ID, Envelope Pattern (meta, data, trace, metrics)
-│   └── qna-7.md                               # Actionable error handling, HTTP codes, auto-retry, partial success
+├── README.md                       # This index
+├── CONVENTIONS.md                  # How to write and maintain these documents
+├── GLOSSARY.md                     # Shared vocabulary
+├── IMPLEMENTATION-STATUS.md        # Blueprint vs. code reconciliation — read before trusting any doc
+│
 ├── architecture/
-│   ├── system-overview.md                     # High-level architecture, flow diagrams, envelope pipeline
-│   ├── security-and-auth.md                   # 3-tier auth, RBAC matrix, AES-256-GCM, SSRF, audit envelopes
-│   └── deployment-and-infrastructure.md       # VPS Apache proxy, Docker Compose, multi-stage Dockerfiles
+│   ├── system-overview.md          # Planes, request lifecycle, limits
+│   ├── execution-engine.md         # Data Plane internals, module by module
+│   ├── control-plane-web.md        # Next.js dashboard structure and data flow
+│   ├── worker-and-outbox.md        # Async audit pipeline
+│   ├── security-and-auth.md        # Auth channels as-built and as-designed, crypto, SSRF
+│   └── deployment-and-infrastructure.md  # Apache host proxy, Docker, CI/CD
+│
 ├── specifications/
-│   ├── database-schema.md                     # SQL DDL PostgreSQL 16+ (16 Relational Tables), indexes, FK
-│   ├── api-spec-engine.md                     # API specification engine, Envelope wrapping, Tool Calling
-│   ├── api-endpoints.md                       # OpenAPI specs for Control Plane, Data Plane & Admin (Envelopes)
-│   └── testing-strategy.md                    # Testing strategy (Envelope validation, Pytest, Bun test, Load)
-└── roadmap/
-    └── implementation-phases.md               # Tactical execution roadmap from Phase 1 to Phase 6
+│   ├── api-endpoints.md            # Every route, grouped by plane
+│   ├── envelope-contract.md        # Wire contract for Data Plane responses
+│   ├── api-spec-engine.md          # Schemas, tool generation, coercion, prompt assembly
+│   ├── database-schema.md          # Table catalog and relationships
+│   ├── configuration.md            # Environment variable reference
+│   └── testing-strategy.md         # Current suite and the intended pyramid
+│
+├── decisions/                      # ADRs — one decision per file
+│   ├── README.md
+│   └── 0001…0007-*.md
+│
+├── roadmap/
+│   ├── implementation-phases.md    # Phase history with honest status
+│   └── open-gaps.md                # Prioritized backlog derived from the drift audit
+│
+└── question-and-answer/            # Archived design conversations (qna-1 … qna-7)
+    └── README.md                   # What these are and how to read them
 ```
 
 ---
 
-## 📚 Blueprint Module Summary
+## Architectural principles
 
-### 1. [System Overview](file:///home/dani/Projects/callcraft/.blueprint/architecture/system-overview.md) *(Reflects Q&A 1, 2, 3, 4, 6, 7)*
-Explains global system architecture, Control Plane (Next.js + Bun) vs Data Plane (Python FastAPI) separation, monorepo structure, data flow from client to AI Engine, in-memory stream processing without disk storage, API Envelope pipeline, distributed tracing (`request_id`/`trace_id`), and execution quota performance.
-
-### 2. [Security & Authentication](file:///home/dani/Projects/callcraft/.blueprint/architecture/security-and-auth.md) *(Reflects Q&A 1, 5, 6, 7)*
-Documents 3-tier authentication model (`/internal/v1/*` Service Auth, `/v1/call/{user_id}` User API Key Auth, `/admin/v1/*` Admin Session Auth), Role-Based Access Control (RBAC), AES-256-GCM encryption for database AI provider keys, SSRF protections, and secure error envelope sanitization without internal credential leakage.
-
-### 3. [Deployment & Infrastructure](file:///home/dani/Projects/callcraft/.blueprint/architecture/deployment-and-infrastructure.md) *(Reflects Q&A 4)*
-Infrastructure configuration guide for single-host Ubuntu VPS running Apache as Host Reverse Proxy & SSL Terminator, combined with Docker Compose containers (`Next.js + Bun`, `Python API`, `Python Worker`, `PostgreSQL`, `Redis`).
-
-### 4. [Database Schema Specifications](file:///home/dani/Projects/callcraft/.blueprint/specifications/database-schema.md) *(Reflects Q&A 1, 3, 5, 6)*
-Complete PostgreSQL 16+ relational database specification containing 16 relational tables (such as `call_specs`, `call_spec_versions`, `api_requests`) with data types, primary keys (ULID/UUID), foreign keys, performance indexes, audit request tracing (`request_id`, `trace_id`), and production-ready SQL migration DDLs.
-
-### 5. [API Specification Engine](file:///home/dani/Projects/callcraft/.blueprint/specifications/api-spec-engine.md) *(Reflects Q&A 1, 6, 7)*
-Technical specifications for building dynamic *Request Schemas* & *Response Schemas*. Details basic & container data types (nested Object/Array), translation to AI Tool Calling, automated Pydantic validation & *Type Coercion* algorithms, step trace generation, internal hallucination auto-retries, and Envelope packaging.
-
-### 6. [API Endpoints Reference](file:///home/dani/Projects/callcraft/.blueprint/specifications/api-endpoints.md) *(Reflects Q&A 1, 4, 5, 6, 7)*
-Full reference documentation for all REST API endpoints across `/internal/v1/*` (Internal Management), `/v1/call/{user_id}` (Public Execution Data Plane), and `/admin/v1/*` (Admin Dashboard), complete with standard Success, Error, and Partial Success Envelope response specifications and HTTP status code mappings.
-
-### 7. [Professional Testing Strategy](file:///home/dani/Projects/callcraft/.blueprint/specifications/testing-strategy.md) *(Reflects Q&A 6, 7)*
-Professional quality assurance and testing specifications including Unit Testing (Python `pytest` & `bun test`), Integration Testing (`testcontainers-python`), Envelope Conformance Testing, Hallucination Auto-retry Verification, E2E UI Testing (Playwright), Load Testing (k6), Security Fuzzing, and Zero Data Retention Memory Audits.
-
-### 8. [Implementation Phases Roadmap](file:///home/dani/Projects/callcraft/.blueprint/roadmap/implementation-phases.md)
-Tactical execution phases from Phase 1 (Python & Bun Monorepo Scaffolding), Phase 2 (Database & Domain Models), Phase 3 (Python Dynamic Execution Engine & Envelope Pipeline), Phase 4 (Next.js & Bun Dashboard), Phase 5 (Security, Worker Logging & Tracing), through Phase 6 (VPS Deployment & QA).
+1. **Separated planes.** The Control Plane (`apps/web`, Next.js on Bun) manages configuration. The
+   Data Plane (`apps/api`, Python FastAPI) executes customer traffic. Customer traffic never passes
+   through Next.js. — [ADR-0001](decisions/0001-control-plane-data-plane-split.md)
+2. **Zero data retention.** Documents, images, prompts, and extracted content live only in RAM for
+   the duration of a request. Only execution metadata is persisted. —
+   [ADR-0002](decisions/0002-stateless-zero-data-retention.md)
+3. **Structured output via tool calling.** A user's response schema becomes a model function
+   declaration, so conformance is enforced by the provider rather than parsed out of prose. —
+   [ADR-0003](decisions/0003-tool-calling-for-structured-output.md)
+4. **One envelope for every answer.** `meta` / `data` or `error` / `executionTrace` / `metrics`, in
+   camelCase, success or failure. —
+   [specifications/envelope-contract.md](specifications/envelope-contract.md),
+   [ADR-0004](decisions/0004-camelcase-json-wire-format.md)
+5. **Actionable errors.** Every failure carries an uppercase `code`, a human message, itemized
+   `details`, and an `actionableStep` telling the caller what to do next. —
+   [ADR-0007](decisions/0007-actionable-error-contract.md)
+6. **Prefixed, sortable identifiers.** `usr_01HZX…`, `spc_01HZX…` — self-describing in logs and
+   lexicographically ordered by creation time. —
+   [ADR-0005](decisions/0005-prefixed-ulid-identifiers.md)
+7. **Header-routed execution.** One public endpoint, `POST /v1/call`; the user, spec, credential, and
+   model come from headers. — [ADR-0006](decisions/0006-header-routed-call-endpoint.md)
+8. **Multi-tenant scoping by project.** Credentials, specs, and provider keys are scoped to projects,
+   and cross-project execution is refused.
 
 ---
 
-## 🛠️ Official Tech Stack
+## Tech stack
 
-| Component | Technology / Library | Description |
+| Component | Technology | Where |
 | :--- | :--- | :--- |
-| **Data Plane / Core API** | **Python 3.12 (FastAPI + Pydantic v2)** | High-throughput, dynamic multimodal API Gateway & Execution Engine |
-| **Control Plane / Front** | **Next.js 14+ (App Router)** | Web Dashboard, React, TypeScript, Tailwind CSS, shadcn/ui |
-| **JS/TS Runtime & Manager** | **Bun 1.1+** | Superfast JavaScript/TypeScript runtime & package manager for Web |
-| **Schema Builder UI** | **React Flow + Monaco** | Visual drag-and-drop & code editor for dynamic API specs |
-| **Database** | **PostgreSQL 16+** | Relational Database (Asyncpg / SQLAlchemy in Python) |
-| **Cache & Rate Limit** | **Redis 7+** | Callcraft spec caching, token-bucket rate limiter, session cache |
-| **Testing Tools** | **Pytest, Bun Test, Playwright, k6** | Automated unit, integration, UI E2E, & load testing |
-| **Reverse Proxy** | **Apache 2.4+ (Host VPS)** | ProxyPass, SSL/TLS Termination, Security headers |
-| **Containerization** | **Docker & Docker Compose** | Multi-container setup for applications and infrastructure |
+| Data Plane / execution engine | Python 3.12, FastAPI, Pydantic v2, Uvicorn | `apps/api` |
+| Control Plane / dashboard | Next.js 14 (App Router), React 18, TypeScript, Tailwind, TanStack Query | `apps/web` |
+| JS runtime & package manager | Bun 1.1+ | repo root workspace |
+| Schema/code editor UI | Monaco (`@monaco-editor/react`), Recharts for analytics | `apps/web` |
+| Database | PostgreSQL 16, SQLAlchemy 2 async + asyncpg | `apps/api/src/callcraft_api/db` |
+| Cache, spec cache, outbox | Redis 7 | `apps/api/src/callcraft_api/services/redis_cache.py` |
+| Background worker | Python asyncio poller | `apps/worker` |
+| AI providers | Gemini, OpenAI, Anthropic, Mistral, DeepSeek adapters | `apps/api/src/callcraft_engine/adapters` |
+| Crypto | AES-256-GCM (provider keys), Argon2id (secret keys) | `apps/api/src/callcraft_engine/crypto.py` |
+| Tests | pytest, pytest-asyncio, respx | `apps/api/tests` |
+| Deployment | Docker Compose behind host Apache 2.4, GitHub Actions → SSH | `docker/`, `.github/workflows/deploy.yml` |
 
+Verified against `package.json`, `apps/web/package.json`, and `pyproject.toml` on the date above.
+
+---
+
+## Reading the blueprint safely
+
+Three habits prevent this document set from misleading you:
+
+1. **Check the front matter.** A **Design Target** document describes intent, not behaviour.
+2. **Check [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md)** before relying on any capability —
+   several things the older documents asserted as built are not wired up (rate limiting, audit-log
+   persistence, service-client auth).
+3. **Follow the code citation.** Every non-obvious claim names a file and line. If the line no longer
+   says what the document says, the document is stale — fix it, in that commit.

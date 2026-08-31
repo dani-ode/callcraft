@@ -1,254 +1,203 @@
-# Specifications — API Endpoints Reference
+# Specification — API Endpoints Reference
 
-This document presents the complete REST API contract specifications for **Callcraft**, divided into 3 primary categories: **Internal Management API** (`/internal/v1/*`), **Public Customer Data Plane API** (`/v1/call`), and **Admin Platform API** (`/admin/v1/*`).
+> **Status:** As-Built
+> **Source of truth:** `apps/api/src/callcraft_api/routers/`
+> **Last verified against code:** 2026-08-31 (commit `0ab3d71`)
+
+Every route the FastAPI application registers, grouped by plane. Response bodies follow
+[envelope-contract.md](envelope-contract.md) on the Data Plane, and plain camelCase JSON objects on
+the internal surface.
+
+Regenerate this list with:
+
+```bash
+grep -rn '@router\.\(get\|post\|put\|patch\|delete\)' apps/api/src --include=*.py
+```
 
 ---
 
-## 1. Public Customer Data Plane API
-
-The primary channel for external customer applications to execute dynamic multimodal AI processing.
+## 1. Public Data Plane
 
 ### `POST /v1/call`
 
-Executes dynamic multimodal AI processing based on the specified `X-CALL-SPEC-ID`.
+The only public execution route. Routing inputs are headers
+([ADR-0006](../decisions/0006-header-routed-call-endpoint.md)).
 
-#### Request Headers:
-```http
-Authorization: Bearer call_sk_sample_key_1234567890
-X-USER-ID: 01HZX89ABCDEF1234567890XYZ
-X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ
-X-Request-ID: req_882391005_abc
-X-Correlation-ID: trc_5599201
-Content-Type: application/json
-```
+**Headers**
 
-#### Path Parameters:
-- `user_id` (string, required): ULID identifier of the Callcraft specification owner.
+| Header | Required | Meaning |
+| :--- | :---: | :--- |
+| `Authorization: Bearer <call_sk_…>` | ✔ | Credential secret; verified against the Argon2id hash |
+| `X-CALL-PUBLIC-KEY` | ✔ | Credential public key (`pk_…`) |
+| `X-USER-ID` | ✔ | Owner of the spec (`usr_…`) |
+| `X-CALL-SPEC-ID` | ✔ | Spec id **or** slug |
+| `X-AI-MODEL-NAME` | — | Overrides the spec's model, e.g. `gemini-3.6-flash` |
+| `X-AI-API-KEY` | — | Caller-supplied provider key; used only when the spec has `useExternalApiKey` |
+| `X-CALL-SHOW-PROMPT` | — | `true` echoes the assembled prompt in `executionTrace.promptBuilder` |
+| `X-CALL-PROVIDER` | — | ⚠️ Accepted and ignored; provider comes from the model row |
+| `Content-Type: application/json` | ✔ | |
 
-#### Request Body Options:
+**Body** — declared fields, plus any extra fields (`extra: "allow"`):
 
-##### Option A: Base64 File Payload
-```json
-{
-  "image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...",
-  "prompt": "Verify document authenticity and extract key fields",
-  "variables": { "environment": "production" }
-}
-```
-
-##### Option B: Image / Document URL Download Payload
-```json
-{
-  "image": "https://storage.clientdomain.com/documents/ktp-sample.jpg",
-  "prompt": "Ensure date of birth strictly uses YYYY-MM-DD format"
-}
-```
-
----
-
-#### Envelope Response Specifications (Q&A 6 & Q&A 7)
-
-##### 1. Success Response Envelope (`200 OK` - `meta.status = "completed"`):
-```json
-{
-  "meta": {
-    "request_id": "req_882391005_abc",
-    "trace_id": "trc_5599201",
-    "timestamp": "2026-08-23T20:05:12Z",
-    "status": "completed",
-    "api_version": "v2.1",
-    "execution_mode": "sync"
-  },
-  "data": {
-    "primary_result": {
-      "type": "structured_json",
-      "content": {
-        "nik": "3271041508950001",
-        "full_name": "BUDI SANTOSO",
-        "gender": "MALE",
-        "birth": {
-          "place": "BOGOR",
-          "date": "1995-08-15"
-        },
-        "address": {
-          "street": "JL. MERDEKA NO. 45",
-          "rt_rw": "002/005",
-          "district": "PAKUAN",
-          "city": "KOTA BOGOR"
-        }
-      }
-    },
-    "human_readable_message": "Identitas dokumen berhasil diekstrak dan divalidasi."
-  },
-  "execution_trace": {
-    "total_duration_ms": 1240,
-    "steps": [
-      {
-        "step_id": "step_1",
-        "agent": "vision_parser",
-        "action_type": "tool_call",
-        "tool_name": "extract_document_data",
-        "status": "success",
-        "duration_ms": 1200
-      }
-    ],
-    "warnings": []
-  },
-  "metrics": {
-    "usage": {
-      "prompt_tokens": 850,
-      "completion_tokens": 120,
-      "total_tokens": 970
-    },
-    "estimated_cost_usd": 0.001455
-  }
-}
-```
-
-##### 2. Actionable Error Response Envelope (`400/422/403/429/500/504` - `meta.status = "failed"`):
-```json
-{
-  "meta": {
-    "request_id": "req_882391009_xyz",
-    "trace_id": "trc_5599202",
-    "timestamp": "2026-08-23T20:07:15Z",
-    "status": "failed",
-    "api_version": "v2.1",
-    "execution_mode": "sync"
-  },
-  "error": {
-    "code": "INVALID_IMAGE_FORMAT",
-    "message": "Gambar tidak dapat diproses. Pastikan formatnya adalah JPG atau PNG, dan resolusi tidak melebihi 4K.",
-    "details": [
-      {
-        "field": "image",
-        "issue": "String Base64 corrupt atau bukan format gambar yang dikenali."
-      }
-    ],
-    "actionable_step": "Silakan kompres gambar atau periksa kembali proses encoding Base64 di sisi client."
-  },
-  "execution_trace": {
-    "total_duration_ms": 120,
-    "steps": [],
-    "warnings": []
-  }
-}
-```
-
-##### 3. Partial Success Response Envelope (`200 OK` / `207 Multi-Status` - `meta.status = "partial_success"`):
-```json
-{
-  "meta": {
-    "request_id": "req_882391010_pqr",
-    "trace_id": "trc_5599203",
-    "timestamp": "2026-08-23T20:08:00Z",
-    "status": "partial_success",
-    "api_version": "v2.1",
-    "execution_mode": "sync"
-  },
-  "data": {
-    "primary_result": {
-      "type": "structured_json",
-      "content": {
-        "estimasi_biaya": 450000000
-      }
-    },
-    "human_readable_message": "Analisis denah dan estimasi biaya berhasil, namun sistem gagal menjadwalkannya di kalender."
-  },
-  "error": {
-    "code": "PARTIAL_TOOL_FAILURE",
-    "message": "Gagal mengeksekusi tool 'create_calendar_event'.",
-    "details": [
-      {
-        "issue": "Google Calendar API sedang down (HTTP 503)."
-      }
-    ],
-    "actionable_step": "Hasil analisis telah disimpan. Jadwalkan ulang event kalender secara manual."
-  },
-  "execution_trace": {
-    "total_duration_ms": 3200,
-    "steps": [
-      { "step_id": "step_1", "agent": "vision_parser", "action_type": "tool_call", "tool_name": "vision_analysis", "status": "success", "duration_ms": 1500 },
-      { "step_id": "step_2", "agent": "data_retriever", "action_type": "tool_call", "tool_name": "query_milvus_db", "status": "success", "duration_ms": 500 },
-      { "step_id": "step_3", "agent": "integrator", "action_type": "tool_call", "tool_name": "create_calendar_event", "status": "failed", "duration_ms": 1200 }
-    ],
-    "warnings": ["Tool create_calendar_event failed with HTTP 503"]
-  }
-}
-```
-
----
-
-#### Standardized Error Codes Reference Table
-
-| Category | HTTP Code | Error Code (`error.code`) | Trigger Condition | Recommended Client Action |
-| :--- | :---: | :--- | :--- | :--- |
-| **Client Input** | `400` | `VALIDATION_ERROR` | Malformed JSON, missing prompt/variables | Correct payload syntax; do not auto-retry |
-| **Client Input** | `422` | `UNSUPPORTED_MEDIA_TYPE` | Non-image payload or invalid MIME | Use valid JPEG, PNG, or PDF format |
-| **Client Input** | `422` | `INVALID_IMAGE_FORMAT` | Corrupt Base64 string or image > 4K | Re-encode file or compress image size |
-| **Security** | `401` | `UNAUTHORIZED` | Invalid or missing API Key (`call_sk_...`) | Check Authorization bearer token |
-| **Security** | `403` | `SSRF_BLOCKED` | Remote URL points to internal IP/localhost | Provide public, safe remote file URL |
-| **Rate Limit** | `429` | `RATE_LIMIT_EXCEEDED` | Request frequency exceeds key limit | Apply Exponential Backoff wait |
-| **AI Model** | `403` | `AI_SAFETY_BLOCK` | Image/prompt triggered safety filter | Inspect image content for violations |
-| **AI Model** | `422` | `VISION_EXTRACTION_FAILED` | Image unreadable, blurry, or low quality | Provide clearer high-contrast image |
-| **AI Model** | `422` | `AI_HALLUCINATION_DETECTED` | Model failed tool spec after 2 retries | Adjust prompt instructions or spec |
-| **Tool/Infra** | `500` | `TOOL_EXECUTION_FAILED` | Internal tool execution exception | Inspect step log in `execution_trace` |
-| **Tool/Infra** | `504` | `UPSTREAM_AI_TIMEOUT` | AI Model provider timed out (>60s) | Retry request with exponential backoff |
-| **Partial** | `207` / `200` | `PARTIAL_TOOL_FAILURE` | Primary tool succeeded, sub-tool failed | Process partial `data`; retry failed tool |
-
----
-
-## 2. Internal Management API (`/internal/v1/*`)
-
-Used exclusively by the Next.js Control Plane server. Requires Service Auth Headers:
-- `X-Service-Client-Id`: `svc_nextjs_main`
-- `X-Service-Client-Secret`: `sec_live_...`
-
-### Summary Table of Internal Endpoints:
-
-| Method | Endpoint Path | Description |
+| Field | Type | Notes |
 | :--- | :--- | :--- |
-| `POST` | `/internal/v1/auth/verify-service` | Verifies service client credentials |
-| `GET` | `/internal/v1/users/{id}` | Fetches user profile data |
-| `POST` | `/internal/v1/users` | Registers new user from Next.js Control Plane |
-| `GET` | `/internal/v1/call-specs` | Lists user's Callcraft specifications (paginated) |
-| `POST` | `/internal/v1/call-specs` | Creates a new Callcraft specification (Save draft/active) |
-| `GET` | `/internal/v1/call-specs/{id}` | Fetches detailed spec and version history |
-| `PUT` | `/internal/v1/call-specs/{id}` | Updates spec and increments version number |
-| `POST` | `/internal/v1/api-credentials` | Generates a new API Key pair (`pk_...` & `call_sk_...`)|
-| `GET` | `/internal/v1/templates` | Lists official platform templates |
-| `GET` | `/internal/v1/analytics/usage` | Queries request audit logs & aggregated token metrics |
+| `image` / `file` / `pdf` | string | Base64 data URL, raw Base64, or an `http(s)` URL |
+| `prompt` | string | Additional instruction; honoured only if the spec allows it |
+| `negativePrompt` | string | Constraint text |
+| `variables` | object | Interpolated into `{{placeholders}}` in the spec's prompts |
+| `data` | object | Alternative container; its values are scanned for inputs too |
+| *any other field* | any | String values that look like a URL, data URL, or long Base64 are treated as additional documents; the rest are passed to the model as request input parameters |
+
+Multiple documents in one call are supported — every qualifying value is decoded and sent as part of
+a multi-image payload (`public.py:259`).
+
+**Example**
+
+```bash
+curl -X POST https://api.example.com/v1/call \
+  -H "Authorization: Bearer call_sk_live_…" \
+  -H "X-CALL-PUBLIC-KEY: pk_live_…" \
+  -H "X-USER-ID: usr_01HZX89ABCDEF1234567890XY" \
+  -H "X-CALL-SPEC-ID: ktp-reader" \
+  -H "Content-Type: application/json" \
+  -d '{"image":"data:image/jpeg;base64,/9j/4AAQ…","prompt":"Gunakan format tanggal YYYY-MM-DD"}'
+```
+
+**Status codes**
+
+| Code | Meaning |
+| :---: | :--- |
+| 200 | `meta.status = "completed"` |
+| 400 | Missing header, unknown model, or no provider key |
+| 401 | Missing or invalid credential |
+| 403 | IP not allowlisted, or credential/spec project mismatch |
+| 404 | Spec not found for that user |
+| 422 | Body failed validation, or model output failed coercion |
+| 502 | AI provider adapter failed |
+| 500 | Unhandled server error |
+
+Full code catalog: [envelope-contract.md](envelope-contract.md#7-error-code-catalog).
+
+### `GET /health`
+
+Liveness probe. `apps/api/src/callcraft_api/routers/health.py:7`.
 
 ---
 
-## 3. Admin Platform API (`/admin/v1/*`)
+## 2. Internal management API — `/internal/v1/*`
 
-Used for administrative platform operations. Requires Bearer JWT Admin Token + RBAC permission checks.
+Consumed by the dashboard. **Identity comes from the `X-USER-ID` header alone**
+(`routers/internal/_deps.py:12`): the header is checked to correspond to an existing user, and
+nothing more. There is no service-client verification and no session token — see
+[../architecture/security-and-auth.md](../architecture/security-and-auth.md) and
+[../roadmap/open-gaps.md](../roadmap/open-gaps.md).
 
-### Endpoints Detail:
+Most collection endpoints accept `?project_id=` to scope results to one project.
 
-#### `GET /admin/v1/models`
-- **Permission**: `model.manage`
-- **Description**: Lists all AI Vision & LLM Models registered on the platform along with active status.
+### Authentication (`routers/auth.py`)
 
-#### `POST /admin/v1/models`
-- **Permission**: `model.manage`
-- **Request Body**:
-  ```json
-  {
-    "provider_code": "gemini",
-    "name": "Gemini 1.5 Pro Vision",
-    "model_identifier": "gemini-1.5-pro",
-    "supports_image": true,
-    "supports_tool_calling": true,
-    "is_default": false
-  }
-  ```
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `POST` | `/internal/v1/auth/register` | Create an account; sends a verification mail when required by settings |
+| `POST` | `/internal/v1/auth/verify-email` | Consume a verification token / OTP |
+| `POST` | `/internal/v1/auth/resend-verification` | Re-send the activation mail |
+| `POST` | `/internal/v1/auth/login` | Verify credentials; returns the user object (no token is issued) |
 
-#### `PUT /admin/v1/models/{id}`
-- **Permission**: `model.manage`
-- **Description**: Enables/disables an AI model or modifies default token rate limits.
+### Platform (`routers/internal/app.py`)
 
-#### `POST /admin/v1/users/{id}/suspend`
-- **Permission**: `user.manage`
-- **Description**: Suspends a user account and immediately blocks all active API Keys for that user across the Data Plane (invalidates Redis caches).
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/internal/v1/status` | Channel probe; echoes the service-client headers without verifying them |
+| `GET` | `/internal/v1/app-init` | Branding, landing-page toggle, registration policy, default prompts |
+| `PUT` | `/internal/v1/app-init` | Update those settings |
+
+### Projects (`routers/internal/projects.py`)
+
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/internal/v1/projects` | List the user's projects |
+| `POST` | `/internal/v1/projects` | Create (201); slug derived from the name |
+| `GET` | `/internal/v1/projects/{project_id}` | Fetch one |
+| `PUT` | `/internal/v1/projects/{project_id}` | Update |
+| `DELETE` | `/internal/v1/projects/{project_id}` | Delete (204); cascades to specs, credentials, provider keys |
+
+### Call specs (`routers/internal/specs.py`)
+
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/internal/v1/specs?project_id=` | List specs |
+| `POST` | `/internal/v1/specs` | Create; slug collisions get a ULID suffix |
+| `GET` | `/internal/v1/specs/{spec_id}` | Fetch spec with its active version |
+| `PUT` | `/internal/v1/specs/{spec_id}` | Update; writes a new version row |
+| `DELETE` | `/internal/v1/specs/{spec_id}` | Delete |
+| `POST` | `/internal/v1/specs/{spec_id}/duplicate?project_id=` | Copy into the same or another project |
+| `GET` | `/internal/v1/specs/{spec_id}/publication` | Marketplace publication state |
+| `POST` | `/internal/v1/specs/{spec_id}/publication` | Publish / unpublish to the marketplace |
+| `GET` | `/internal/v1/specs/{spec_id}/playground-state` | Saved playground form state |
+| `POST` | `/internal/v1/specs/{spec_id}/playground-state` | Persist playground form state |
+
+### Credentials and provider keys (`routers/internal/keys.py`)
+
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/internal/v1/keys?project_id=` | List API credentials (no secrets) |
+| `POST` | `/internal/v1/keys` | Create a pair; **the secret is returned once**, as `secretKey` |
+| `PUT` | `/internal/v1/keys/{key_id}/whitelist` | Replace the IP allowlist; entries validated as IP or CIDR |
+| `DELETE` | `/internal/v1/keys/{key_id}` | Revoke |
+| `GET` | `/internal/v1/logs?project_id=&limit=50` | Execution log rows from `api_requests` — ⚠️ nothing writes that table today |
+| `POST` | `/internal/v1/providers/save-key` | Store a user's AI provider key, AES-256-GCM encrypted |
+| `GET` | `/internal/v1/providers/keys?project_id=` | List stored provider keys, masked |
+| `GET` | `/internal/v1/providers/list` | Providers registered on the platform |
+| `POST` | `/internal/v1/providers/verify-key` | Live-check a provider key against the vendor |
+
+### Templates / marketplace (`routers/internal/templates.py`)
+
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/internal/v1/templates?category=&search=&sort=` | Browse published templates |
+| `POST` | `/internal/v1/templates/publish` | Publish a spec as a template |
+| `GET` | `/internal/v1/templates/{template_id}` | Template detail |
+| `POST` | `/internal/v1/templates/{template_id}/fork?project_id=` | Fork into the caller's account as a new spec |
+| `POST` | `/internal/v1/templates/{template_id}/like` | Toggle like |
+| `GET` | `/internal/v1/templates/{template_id}/comments` | List reviews |
+| `POST` | `/internal/v1/templates/{template_id}/comments` | Add a review with a rating |
+| `DELETE` | `/internal/v1/templates/comments/{comment_id}` | Delete own review |
+
+### Users (`routers/internal/users.py`)
+
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/internal/v1/users/me` | Caller's profile |
+| `GET` | `/internal/v1/users/{target_user_id}/profile` | Public profile of another user |
+| `PUT` | `/internal/v1/users/profile` | Update own profile |
+| `POST` | `/internal/v1/users/me/close-account` | Close the account |
+| `PUT` | `/internal/v1/admin/users/{target_user_id}/status` | ⚠️ Set account status — no role check |
+| `PUT` | `/internal/v1/admin/users/{target_user_id}/verify` | ⚠️ Force-verify an account — no role check |
+
+### AI catalog (`routers/internal/models.py`)
+
+| Method | Path | Purpose |
+| :--- | :--- | :--- |
+| `GET` | `/internal/v1/models` | Active models with capability flags and pricing |
+| `GET` | `/internal/v1/providers` | Active providers |
+
+---
+
+## 3. Admin plane — `/admin/v1/*`
+
+| Method | Path | Status |
+| :--- | :--- | :--- |
+| `GET` | `/admin/v1/status` | ✅ Returns a static health payload — unauthenticated, and its `active_models` list is hardcoded rather than read from the database (`routers/admin.py:6`) |
+
+📐 The model management, prompt management, and user-suspension endpoints described in the original
+blueprint do not exist. Their nearest working equivalents are the `/internal/v1/models` reads and the
+`/internal/v1/admin/users/*` mutations listed above, neither of which enforces a role.
+
+---
+
+## 4. What is not here
+
+📐 Designed in the original blueprint, absent from the code: `/internal/v1/auth/verify-service`,
+`/internal/v1/call-specs` (the surface is `/internal/v1/specs`), `/internal/v1/api-credentials`
+(it is `/internal/v1/keys`), `/internal/v1/analytics/usage` (partially covered by
+`/internal/v1/logs`), and the whole `/admin/v1/models`, `/admin/v1/users/{id}/suspend` family.
