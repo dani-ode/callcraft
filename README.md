@@ -1,142 +1,196 @@
 # Callcraft — AI-Powered Dynamic Multimodal API Execution Engine
 
-[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg?style=flat&logo=python)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-green.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Bun](https://img.shields.io/badge/Bun-1.1+-orange.svg?style=flat&logo=bun)](https://bun.sh/)
-[![Next.js](https://img.shields.io/badge/Next.js-14.2+-black.svg?style=flat&logo=next.js)](https://nextjs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue.svg?style=flat&logo=postgresql)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7+-red.svg?style=flat&logo=redis)](https://redis.io/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Bun](https://img.shields.io/badge/Bun-1.1+-fbf0df.svg?style=for-the-badge&logo=bun&logoColor=black)](https://bun.sh/)
+[![Next.js](https://img.shields.io/badge/Next.js-14.2+-000000.svg?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
-**Callcraft** is a high-speed, AI-powered **Dynamic Multimodal API Execution Engine**. It empowers users to visually design custom API contracts, define dynamic request and response schemas, and execute 100% precision structured document & data processing by leveraging state-of-the-art AI Vision & LLM Models (Google Gemini 1.5, OpenAI GPT-4o, Anthropic Claude, and DeepSeek).
-
----
-
-## ⚡ Core Features & Architectural Highlights
-
-- 🔒 **Stateless Privacy-First Data Processing**: Image/document files (Base64 or URL downloads) and context payloads are strictly processed in RAM buffers (`bytes`) during execution and immediately dropped from memory. **No files are ever saved to host disk, S3, MinIO, or databases.**
-- 🚀 **Separated Control Plane & Data Plane**:
-  - **Control Plane (`Next.js` with Bun)**: Visual dashboard for users and admins to manage API specs, input templates, AI provider credentials, and analytics.
-  - **Data Plane (`Python / FastAPI`)**: High-performance API Gateway and Execution Engine that directly handles customer execution traffic without bottlenecks.
-- 🤖 **Dynamic Tool & Function Calling Engine**: Automatically translates user-defined JSON Schemas into official AI Vision *Tool Calling Specs* to guarantee 100% valid JSON responses.
-- 🛡️ **Multi-Tier Security & Authentication**:
-  - **Service Auth**: Internal communication between Next.js Server ➔ Python (`/internal/v1/*`).
-  - **Customer Auth**: Public execution API (`/v1/call`) via Bearer API Key (`call_sk_...`) & `X-USER-ID` header.
-  - **Admin Auth**: Granular access control based on Role-Based Access Control (**RBAC**).
-  - **Security Safeguards**: AES-256-GCM encryption for provider API keys, Argon2id hashing for secret keys, and strict SSRF URL validation.
+**Callcraft** is an enterprise-grade, high-speed **Dynamic Multimodal AI Execution Engine**. It enables developers and enterprise teams to visually define custom API contracts, construct dynamic input/response JSON schemas, and execute precision structured document and data extraction with state-of-the-art vision and language models (Google Gemini, OpenAI GPT-4o, Anthropic Claude, Mistral, and DeepSeek).
 
 ---
 
-## 📂 Repository Monorepo Structure
+## 🏛️ System Architecture
+
+Callcraft is designed around a clean separation of concerns, decoupling management logic from runtime execution traffic:
+
+```mermaid
+graph TD
+    Client["Client Applications / External Services"] -->|POST /v1/call<br>Bearer API Key| DataPlane["Data Plane API Gateway<br>(Python 3.12 / FastAPI)"]
+    Admin["Admin / Developer Browser"] -->|HTTP / Web UI| ControlPlane["Control Plane Dashboard<br>(Next.js 14 / Bun)"]
+
+    subgraph Internal Architecture
+        ControlPlane -->|Service Auth / internal/v1/*| DataPlane
+        DataPlane -->|Async State / Spec Lookup| Redis["Redis 7<br>(Spec Cache & Outbox)"]
+        DataPlane -->|Relational Persistence| Postgres[("PostgreSQL 16<br>(Metadata / Specs / Keys)")]
+        DataPlane -->|In-Memory Execution| LLM["Multimodal AI Adapters<br>(Gemini / OpenAI / Claude / DeepSeek)"]
+        Worker["Outbox Worker<br>(Python Async Poller)"] -->|Audit / Event Processing| Postgres
+        Worker -->|Consume Queue| Redis
+    end
+```
+
+### Key Design Principles
+
+1. **Separated Control Plane & Data Plane**:
+   - **Control Plane (`apps/web`)**: Next.js 14 App Router running on Bun. Provides visual schema design, API key generation, provider configuration, and operational dashboards.
+   - **Data Plane (`apps/api`)**: Python 3.12 + FastAPI high-throughput API gateway. Direct execution engine with no Next.js overhead on customer call traffic.
+2. **Stateless & Zero Data Retention**:
+   - Customer payloads, document images (Base64 or URL streams), and extracted data reside strictly in RAM buffers (`bytes`) during execution.
+   - Zero payload or document data is persisted to host storage, S3, or databases.
+3. **Provider-Native Tool Calling**:
+   - Automatically translates user-defined JSON Schemas into official AI model tool/function calling specifications to guarantee 100% schema-compliant JSON output without prose contamination.
+4. **Standardized Wire Envelope & Actionable Errors**:
+   - All response envelopes follow a consistent wire format (`meta`, `data`, `execution`, `metrics` or `error`).
+   - Every failure provides structured actionable error contracts featuring an explicit `code`, human-readable `message`, itemized `details`, and an `actionableStep`.
+5. **Defense-in-Depth Security**:
+   - AES-256-GCM authenticated encryption for provider API keys.
+   - Argon2id cryptographic password/secret hashing.
+   - Strict SSRF (Server-Side Request Forgery) IP/URL filtering on image fetches.
+   - Scoped multi-tenant authorization per project and granular RBAC.
+
+---
+
+## 📂 Repository Layout
 
 ```text
 callcraft/
-├── .blueprint/                 # Complete Architecture Blueprint & Q&A Specifications
-│   ├── README.md               # Master index of architectural blueprints
-│   ├── architecture/           # System overview, Security/Auth, Deployment specs
-│   ├── specifications/         # Database DDL (16 tables), API Spec engine, Endpoints, Testing Strategy
-│   └── roadmap/                # Tactical implementation roadmap (Phase 1-6)
+├── .blueprint/                 # Architecture blueprints, ADRs, & specifications
+│   ├── README.md               # Architecture documentation index
+│   ├── architecture/           # System overview, security, execution engine, worker
+│   ├── specifications/         # Database schema, API spec engine, envelope contracts
+│   └── roadmap/                # Tactical phase breakdown & open gaps
 │
 ├── apps/
-│   ├── web/                    # FRONTEND: Next.js 14 Dashboard & Visual Schema Builder (Bun Runtime)
-│   ├── api/                    # BACKEND API: Python FastAPI Data Plane Gateway & Execution Engine
-│   │   ├── main.py
-│   │   ├── src/callcraft_engine/ # Shared Engine (Tool Generator, Coercion, Crypto, SSRF)
-│   │   └── tests/              # Pytest Unit & Engine Test Suite
-│   └── worker/                 # WORKER: Python Async Outbox Logger
+│   ├── web/                    # CONTROL PLANE: Next.js 14 Dashboard & Monaco Schema Editor
+│   ├── api/                    # DATA PLANE: Python FastAPI Gateway & Multimodal Adapters
+│   │   ├── main.py             # Uvicorn entrypoint
+│   │   ├── src/callcraft_engine/ # Dynamic Tool Generator, Crypto, Coercion, SSRF
+│   │   └── tests/              # Pytest engine test suite
+│   └── worker/                 # BACKGROUND WORKER: Python Async Outbox Event Poller
 │
-├── migrations/                 # PostgreSQL 16+ DDL Migration SQL Scripts (16 Relational Tables)
-├── docker/                     # Dockerfiles (Python FastAPI Multi-Stage & Bun Next.js)
-├── docker-compose.yml          # Multi-Container Setup (Web, API, Worker, Postgres, Redis)
-├── pyproject.toml              # Root Python 3.12 Workspace Manifest
-├── requirements.txt            # Python Dependencies List
-└── .env.example                # Environment Variable Template
+├── migrations/                 # PostgreSQL DDL migration scripts (16 relational tables)
+├── docker/                     # Optimized multi-stage Dockerfiles (API, Web, Worker)
+├── docker-compose.yml          # Infrastructure orchestration (Postgres, Redis, API, Worker, Web)
+├── pyproject.toml              # Root Python package dependencies & tool settings
+├── package.json                # Bun monorepo workspace & script definitions
+└── .env.example                # Standardized environment configuration template
 ```
 
 ---
 
-## 🛠️ Prerequisites
+## 🛠️ Tech Stack & Requirements
 
-Ensure your environment meets the following requirements before running the application:
-- **Python**: `3.12+`
-- **Bun**: `v1.1+`
-- **Docker & Docker Compose**: `v24.0+`
-- **PostgreSQL**: `v16+` (If running without Docker)
-- **Redis**: `v7+` (If running without Docker)
+| Layer | Technologies | Minimum Version |
+| :--- | :--- | :--- |
+| **Runtime / Tooling** | Python, Bun, Node.js | Python `3.12+`, Bun `1.1+` |
+| **Backend (Data Plane)** | FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2, asyncpg | FastAPI `0.111+` |
+| **Frontend (Control Plane)** | Next.js 14 (App Router), React 18, TypeScript, Monaco | Next.js `14.2+` |
+| **Database & Cache** | PostgreSQL, Redis | PostgreSQL `16+`, Redis `7+` |
+| **Containerization** | Docker, Docker Compose | Docker `24.0+`, Compose `v2+` |
 
 ---
 
-## 🚀 Quick Start (Local Development)
+## ⚡ Quick Start
 
-### 1. Clone Repository & Environment Setup
+### 1. Environment Setup
+
+Copy the example configuration file and fill in required secrets:
+
 ```bash
 cp .env.example .env
+```
+
+> **Note**: For production deployments, generate a 32-byte hex key for `MASTER_ENCRYPTION_KEY` via `openssl rand -hex 32`.
+
+### 2. Install Workspace Dependencies
+
+```bash
 bun install
 ```
 
-### 2. Start Infrastructure Services (PostgreSQL & Redis)
+### 3. Setup & Execution Options
+
+#### Option A: Run Full Stack via Docker Compose (Recommended)
+
 ```bash
-docker-compose up -d callcraft-postgres callcraft-redis
+docker-compose up --build -d
 ```
 
-### 3. Run Database Migrations
-```bash
-psql -h 127.0.0.1 -U callcraft_user -d callcraft_db -f migrations/0001_initial_schema.sql
-```
+Access services at:
+- **Web Dashboard**: `http://localhost:3001`
+- **Data Plane API**: `http://127.0.0.1:8081`
+- **Interactive OpenAPI Documentation**: `http://127.0.0.1:8081/docs`
 
-### 4. Run Both Backend & Frontend (Single-Command Option A)
-```bash
-bun dev
-```
-*The Data Plane API will run at `http://127.0.0.1:8081` and the Web Dashboard at `http://localhost:3001`.*
+#### Option B: Hybrid Local Development (Docker Infra + Local App Services)
+
+1. Start database and cache containers:
+   ```bash
+   docker-compose up -d callcraft-postgres callcraft-redis
+   ```
+
+2. Apply database migrations:
+   ```bash
+   psql -h 127.0.0.1 -p 5432 -U callcraft_user -d callcraft_db -f migrations/0001_initial_schema.sql
+   ```
+
+3. Setup Python Virtual Environment:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -e ".[dev]"
+   ```
+
+4. Launch API and Dashboard concurrently:
+   ```bash
+   bun dev
+   ```
 
 ---
 
-### Individual Service Commands:
+## 📜 Available Workspace Scripts
 
-- **Start Python Backend Data Plane API (`apps/api`)**:
-  ```bash
-  bun run dev:api
-  ```
-  *Data Plane API available at `http://127.0.0.1:8081`.*
+Run these scripts from the repository root using `bun`:
 
-- **Start Next.js Web Dashboard (`apps/web`)**:
-  ```bash
-  bun run dev:web
-  ```
-  *Control Plane Dashboard available at `http://localhost:3001`.*
-
-- **Run Pytest Backend Test Suite**:
-  ```bash
-  bun run test:api
-  ```
+| Command | Action |
+| :--- | :--- |
+| `bun dev` | Runs both Backend API (`:8081`) and Web Dashboard (`:3001`) concurrently |
+| `bun run dev:api` | Starts the Python FastAPI Data Plane with Uvicorn hot-reloading |
+| `bun run dev:web` | Starts the Next.js Control Plane Dashboard in development mode |
+| `bun run build:web` | Builds the production bundle for the Next.js Control Plane |
+| `bun run test:api` | Executes backend unit tests & engine test suite with Pytest |
+| `bun run test:web` | Executes frontend tests for the Next.js app |
 
 ---
 
-## 📡 Usage Example (Public Callcraft API Execution)
+## 📡 API Usage & Execution Example
 
-After creating a Callcraft API specification and generating an API Key in the Dashboard, external applications can execute API calls via HTTP `POST`:
+Customers send execution requests to the public Data Plane API endpoint `POST /v1/call` using standard headers and Bearer API key authentication:
+
+### Request Example (`cURL`):
 
 ```bash
 curl -X POST "http://127.0.0.1:8081/v1/call" \
-  -H "Authorization: Bearer call_sk_sample_key_1234567890" \
-  -H "X-USER-ID: 01HZX89ABCDEF1234567890XYZ" \
-  -H "X-CALL-SPEC-ID: 01HZX89ABCDEF1234567890XYZ" \
+  -H "Authorization: Bearer call_sk_live_01HZX89ABCDEF1234567890XYZ" \
+  -H "X-USER-ID: usr_01HZX89ABCDEF1234567890XYZ" \
+  -H "X-CALL-SPEC-ID: spc_01HZX89ABCDEF1234567890XYZ" \
   -H "Content-Type: application/json" \
   -d '{
-    "image": "https://storage.example.com/ktp-sample.jpg",
-    "prompt": "Verify national identity number structure",
-    "variables": { "environment": "production" }
+    "image": "https://storage.example.com/identity-sample.jpg",
+    "prompt": "Extract identity document details into structured format.",
+    "variables": { "country": "ID" }
   }'
 ```
 
-### Sample Response (`200 OK`):
+### Successful Response (`200 OK`):
+
 ```json
 {
   "success": true,
   "request_id": "req_01HZY9998877665544332211AA",
   "spec": {
-    "id": "01HZX89ABCDEF1234567890XYZ",
+    "id": "spc_01HZX89ABCDEF1234567890XYZ",
     "name": "Identity Document Extractor",
     "version": 1
   },
@@ -147,28 +201,65 @@ curl -X POST "http://127.0.0.1:8081/v1/call" \
     "tokens": { "total_tokens": 780 }
   },
   "data": {
-    "nik": "3271041508950001",
+    "document_number": "3271041508950001",
     "full_name": "BUDI SANTOSO",
     "gender": "MALE"
   }
 }
 ```
 
+### Structured Error Response Example (`422 Unprocessable Entity`):
+
+```json
+{
+  "success": false,
+  "request_id": "req_01HZY9998877665544332211BB",
+  "error": {
+    "code": "INVALID_IMAGE_URL",
+    "message": "The provided image URL failed security checks or could not be downloaded.",
+    "details": [
+      {
+        "field": "image",
+        "reason": "URL points to a private IP range (SSRF protection triggered)."
+      }
+    ],
+    "actionableStep": "Provide a publicly reachable HTTP/HTTPS image URL."
+  }
+}
+```
+
 ---
 
-## 📘 Documentation & Blueprints
+## 🧪 Testing & Code Quality
 
-Detailed technical specifications and architecture design docs are available in the `.blueprint/` directory:
-- 📄 [System Architecture Overview](file:///home/dani/Projects/callcraft/.blueprint/architecture/system-overview.md)
-- 🔐 [Security & Auth Specifications](file:///home/dani/Projects/callcraft/.blueprint/architecture/security-and-auth.md)
-- 🐳 [Deployment & Infrastructure Blueprint](file:///home/dani/Projects/callcraft/.blueprint/architecture/deployment-and-infrastructure.md)
-- 🗄️ [Database Schema DDL (16 Tables)](file:///home/dani/Projects/callcraft/.blueprint/specifications/database-schema.md)
-- ⚙️ [Dynamic API Specification Engine](file:///home/dani/Projects/callcraft/.blueprint/specifications/api-spec-engine.md)
-- 🧪 [Professional Testing Strategy](file:///home/dani/Projects/callcraft/.blueprint/specifications/testing-strategy.md)
-- 🗺️ [Implementation Roadmap](file:///home/dani/Projects/callcraft/.blueprint/roadmap/implementation-phases.md)
+Callcraft maintains comprehensive test suites for core execution logic, crypto helpers, SSRF protections, and API routes.
+
+```bash
+# Run backend pytest suite
+bun run test:api
+
+# Run frontend tests
+bun run test:web
+```
+
+---
+
+## 📘 Architecture Blueprints & Reference Docs
+
+For deeper insights into system internals, database DDL, and RFC-style architecture specifications, refer to the `.blueprint/` directory:
+
+- 📖 [System Architecture Overview](.blueprint/architecture/system-overview.md)
+- 🔐 [Security, Crypto & Auth Specifications](.blueprint/architecture/security-and-auth.md)
+- 🚀 [Execution Engine Internals](.blueprint/architecture/execution-engine.md)
+- 🗄️ [Database Schema & Table Specifications](.blueprint/specifications/database-schema.md)
+- ⚡ [API Endpoint Specification](.blueprint/specifications/api-endpoints.md)
+- 📐 [Envelope & Error Contract Standard](.blueprint/specifications/envelope-contract.md)
+- 🧪 [Testing Strategy & Test Pyramid](.blueprint/specifications/testing-strategy.md)
+- 🗺️ [Implementation Roadmap](.blueprint/roadmap/implementation-phases.md)
 
 ---
 
 ## 📜 License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE).
+
