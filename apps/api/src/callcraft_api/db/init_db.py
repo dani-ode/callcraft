@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from datetime import datetime, date, timedelta, timezone
 import ulid
 from sqlalchemy import select, text
@@ -219,6 +220,7 @@ async def init_db(session: AsyncSession) -> None:
         ("usr_01HZX01USER0000000000005", "m.vance@medtech.org", "medtech_vance_secret_123", "Dr. Michael Vance", "USER"),
     ]
     user_map = {}
+    user_id_map = {}
     for uid, uemail, upass, uname, urole in users_data:
         stmt = select(User).where(User.email == uemail)
         res = await session.execute(stmt)
@@ -233,7 +235,13 @@ async def init_db(session: AsyncSession) -> None:
                 email_verified_at=datetime.now(timezone.utc),
             )
             session.add(usr)
-        user_map[uemail] = usr.id or uid
+        actual_id = usr.id if usr else uid
+        user_map[uemail] = actual_id
+        user_id_map[uid] = actual_id
+
+    def resolve_user_id(uid: Any) -> str:
+        s_uid = str(uid) if uid else "usr_01HZX01USER0000000000001"
+        return user_id_map.get(s_uid, s_uid)
 
     await session.flush()
 
@@ -271,7 +279,7 @@ async def init_db(session: AsyncSession) -> None:
         if not res.scalar_one_or_none():
             session.add(Project(
                 id=prj_id,
-                user_id=prj_uid,
+                user_id=resolve_user_id(prj_uid),
                 name=prj_name,
                 slug=prj_slug,
                 description=prj_desc,
@@ -294,7 +302,7 @@ async def init_db(session: AsyncSession) -> None:
             session.add(
                 ApiCredential(
                     id=cid,
-                    user_id=uid,
+                    user_id=resolve_user_id(uid),
                     project_id=prj_id,
                     name=cname,
                     public_key=pkey,
@@ -313,13 +321,14 @@ async def init_db(session: AsyncSession) -> None:
     for uap_id, uid, prj_id, pid, raw_key in user_ai_providers_data:
         try:
             enc_key, nonce = encrypt_aes_256_gcm(raw_key, settings.master_encryption_key)
-            stmt = select(UserAiProvider).where(UserAiProvider.user_id == uid, UserAiProvider.project_id == prj_id, UserAiProvider.provider_id == pid)
+            resolved_uid = resolve_user_id(uid)
+            stmt = select(UserAiProvider).where(UserAiProvider.user_id == resolved_uid, UserAiProvider.project_id == prj_id, UserAiProvider.provider_id == pid)
             res = await session.execute(stmt)
             if not res.scalar_one_or_none():
                 session.add(
                     UserAiProvider(
                         id=uap_id,
-                        user_id=uid,
+                        user_id=resolved_uid,
                         project_id=prj_id,
                         provider_id=pid,
                         encrypted_api_key=enc_key,
@@ -617,7 +626,7 @@ async def init_db(session: AsyncSession) -> None:
         ("Sarah Chen (Co-Founder)", 4, "Sangat efisien untuk pengolahan dokumen Purchase Order korporasi."),
     ]
 
-    users_for_comments = ["usr_01HZX01USER0000000000001", "usr_01HZX01USER0000000000002", "usr_01HZX01USER0000000000003", "usr_01HZX01USER0000000000004", "usr_01HZX01USER0000000000005"]
+    users_for_comments = [resolve_user_id("usr_01HZX01USER0000000000001"), resolve_user_id("usr_01HZX01USER0000000000002"), resolve_user_id("usr_01HZX01USER0000000000003"), resolve_user_id("usr_01HZX01USER0000000000004"), resolve_user_id("usr_01HZX01USER0000000000005")]
 
     for tmpl in templates_data:
         likes_count = random.randint(40, 60)
@@ -635,7 +644,7 @@ async def init_db(session: AsyncSession) -> None:
             session.add(
                 Template(
                     id=tmpl["id"],
-                    user_id=tmpl.get("user_id", "usr_01HZX01USER0000000000001"),
+                    user_id=resolve_user_id(str(tmpl.get("user_id", "usr_01HZX01USER0000000000001"))),
                     code=tmpl["code"],
                     name=tmpl["name"],
                     description=tmpl["description"],
@@ -716,7 +725,8 @@ async def init_db(session: AsyncSession) -> None:
     tmpl_map = {t["id"]: t for t in templates_data}
 
     for sid, suid, sprj_id, stpid, sname, sslug, sdesc, sresp, mident in specs_data:
-        stmt = select(CallSpec).where(CallSpec.user_id == suid, CallSpec.slug == sslug)
+        resolved_suid = resolve_user_id(suid)
+        stmt = select(CallSpec).where((CallSpec.id == sid) | ((CallSpec.user_id == resolved_suid) & (CallSpec.slug == sslug)))
         res = await session.execute(stmt)
         spec_obj = res.scalar_one_or_none()
         matched_tmpl = tmpl_map.get(stpid, {})
@@ -724,7 +734,7 @@ async def init_db(session: AsyncSession) -> None:
         if not spec_obj:
             spec_obj = CallSpec(
                 id=sid,
-                user_id=suid,
+                user_id=resolved_suid,
                 project_id=sprj_id,
                 published_template_id=stpid,
                 name=sname,
@@ -740,7 +750,7 @@ async def init_db(session: AsyncSession) -> None:
             await session.flush()
 
         ver_id = f"spv_01HZX01VERSION{sid[-10:]}"
-        stmt_ver = select(CallSpecVersion).where(CallSpecVersion.id == ver_id)
+        stmt_ver = select(CallSpecVersion).where((CallSpecVersion.id == ver_id) | ((CallSpecVersion.call_spec_id == spec_obj.id) & (CallSpecVersion.version_number == 1)))
         res_ver = await session.execute(stmt_ver)
         if not res_ver.scalar_one_or_none():
             session.add(
@@ -772,7 +782,7 @@ async def init_db(session: AsyncSession) -> None:
     ]
 
     for log_id, req_id, log_uid, spec_id, ver_id, cred_id, pcode, mident, st, hst, itype, isize, ptime, ptok, ctok, ttok, cost, ip, ua, log_created in logs_data:
-        stmt = select(ApiRequest).where(ApiRequest.request_id == req_id)
+        stmt = select(ApiRequest).where((ApiRequest.id == log_id) | (ApiRequest.request_id == req_id))
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
             stmt_vcheck = select(CallSpecVersion.id).where(CallSpecVersion.id == ver_id)
@@ -782,7 +792,7 @@ async def init_db(session: AsyncSession) -> None:
                     ApiRequest(
                         id=log_id,
                         request_id=req_id,
-                        user_id=log_uid,
+                        user_id=resolve_user_id(log_uid),
                         call_spec_id=spec_id,
                         call_spec_version_id=ver_id,
                         credential_id=cred_id,
@@ -825,13 +835,15 @@ async def init_db(session: AsyncSession) -> None:
 
     for idx, (u_uid, days_ago, req_tot, req_succ, req_fail, tok_tot, cost_tot) in enumerate(usage_records):
         u_date = today - timedelta(days=days_ago)
-        stmt = select(UserUsageDaily).where(UserUsageDaily.user_id == u_uid, UserUsageDaily.usage_date == u_date)
+        resolved_uuid = resolve_user_id(u_uid)
+        usg_id = f"usg_01HZX01USG{idx+1:017d}"
+        stmt = select(UserUsageDaily).where((UserUsageDaily.id == usg_id) | ((UserUsageDaily.user_id == resolved_uuid) & (UserUsageDaily.usage_date == u_date)))
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
             session.add(
                 UserUsageDaily(
-                    id=f"usg_01HZX01USG{idx+1:017d}",
-                    user_id=u_uid,
+                    id=usg_id,
+                    user_id=resolved_uuid,
                     usage_date=u_date,
                     total_requests=req_tot,
                     successful_requests=req_succ,

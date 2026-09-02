@@ -244,8 +244,8 @@ curl -X POST "http://127.0.0.1:8081/v1/call" \
       "type": "structured_json",
       "content": {
         "documentNumber": "3271041508950001",
-        "fullName": "BUDI SANTOSO",
-        "gender": "MALE",
+        "fullName": "GOTTFRIED WILHELM LEIBNIZ",
+        "gender": "LAKI-LAKI",
         "birthDate": "1995-08-15",
         "address": "JL. MERDEKA NO. 45",
         "isVerified": true
