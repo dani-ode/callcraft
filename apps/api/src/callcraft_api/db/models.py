@@ -57,7 +57,10 @@ class User(Base):
     location: Mapped[Optional[str]] = mapped_column(VARCHAR(255))
     phone: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
     email_verification_token: Mapped[Optional[str]] = mapped_column(VARCHAR(255), index=True)
+    reset_password_token: Mapped[Optional[str]] = mapped_column(VARCHAR(255), index=True)
+    reset_password_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     projects: Mapped[List["Project"]] = relationship("Project", back_populates="user", cascade="all, delete-orphan")

@@ -286,3 +286,157 @@ async def test_ai_connection_failure_envelope():
             assert data["meta"]["status"] == "failed"
             assert "EXECUTION_FAILED" in data["error"]["code"] or "CONNECTION" in data["error"]["code"]
             assert data["error"]["actionableStep"] != ""
+
+
+@pytest.mark.asyncio
+async def test_public_call_payload_validation():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # Extra payload fields are accepted and passed through to context
+        res_valid = await ac.post(
+            "/v1/call",
+            headers={"Authorization": "Bearer call_sk_valid_key", "X-USER-ID": "usr_test123"},
+            json={
+                "prompt": "Test prompt",
+                "negativePrompt": "No noise",
+                "aiApiKey": "sk-123",
+                "aiModelName": "gemini-3.6-flash",
+                "custom_key": "custom_value"
+            },
+        )
+        assert res_valid.status_code == 400
+        assert res_valid.json()["error"]["code"] == "MISSING_PUBLIC_KEY"
+
+
+@pytest.mark.asyncio
+async def test_public_call_request_schema_validation():
+    mock_spec = {
+        "id": "spc_test123",
+        "name": "KTP Extractor",
+        "slug": "ktp-parser",
+        "useExternalApiKey": True,
+        "externalModelName": "gemini-3.6-flash",
+        "externalApiKey": "sk-mock-gemini-key-12345",
+        "requestSchema": {
+            "type": "object",
+            "properties": {"document_type": {"type": "string"}},
+            "required": ["document_type"],
+        },
+        "responseSchema": {"type": "object", "properties": {"name": {"type": "string"}}},
+    }
+
+    with patch("callcraft_api.routers.public.redis_service.get_spec", new_callable=AsyncMock) as mock_get_spec, \
+         patch("callcraft_api.routers.public.Repository.verify_api_credential", new_callable=AsyncMock) as mock_verify_cred:
+
+        mock_get_spec.return_value = mock_spec
+        mock_verify_cred.return_value = {"id": "cred_1", "ip_whitelist": []}
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            # 1. Missing required key 'document_type' specified in DB requestSchema -> returns 400 MISSING_REQUIRED_SPEC_INPUT
+            res_missing = await ac.post(
+                "/v1/call",
+                headers={"Authorization": "Bearer call_sk_valid_key", "X-USER-ID": "usr_test123", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
+                json={"prompt": "Extract document"},
+            )
+            assert res_missing.status_code == 400
+            data_missing = res_missing.json()
+            assert data_missing["error"]["code"] == "MISSING_REQUIRED_SPEC_INPUT"
+            assert "document_type" in data_missing["error"]["message"]
+
+            # 2. Provided required key 'document_type' -> validation passes
+            mock_adapter = AsyncMock()
+            mock_adapter.execute_structured_extraction.return_value = (
+                {"name": "John Doe"},
+                {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            )
+            with patch("callcraft_api.routers.public.get_adapter", return_value=mock_adapter), \
+                 patch("callcraft_api.routers.public.redis_service.push_outbox", new_callable=AsyncMock):
+
+                res_ok = await ac.post(
+                    "/v1/call",
+                    headers={"Authorization": "Bearer call_sk_valid_key", "X-USER-ID": "usr_test123", "X-CALL-PUBLIC-KEY": "pk_live_test_123", "X-CALL-SPEC-ID": "ktp-parser"},
+                    json={"prompt": "Extract document", "document_type": "ktp"},
+                )
+                assert res_ok.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_and_reset_password_flow():
+    import ulid
+    test_email = f"resetuser_{str(ulid.new()).lower()[-6:]}@callcraft.dev"
+
+    with patch("callcraft_api.routers.auth.send_verification_email", return_value=True), \
+         patch("callcraft_api.routers.auth.send_password_reset_email", return_value=True) as mock_send_reset:
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            # 1. Register user
+            reg_resp = await ac.post("/internal/v1/auth/register", json={
+                "name": "Reset Test User",
+                "email": test_email,
+                "password": "initialpassword123"
+            })
+            assert reg_resp.status_code == 200
+            user_id = reg_resp.json()["id"]
+
+            # Admin verify user to activate account
+            await ac.put(f"/internal/v1/admin/users/{user_id}/verify")
+
+            # 2. Trigger forgot-password request
+            forgot_resp = await ac.post("/internal/v1/auth/forgot-password", json={
+                "email": test_email
+            })
+            assert forgot_resp.status_code == 200
+            assert forgot_resp.json()["emailSent"] is True
+            mock_send_reset.assert_called_once()
+
+            # Retrieve token passed to send_password_reset_email
+            call_args = mock_send_reset.call_args[0]
+            token = call_args[2]
+            assert token is not None and len(token) > 10
+
+            # 2b. Test verify-reset-token endpoint with valid token
+            vtoken_resp = await ac.get(f"/internal/v1/auth/verify-reset-token?token={token}&email={test_email}")
+            assert vtoken_resp.status_code == 200
+            assert vtoken_resp.json()["valid"] is True
+
+            # Test verify-reset-token endpoint with invalid token -> 400
+            vinvalid_resp = await ac.get(f"/internal/v1/auth/verify-reset-token?token=invalid_token_xyz")
+            assert vinvalid_resp.status_code == 400
+
+            # 3. Attempt reset password with invalid token -> 400 Bad Request
+
+            invalid_resp = await ac.post("/internal/v1/auth/reset-password", json={
+                "email": test_email,
+                "token": "invalid_reset_token_123",
+                "newPassword": "brandnewpassword123"
+            })
+            assert invalid_resp.status_code == 400
+            assert "tidak valid" in str(invalid_resp.json())
+
+
+            # 4. Reset password with valid token
+            reset_resp = await ac.post("/internal/v1/auth/reset-password", json={
+                "email": test_email,
+                "token": token,
+                "newPassword": "brandnewpassword123"
+            })
+            assert reset_resp.status_code == 200
+            assert "berhasil diperbarui" in reset_resp.json()["message"]
+
+            # 5. Login with old password -> fail 401
+            old_login = await ac.post("/internal/v1/auth/login", json={
+                "email": test_email,
+                "password": "initialpassword123"
+            })
+            assert old_login.status_code == 401
+
+            # 6. Login with new password -> success 200
+            new_login = await ac.post("/internal/v1/auth/login", json={
+                "email": test_email,
+                "password": "brandnewpassword123"
+            })
+            assert new_login.status_code == 200
+            assert new_login.json()["id"] == user_id
+
+
+
+

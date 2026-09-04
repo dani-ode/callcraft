@@ -4,7 +4,7 @@ import os
 import random
 import secrets
 import ulid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
@@ -13,9 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from callcraft_api.db.models import User, AppInit
 from callcraft_api.db.session import get_db_session
-from callcraft_api.services.email import send_verification_email
+from callcraft_api.services.email import send_verification_email, send_password_reset_email
 
 router = APIRouter(prefix="/internal/v1/auth", tags=["Authentication"])
+
 
 
 def hash_password(password: str) -> str:
@@ -58,6 +59,17 @@ class VerifyEmailRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., description="User registered email address")
+
+
+class ResetPasswordRequest(BaseModel):
+    email: Optional[str] = Field(None, description="Optional email address")
+    token: str = Field(..., description="Reset password token")
+    new_password: str = Field(..., min_length=6, alias="newPassword", description="New password min 6 characters")
+
 
 
 @router.post("/register")
@@ -313,3 +325,152 @@ async def login_user(
         "location": user_obj.location,
         "phone": user_obj.phone,
     }
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database session unavailable")
+
+    clean_email = payload.email.strip().lower()
+    stmt = select(User).where(User.email == clean_email)
+    res = await db.execute(stmt)
+    user_obj = res.scalar_one_or_none()
+
+    if not user_obj:
+        return {
+            "message": "Jika email terdaftar di sistem, instruksi reset password telah dikirim ke inbox Anda.",
+            "emailSent": True,
+        }
+
+    if user_obj.status in ["suspended", "disabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Akun Anda berstatus '{user_obj.status}'. Silakan hubungi administrator.",
+        )
+
+    # Generate secure reset token (valid for 1 hour)
+    token = secrets.token_hex(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    user_obj.reset_password_token = token
+    user_obj.reset_password_token_expires_at = expires_at
+    await db.commit()
+
+    email_sent = send_password_reset_email(clean_email, user_obj.full_name, token)
+
+    return {
+        "message": "Instruksi reset password telah dikirim ke inbox email Anda. Silakan periksa email Anda.",
+        "emailSent": email_sent,
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database session unavailable")
+
+    token_str = payload.token.strip()
+    if not token_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token reset password tidak valid.",
+        )
+
+    user_obj = None
+    if payload.email and payload.email.strip():
+        clean_email = payload.email.strip().lower()
+        stmt = select(User).where(User.email == clean_email, User.reset_password_token == token_str)
+        res = await db.execute(stmt)
+        user_obj = res.scalar_one_or_none()
+
+    if not user_obj:
+        stmt = select(User).where(User.reset_password_token == token_str)
+        res = await db.execute(stmt)
+        user_obj = res.scalar_one_or_none()
+
+    if not user_obj:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token reset password tidak valid atau telah kedaluwarsa.",
+        )
+
+    # Check token expiration
+    now = datetime.now(timezone.utc)
+    if user_obj.reset_password_token_expires_at and user_obj.reset_password_token_expires_at < now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token reset password telah kedaluwarsa. Silakan ajukan permintaan reset password baru.",
+        )
+
+    if user_obj.status in ["suspended", "disabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Akun Anda berstatus '{user_obj.status}'. Silakan hubungi administrator.",
+        )
+
+    # Update password and clear reset token
+    user_obj.password_hash = hash_password(payload.new_password)
+    user_obj.reset_password_token = None
+    user_obj.reset_password_token_expires_at = None
+    await db.commit()
+
+    return {
+        "message": "Password Anda berhasil diperbarui! Silakan login dengan password baru Anda.",
+    }
+
+
+@router.get("/verify-reset-token")
+async def verify_reset_token(
+    token: str,
+    email: Optional[str] = None,
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database session unavailable")
+
+    token_str = token.strip() if token else ""
+    if not token_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token reset password wajib diisi.",
+        )
+
+    user_obj = None
+    if email and email.strip():
+        clean_email = email.strip().lower()
+        stmt = select(User).where(User.email == clean_email, User.reset_password_token == token_str)
+        res = await db.execute(stmt)
+        user_obj = res.scalar_one_or_none()
+
+    if not user_obj:
+        stmt = select(User).where(User.reset_password_token == token_str)
+        res = await db.execute(stmt)
+        user_obj = res.scalar_one_or_none()
+
+    if not user_obj:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token reset password tidak valid atau tidak ditemukan.",
+        )
+
+    now = datetime.now(timezone.utc)
+    if user_obj.reset_password_token_expires_at and user_obj.reset_password_token_expires_at < now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token reset password telah kedaluwarsa. Silakan ajukan permintaan reset password baru.",
+        )
+
+    return {
+        "valid": True,
+        "email": user_obj.email,
+        "name": user_obj.full_name,
+    }
+
+

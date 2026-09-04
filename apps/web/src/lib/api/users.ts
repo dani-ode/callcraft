@@ -111,6 +111,59 @@ export async function resendVerificationEmail(email: string): Promise<{ message:
   return await res.json();
 }
 
+export async function forgotPassword(email: string): Promise<{ message: string; emailSent: boolean }> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(extractErrorMessage(errData, "Gagal mengirimkan instruksi reset password"));
+  }
+
+  return await res.json();
+}
+
+export async function resetPassword(payload: { email?: string; token: string; newPassword: string }): Promise<{ message: string }> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: payload.email,
+      token: payload.token,
+      newPassword: payload.newPassword,
+    }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(extractErrorMessage(errData, "Gagal mereset password"));
+  }
+
+  return await res.json();
+}
+
+export async function verifyResetToken(token: string, email?: string): Promise<{ valid: boolean; email: string; name: string }> {
+  const queryParams = new URLSearchParams();
+  queryParams.append("token", token);
+  if (email) queryParams.append("email", email);
+
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/auth/verify-reset-token?${queryParams.toString()}`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(extractErrorMessage(errData, "Token reset password tidak valid atau telah kedaluwarsa"));
+  }
+
+  return await res.json();
+}
+
+
+
 export async function adminUpdateUserStatus(targetUserId: string, status: string): Promise<{ message: string; status: string }> {
   const res = await fetch(`${PYTHON_API_URL}/internal/v1/admin/users/${targetUserId}/status`, {
     method: "PUT",

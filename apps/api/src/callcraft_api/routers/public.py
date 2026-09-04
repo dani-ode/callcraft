@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import ulid
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 def truncate_base64_in_prompt(text: str) -> str:
@@ -60,7 +60,7 @@ from callcraft_api.services.execution_service import (
 
 
 class CallRequestPayload(BaseModel):
-    model_config = {"extra": "allow"}
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     image: Optional[str] = Field(default=None, description="Base64 encoded string or URL of document/image/pdf")
     file: Optional[str] = Field(default=None, description="Alternative alias for image/pdf input stream")
@@ -68,8 +68,8 @@ class CallRequestPayload(BaseModel):
     prompt: Optional[str] = Field(default=None, description="Optional custom positive user prompt override")
     negative_prompt: Optional[str] = Field(default=None, alias="negativePrompt", description="Optional negative prompt (prohibitions & constraints)")
     variables: Optional[Dict[str, Any]] = Field(default=None, description="Dynamic JSON context variables")
-    ai_api_key: Optional[str] = Field(default=None, description="External AI API Key when external key mode is active")
-    ai_model_name: Optional[str] = Field(default=None, description="External AI Model Name when external key mode is active")
+    ai_api_key: Optional[str] = Field(default=None, alias="aiApiKey", description="External AI API Key when external key mode is active")
+    ai_model_name: Optional[str] = Field(default=None, alias="aiModelName", description="External AI Model Name when external key mode is active")
 
 
 @router.post("/call")
@@ -399,6 +399,36 @@ async def execute_callcraft(
             if k in ("prompt", "negativePrompt", "negative_prompt", "variables", "ai_api_key", "ai_model_name", "image", "file", "pdf"):
                 continue
             request_inputs[k] = v
+
+    # 4b. Validate request inputs against requestSchema defined in Call Spec (DB) if configured
+    req_schema = cached_spec.get("requestSchema") or cached_spec.get("request_schema") or {}
+    if req_schema and isinstance(req_schema, dict):
+        required_keys = req_schema.get("required") or []
+        if isinstance(required_keys, list) and required_keys:
+            provided_keys = set(request_inputs.keys())
+            if payload.variables and isinstance(payload.variables, dict):
+                provided_keys.update(payload.variables.keys())
+            if payload.prompt:
+                provided_keys.add("prompt")
+            if payload.image:
+                provided_keys.add("image")
+            if payload.file:
+                provided_keys.add("file")
+            if payload.pdf:
+                provided_keys.add("pdf")
+
+            missing_keys = [k for k in required_keys if k not in provided_keys]
+            if missing_keys:
+                return create_error_response(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    error_code="MISSING_REQUIRED_SPEC_INPUT",
+                    message=f"Body request tidak lengkap: parameter wajib '{', '.join(missing_keys)}' tidak ditemukan sesuai spesifikasi Call Spec di DB",
+                    details=[{"field": k, "issue": "Missing required request parameter"} for k in missing_keys],
+                    actionable_step=f"Sertakan parameter wajib '{', '.join(missing_keys)}' dalam body request (langsung atau di dalam object 'variables').",
+                    request_id=request_id,
+                    start_time=start_time,
+                )
+
 
     # Construct complete prompt builder text matching exact AI input JSON
     import json

@@ -69,7 +69,11 @@ async def init_db(session: AsyncSession) -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(255);",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_password_token VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_password_token_expires_at TIMESTAMPTZ;",
+            "CREATE INDEX IF NOT EXISTS idx_users_reset_password_token ON users(reset_password_token);",
             "ALTER TABLE app_init ADD COLUMN IF NOT EXISTS default_registration_status VARCHAR(50) DEFAULT 'pending_verification';",
+
             "ALTER TABLE app_init ADD COLUMN IF NOT EXISTS require_email_verification BOOLEAN DEFAULT TRUE;",
             "ALTER TABLE templates ADD COLUMN IF NOT EXISTS tools_config JSONB DEFAULT '{}'::jsonb;",
             "ALTER TABLE call_specs ADD COLUMN IF NOT EXISTS tools_config JSONB DEFAULT '{}'::jsonb;",

@@ -164,10 +164,19 @@ function LoginForm() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#8a715e] dark:text-[#edd6bb] flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-[#e1b329]" />
-                <span>Password</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[#8a715e] dark:text-[#edd6bb] flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-[#e1b329]" />
+                  <span>Password</span>
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-[#e1b329] hover:underline"
+                >
+                  Lupa Password?
+                </Link>
+              </div>
+
               <input
                 type="password"
                 required
