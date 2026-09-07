@@ -1,13 +1,21 @@
 # Blueprint Conventions
 
-Rules for writing and maintaining documents inside `.blueprint/`. Read this before editing any
-document here.
+> **Status:** Governing documentation standard
+> **Source of truth:** this document, supplemented by [AI-SPEC.md](AI-SPEC.md)
+> **Last reviewed:** 2026-09-06
+
+Rules for writing and maintaining documents inside `.blueprint/`. For non-trivial code or product
+changes, [AI-SPEC.md](AI-SPEC.md) and its required change specification take precedence.
 
 ---
 
 ## 1. Every document declares what it is
 
-Each document starts with a front matter block:
+Live documents must be discoverable from [README.md](README.md). Non-trivial implementation work
+also requires a change specification at `specifications/changes/`, created from
+[templates/change-spec.md](templates/change-spec.md).
+
+Each live document starts with a front matter block:
 
 ```markdown
 # <Title>
@@ -60,7 +68,11 @@ Summaries, catalogs, rationale, and diagrams are fine — verbatim mirrors are n
 ## 4. Cite code with paths
 
 Reference implementation as `apps/api/src/callcraft_api/routers/public.py:75` — a path plus a line
-number. Do not describe behaviour without saying where it lives.
+number. Do not describe behaviour without saying where it lives. For a high-level summary, link to
+the reconciliation entry in [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
+
+Links between blueprint documents must resolve. Before committing a blueprint change, run a Markdown
+link check (including relevant anchors) and fix or remove every dead navigation link.
 
 ---
 

@@ -36,9 +36,9 @@ def test_adapter_factory_dispatch():
     openai_adapter = get_adapter("openai")
     assert isinstance(openai_adapter, OpenAIAdapter)
 
-    # Unknown defaults to Gemini
-    fallback_adapter = get_adapter("unknown_provider")
-    assert isinstance(fallback_adapter, GeminiAdapter)
+    # Unknown providers fail explicitly; routing must never silently select Gemini.
+    with pytest.raises(ValueError, match="Unsupported AI provider"):
+        get_adapter("unknown_provider")
 
 
 @pytest.mark.asyncio

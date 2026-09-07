@@ -6,6 +6,7 @@ from callcraft_engine.adapters.openai import OpenAIAdapter
 from callcraft_engine.adapters.anthropic import AnthropicAdapter
 from callcraft_engine.adapters.mistral import MistralAdapter
 from callcraft_engine.adapters.deepseek import DeepSeekAdapter
+from callcraft_engine.adapters.experiential import EXPERIENTIAL_MODEL_ID, ExperientialAdapter
 
 logger = logging.getLogger("callcraft.engine.adapters.factory")
 
@@ -18,7 +19,13 @@ _ADAPTER_REGISTRY: Dict[str, Type[BaseAIAdapter]] = {
 }
 
 
-def get_adapter(provider_code: str = "gemini") -> BaseAIAdapter:
-    code = provider_code.lower()
-    adapter_cls = _ADAPTER_REGISTRY.get(code, GeminiAdapter)
+def get_adapter(provider_code: str = "gemini", model_identifier: str | None = None) -> BaseAIAdapter:
+    """Return an adapter for a known provider, with explicit model gateway routing."""
+    if model_identifier == EXPERIENTIAL_MODEL_ID:
+        return ExperientialAdapter()
+
+    code = provider_code.lower().strip()
+    adapter_cls = _ADAPTER_REGISTRY.get(code)
+    if adapter_cls is None:
+        raise ValueError(f"Unsupported AI provider: {provider_code}")
     return adapter_cls()

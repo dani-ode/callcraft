@@ -30,9 +30,9 @@ schema, prompts, tool configuration, and model preference. Executed by `POST /v1
 `X-CALL-SPEC-ID` header. Table: `call_specs`; versions in `call_spec_versions`.
 
 ### Control Plane
-The dashboard: Next.js 14 App Router served by Bun, in `apps/web`. Manages specs, keys, projects,
-templates, and settings. See
-[architecture/control-plane-web.md](architecture/control-plane-web.md).
+The dashboard: Next.js 14 App Router served by Bun, in `apps/web`. It manages specs, keys, projects,
+templates, and settings. The actual management-route catalog is
+[specifications/api-endpoints.md](specifications/api-endpoints.md#2-internal-management-api--internalv1).
 
 ### Data Plane
 The public execution path: `POST /v1/call` on the Python FastAPI service, in
@@ -61,8 +61,8 @@ in the assembled prompt.
 
 ### Outbox
 A Redis list (`callcraft:outbox:api_requests`) that the Data Plane pushes execution metadata onto
-after each call, drained by the worker. See
-[architecture/worker-and-outbox.md](architecture/worker-and-outbox.md).
+after each successful call. The worker drains it, but persistence remains an open gap; see
+[IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md#3-worker-and-audit-logging).
 
 ### Playground
 Dashboard page that executes a spec against the real Data Plane using a chosen credential. Per-user,

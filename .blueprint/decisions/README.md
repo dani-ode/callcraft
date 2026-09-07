@@ -8,8 +8,8 @@ One file per decision that constrains future work. ADRs are append-only: a decis
 true is **superseded** by a new ADR, not edited into agreement with the present.
 
 These records were reconstructed from the archived design conversations in
-[../question-and-answer/](../question-and-answer/README.md) and from the code as it stands, so that
-future changes have something specific to argue against.
+[`../question-and-answer/`](../question-and-answer/) and from the code as it stands, so that future
+changes have something specific to argue against.
 
 | # | Decision | Status |
 | :-- | :--- | :--- |

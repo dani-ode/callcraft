@@ -232,14 +232,14 @@ async def execute_callcraft(
 
     provider_code = model_info["providerCode"]
 
-    if use_external_key and header_key:
+    if active_model == "claude-fable-5.1":
+        # This model is gateway-only. The adapter reads EXPLABS_API_KEY and refuses provider-key fallback.
+        active_api_key = "experiential-gateway"
+    elif use_external_key and header_key:
         active_api_key = header_key
     else:
         user_ai_key = await Repository.get_user_ai_provider_key(db, user_id, provider_code, project_id=spec_project_id)
-        active_api_key = (
-            user_ai_key
-            or cached_spec.get("externalApiKey")
-        )
+        active_api_key = user_ai_key or cached_spec.get("externalApiKey")
 
     if not active_api_key:
         return create_error_response(
@@ -251,7 +251,17 @@ async def execute_callcraft(
             start_time=start_time,
         )
 
-    adapter = get_adapter(provider_code)
+    try:
+        adapter = get_adapter(provider_code, model_identifier=active_model)
+    except ValueError as exc:
+        return create_error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="UNSUPPORTED_AI_PROVIDER",
+            message=str(exc),
+            actionable_step="Pilih provider AI yang terdaftar dan didukung.",
+            request_id=request_id,
+            start_time=start_time,
+        )
 
     # 4. Process Image / PDF Input Streams directly in RAM (Support multiple images/documents)
     image_files: List[Tuple[bytes, str]] = []
