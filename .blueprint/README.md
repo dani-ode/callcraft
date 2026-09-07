@@ -48,7 +48,6 @@ outbox work. Review the implementation-status register before relying on any cap
 ├── roadmap/
 │   ├── implementation-phases.md      # Historical delivery phases
 │   └── open-gaps.md                  # Prioritized, evidence-backed risk register
-└── question-and-answer/              # Archived design conversations; non-authoritative
 ```
 
 ## Trust and status rules
