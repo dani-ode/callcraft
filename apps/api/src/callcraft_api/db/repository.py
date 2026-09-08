@@ -514,6 +514,9 @@ class Repository:
         tools_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Creates a new Call Spec and version in database."""
+        if not project_id or not project_id.strip():
+            raise ValueError("Parameter 'project_id' wajib diisi untuk membuat Call Spec.")
+
         spec_id = f"spc_{str(ulid.new())}"
 
         spec = CallSpec(
@@ -889,7 +892,7 @@ class Repository:
 
     @staticmethod
     async def list_projects(db: Optional[AsyncSession], user_id: str) -> List[Dict[str, Any]]:
-        """Lists all active projects for a user."""
+        """Lists all active projects for a user with resource counts."""
         if db is None:
             return []
         stmt = (
@@ -899,7 +902,24 @@ class Repository:
         )
         res = await db.execute(stmt)
         projects = res.scalars().all()
-        return [Repository._serialize_project(p) for p in projects]
+
+        output = []
+        for p in projects:
+            p_dict = Repository._serialize_project(p)
+
+            spec_cnt_stmt = select(func.count(CallSpec.id)).where(CallSpec.project_id == p.id)
+            spec_cnt_res = await db.execute(spec_cnt_stmt)
+            p_dict["specsCount"] = spec_cnt_res.scalar() or 0
+
+            key_cnt_stmt = select(func.count(ApiCredential.id)).where(
+                ApiCredential.project_id == p.id, ApiCredential.revoked_at.is_(None)
+            )
+            key_cnt_res = await db.execute(key_cnt_stmt)
+            p_dict["keysCount"] = key_cnt_res.scalar() or 0
+
+            output.append(p_dict)
+
+        return output
 
     @staticmethod
     async def get_project(

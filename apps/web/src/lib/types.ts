@@ -14,6 +14,8 @@ export interface Project {
   color: string;
   icon: string;
   status: string;
+  specsCount?: number;
+  keysCount?: number;
   createdAt?: string;
   updatedAt?: string;
 }

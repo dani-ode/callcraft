@@ -75,6 +75,7 @@ export async function updateCallSpec(
 export async function createCallSpec(payload: {
   name: string;
   slug: string;
+  projectId?: string;
   description?: string;
   requestSchema?: any;
   responseSchema?: any;
@@ -93,6 +94,7 @@ export async function createCallSpec(payload: {
     body: JSON.stringify({
       name: payload.name,
       slug: payload.slug,
+      project_id: payload.projectId,
       description: payload.description,
       request_schema: payload.requestSchema,
       response_schema: payload.responseSchema,

@@ -85,8 +85,9 @@ export function ProjectSwitcher({ collapsed = false }: ProjectSwitcherProps) {
               <p className="text-xs font-bold text-slate-800 dark:text-[#edd6bb] truncate leading-tight">
                 {activeProject.name}
               </p>
-              <p className="text-[10px] text-[#8b7e6d] font-mono truncate leading-tight">
-                {activeProject.slug}
+              <p className="text-[10px] text-[#8b7e6d] font-mono truncate leading-tight flex items-center gap-1">
+                <span className="opacity-60">ID:</span>
+                <span className="font-semibold text-[#e1b329]">{activeProject.id}</span>
               </p>
             </div>
             <ChevronDown
@@ -128,6 +129,9 @@ export function ProjectSwitcher({ collapsed = false }: ProjectSwitcherProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-slate-800 dark:text-[#edd6bb] truncate">{project.name}</p>
+                  <p className="text-[10px] text-[#8b7e6d] font-mono truncate leading-tight">
+                    ID: <span className="font-semibold text-slate-700 dark:text-[#edd6bb]/80">{project.id}</span>
+                  </p>
                 </div>
                 {activeProject.id === project.id && (
                   <Check className="w-3.5 h-3.5 shrink-0" style={{ color: project.color }} />

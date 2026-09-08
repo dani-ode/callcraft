@@ -150,7 +150,7 @@ MCP_TOOLS = [
                 "use_external_api_key": {"type": "boolean", "default": True},
                 "external_model_name": {"type": "string", "default": "gemini-3.6-flash"},
             },
-            "required": ["name", "response_schema"],
+            "required": ["name", "response_schema", "project_id"],
         },
     },
     {
@@ -294,7 +294,9 @@ async def execute_mcp_tool(
         raw_slug = arguments.get("slug") or spec_name
         base_slug = raw_slug.lower().replace(" ", "-")
         slug = f"{base_slug}-{str(ulid.new()).lower()[-4:]}"
-        target_project_id = arguments.get("project_id") or default_project_id
+        target_project_id = (arguments.get("project_id") or default_project_id or "").strip()
+        if not target_project_id:
+            raise ValueError("Parameter 'project_id' wajib diisi untuk membuat Call Spec baru di MCP Server.")
 
         spec = await Repository.create_call_spec(
             db=db,
@@ -474,6 +476,9 @@ async def execute_mcp_tool(
             await redis_service.delete_spec(user_id, spec_id)
             return {"message": "Spec imported and updated successfully", "spec": updated}
         else:
+            if not project_id or not str(project_id).strip():
+                raise ValueError("Parameter 'project_id' wajib diisi untuk meng-import Call Spec baru di MCP Server.")
+
             name = spec_json.get("name") or "Imported Call Spec"
             raw_slug = spec_json.get("slug") or name
             base_slug = raw_slug.lower().replace(" ", "-")

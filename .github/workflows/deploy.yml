@@ -95,19 +95,9 @@ jobs:
               git remote add origin https://github.com/dani-ode/callcraft.git || git remote set-url origin https://github.com/dani-ode/callcraft.git
             fi
             
-            cd "$HOME/callcraft"
-            
-            # Fetch & pull latest commits
+            # Fetch latest changes & rebuild via Makefile
             git fetch origin main
             git reset --hard origin/main
-            
-            # Rebuild & restart Docker Compose services smoothly (force remove leftover containers if any)
-            docker compose down --remove-orphans || true
-            docker rm -f callcraft-redis callcraft-postgres callcraft-api callcraft-worker callcraft-web 2>/dev/null || true
-            docker compose up -d --build
-            
-            # Automatic DB seeding disabled in CI/CD. Execute manually on VPS when needed:
-            # docker compose exec -T callcraft-api python3 -m callcraft_api.db.init_db
-            docker image prune -f
+            make pull-rebuild
             
             echo "✅ Callcraft Studio successfully deployed to VPS!"

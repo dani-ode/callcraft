@@ -45,6 +45,7 @@ import {
 } from "@/lib/api-client";
 import { getActiveUserId } from "@/lib/api/core";
 import { useAuth } from "@/context/auth-context";
+import { useProject } from "@/context/project-context";
 import { ToolCallingConfig } from "@/lib/types";
 
 
@@ -52,6 +53,7 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const { activeProject } = useProject();
 
   const [activeTab, setActiveTab] = useState<"response" | "tools" | "request" | "settings">("response");
   const [specName, setSpecName] = useState("");
@@ -356,6 +358,7 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
         const newSpec = await createCallSpec({
           name: specName || "New Custom Spec",
           slug: specSlug || "my-custom-spec",
+          projectId: activeProject?.id,
           requestSchema: requestSchemaObj,
           responseSchema: responseSchemaObj,
           toolsConfig: toolsConfig,

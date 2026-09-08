@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Boxes, Feather, Wrench, ShieldCheck, Stethoscope, Rocket, Layers,
-  Globe, Code2, Cpu, Plus, Edit3, Trash2, Check, Sparkles, AlertCircle,
-  Loader2, ArrowRight, FolderKanban, Info
+  Globe, Code2, Cpu, Plus, Edit3, Trash2, Check, Copy, Sparkles, AlertCircle,
+  Loader2, ArrowRight, FolderKanban, Info, Key, FileText, Calendar, Terminal,
+  Shield, ChevronDown, ChevronUp
 } from "lucide-react";
 import { Project } from "@/lib/types";
 import { useProject } from "@/context/project-context";
@@ -45,9 +46,43 @@ function slugify(str: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function ProjectIdBadge({ projectId }: { projectId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(projectId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/60 dark:bg-slate-950/80 border border-[#edd6bb]/20 hover:border-[#e1b329]/50 text-[11px] font-mono text-[#edd6bb] hover:text-[#e1b329] transition-all cursor-pointer group"
+      title="Klik untuk menyalin Project ID"
+    >
+      <span className="text-[10px] text-[#8b7e6d] uppercase font-sans font-bold">ID:</span>
+      <span className="font-semibold text-[#e1b329]">{projectId}</span>
+      {copied ? (
+        <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+      ) : (
+        <Copy className="w-3 h-3 text-[#8b7e6d] group-hover:text-[#e1b329] shrink-0" />
+      )}
+    </button>
+  );
+}
+
 export default function ProjectsManagementPage() {
   const router = useRouter();
-  const { projects, activeProject, setActiveProject, refreshProjects } = useProject();
+  const { projects, activeProject, setActiveProject, refreshProjects, isLoading } = useProject();
+
+  // Snippet expand toggle state per project
+  const [expandedSnippetId, setExpandedSnippetId] = useState<string | null>(null);
+
+  // Info banner state
+  const [showGuideBanner, setShowGuideBanner] = useState(true);
 
   // Create Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -79,6 +114,11 @@ export default function ProjectsManagementPage() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  // Metrics Calculations
+  const totalProjects = projects.length;
+  const totalSpecs = projects.reduce((acc, p) => acc + (p.specsCount || 0), 0);
+  const totalKeys = projects.reduce((acc, p) => acc + (p.keysCount || 0), 0);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,8 +207,18 @@ export default function ProjectsManagementPage() {
     }
   };
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return "Baru saja";
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Toast Notification */}
       {toast && (
         <div
@@ -186,18 +236,18 @@ export default function ProjectsManagementPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-6 rounded-3xl border border-[#8a715e]/20 dark:border-[#edd6bb]/15 shadow-xl">
         <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#e1b329] via-[#ffb443] to-[#8a715e] p-0.5 shadow-lg shadow-[#e1b329]/20 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#e1b329] via-[#ffb443] to-[#8a715e] p-0.5 shadow-lg shadow-[#e1b329]/20 flex items-center justify-center shrink-0">
               <div className="w-full h-full bg-[#120e0b] rounded-[14px] flex items-center justify-center">
                 <FolderKanban className="w-5 h-5 text-[#e1b329]" />
               </div>
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-[#edd6bb]">
-                Manajemen Projects
+                Manajemen Projects & Workspace
               </h1>
               <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d]">
-                Kelola ruang kerja dan isolasi resource per project (Call Specs, API Keys, Execution Logs)
+                Kelola ruang kerja, isolasi resource (Call Specs, API Keys, Execution Logs), dan konfigurasi MCP per Project ID
               </p>
             </div>
           </div>
@@ -220,97 +270,254 @@ export default function ProjectsManagementPage() {
         </button>
       </div>
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {projects.map((project) => {
-          const isActive = activeProject?.id === project.id;
-          return (
-            <div
-              key={project.id}
-              className={`glass-panel p-6 rounded-3xl border transition-all duration-300 relative flex flex-col justify-between group ${
-                isActive
-                  ? "border-[#e1b329] bg-[#e1b329]/5 dark:bg-[#e1b329]/8 shadow-2xl shadow-[#e1b329]/10"
-                  : "border-[#8a715e]/20 dark:border-[#edd6bb]/15 hover:border-[#8a715e]/40 dark:hover:border-[#edd6bb]/30"
-              }`}
+      {/* Summary Metrics Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="glass-panel p-4 rounded-2xl border border-[#edd6bb]/20 space-y-1">
+          <span className="text-[10px] font-bold text-[#8b7e6d] uppercase tracking-wider">Total Projects</span>
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{totalProjects}</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
+            <Sparkles className="w-3 h-3" />
+            <span>Project Aktif</span>
+          </span>
+          <div className="text-sm font-extrabold text-amber-600 dark:text-amber-400 truncate">
+            {activeProject ? activeProject.name : "-"}
+          </div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+            <FileText className="w-3 h-3" />
+            <span>Total Call Specs</span>
+          </span>
+          <div className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">{totalSpecs}</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+            <Key className="w-3 h-3" />
+            <span>API Credentials</span>
+          </span>
+          <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{totalKeys}</div>
+        </div>
+      </div>
+
+      {/* Informative MCP & API Integration Guide Banner */}
+      {showGuideBanner && (
+        <div className="glass-panel p-5 rounded-3xl border border-[#e1b329]/30 bg-gradient-to-r from-[#e1b329]/10 via-amber-500/5 to-transparent relative shadow-xl space-y-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-[#e1b329]/20 text-[#e1b329]">
+                <Info className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-extrabold text-slate-900 dark:text-[#edd6bb]">
+                  Panduan Isolasi Project & Integrasi MCP Server
+                </h2>
+                <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d]">
+                  Gunakan <code className="font-mono text-[#e1b329] font-bold">Project ID</code> untuk memisahkan Call Specs, API Keys, dan log eksekusi saat menghubungkan AI Agent / MCP Clients.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowGuideBanner(false)}
+              className="text-xs text-[#8b7e6d] hover:text-[#edd6bb] p-1 rounded-md"
             >
-              {/* Header */}
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-md transition-transform group-hover:scale-105"
-                      style={{ backgroundColor: `${project.color}25` }}
-                    >
-                      <ProjectIcon icon={project.icon} color={project.color} className="w-5 h-5" />
+              ✕
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
+            <div className="p-3 rounded-2xl bg-slate-950/60 border border-[#edd6bb]/15 space-y-1">
+              <div className="flex items-center gap-1.5 text-amber-400 font-extrabold text-[11px]">
+                <Terminal className="w-3.5 h-3.5" />
+                <span>Format Integrasi MCP Server (`mcp_config.json`):</span>
+              </div>
+              <p className="font-mono text-[11px] text-slate-300">
+                &quot;headers&quot;: &#123; &quot;X-USER-ID&quot;: &quot;usr_...&quot;, <span className="text-[#e1b329]">&quot;X-PROJECT-ID&quot;: &quot;&lt;PROJECT_ID&gt;&quot;</span> &#125;
+              </p>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-950/60 border border-[#edd6bb]/15 space-y-1">
+              <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[11px]">
+                <Shield className="w-3.5 h-3.5" />
+                <span>Format HTTP REST API Request Header:</span>
+              </div>
+              <p className="font-mono text-[11px] text-slate-300">
+                X-USER-ID: usr_... | <span className="text-[#e1b329]">X-PROJECT-ID: &lt;PROJECT_ID&gt;</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Projects Cards Grid */}
+      {isLoading ? (
+        <div className="py-16 text-center text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#e1b329]" />
+          <p className="text-xs mt-2 font-bold">Memuat daftar Projects...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projects.map((project) => {
+            const isActive = activeProject?.id === project.id;
+            const isSnippetOpen = expandedSnippetId === project.id;
+
+            return (
+              <div
+                key={project.id}
+                className={`glass-panel p-6 rounded-3xl border transition-all duration-300 relative flex flex-col justify-between group ${
+                  isActive
+                    ? "border-[#e1b329] bg-gradient-to-b from-[#e1b329]/10 to-transparent shadow-2xl shadow-[#e1b329]/10"
+                    : "border-[#8a715e]/20 dark:border-[#edd6bb]/15 hover:border-[#8a715e]/40 dark:hover:border-[#edd6bb]/30"
+                }`}
+              >
+                <div className="space-y-4">
+                  {/* Icon, Active Status & Name Header */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md transition-transform group-hover:scale-105"
+                        style={{ backgroundColor: `${project.color}25` }}
+                      >
+                        <ProjectIcon icon={project.icon} color={project.color} className="w-6 h-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-extrabold text-base text-slate-900 dark:text-[#edd6bb] truncate">
+                          {project.name}
+                        </h3>
+                        <div className="mt-1 flex items-center gap-2">
+                          <ProjectIdBadge projectId={project.id} />
+                        </div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-extrabold text-base text-slate-900 dark:text-[#edd6bb] truncate">
-                        {project.name}
-                      </h3>
-                      <p className="text-xs text-[#8b7e6d] font-mono truncate">{project.slug}</p>
+
+                    {isActive ? (
+                      <span className="px-2.5 py-1 rounded-full bg-[#e1b329]/20 text-[#e1b329] border border-[#e1b329]/30 text-[10px] font-extrabold shrink-0 flex items-center gap-1.5 shadow-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#e1b329] animate-pulse"></span>
+                        <span>Aktif</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md bg-[#8b7e6d]/15 text-[#8b7e6d] dark:text-[#edd6bb]/60 text-[10px] font-mono shrink-0">
+                        slug: {project.slug}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Project Description */}
+                  <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d] line-clamp-2 min-h-[2.5rem] leading-relaxed">
+                    {project.description || "Tidak ada deskripsi yang disediakan."}
+                  </p>
+
+                  {/* Resource Counts & Metadata Badges */}
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#8a715e]/15 dark:border-[#edd6bb]/10 text-center">
+                    <div className="p-2 rounded-xl bg-[#8a715e]/5 dark:bg-[#edd6bb]/5 space-y-0.5">
+                      <span className="text-[9px] font-extrabold text-[#8b7e6d] uppercase tracking-wider flex items-center justify-center gap-1">
+                        <FileText className="w-2.5 h-2.5 text-indigo-400" />
+                        <span>Specs</span>
+                      </span>
+                      <p className="text-xs font-bold text-slate-900 dark:text-[#edd6bb]">{project.specsCount || 0}</p>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-[#8a715e]/5 dark:bg-[#edd6bb]/5 space-y-0.5">
+                      <span className="text-[9px] font-extrabold text-[#8b7e6d] uppercase tracking-wider flex items-center justify-center gap-1">
+                        <Key className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>Keys</span>
+                      </span>
+                      <p className="text-xs font-bold text-slate-900 dark:text-[#edd6bb]">{project.keysCount || 0}</p>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-[#8a715e]/5 dark:bg-[#edd6bb]/5 space-y-0.5">
+                      <span className="text-[9px] font-extrabold text-[#8b7e6d] uppercase tracking-wider flex items-center justify-center gap-1">
+                        <Calendar className="w-2.5 h-2.5 text-amber-400" />
+                        <span>Dibuat</span>
+                      </span>
+                      <p className="text-[10px] font-bold text-slate-900 dark:text-[#edd6bb] truncate">
+                        {formatDate(project.createdAt)}
+                      </p>
                     </div>
                   </div>
 
-                  {isActive ? (
-                    <span className="px-2.5 py-1 rounded-full bg-[#e1b329]/20 text-[#e1b329] border border-[#e1b329]/30 text-[10px] font-extrabold shrink-0 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" />
-                      <span>Aktif</span>
+                  {/* Expandable MCP & API Header Snippet */}
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSnippetId(isSnippetOpen ? null : project.id)}
+                      className="w-full text-[11px] font-extrabold text-[#e1b329] hover:underline flex items-center justify-between py-1"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Terminal className="w-3 h-3" />
+                        <span>{isSnippetOpen ? "Sembunyikan Code Snippet" : "Lihat Snippet MCP & Header"}</span>
+                      </span>
+                      {isSnippetOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+
+                    {isSnippetOpen && (
+                      <div className="p-3 rounded-2xl bg-slate-950/90 border border-[#edd6bb]/20 font-mono text-[10px] space-y-2 text-slate-200 animate-in fade-in zoom-in-95">
+                        <div>
+                          <p className="text-[9px] font-bold text-[#e1b329] uppercase font-sans mb-0.5">MCP Header Scope:</p>
+                          <code className="text-emerald-400 break-all select-all">&quot;X-PROJECT-ID&quot;: &quot;{project.id}&quot;</code>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-[#e1b329] uppercase font-sans mb-0.5">REST API Curl Header:</p>
+                          <code className="text-amber-300 break-all select-all">-H &quot;X-PROJECT-ID: {project.id}&quot;</code>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="pt-4 mt-4 border-t border-[#8a715e]/15 dark:border-[#edd6bb]/10 flex items-center justify-between gap-2">
+                  {!isActive ? (
+                    <button
+                      id={`switch-project-btn-${project.id}`}
+                      onClick={() => {
+                        setActiveProject(project);
+                        showToast(`Project aktif diganti ke "${project.name}"`);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#8a715e]/10 hover:bg-[#e1b329]/20 hover:text-[#e1b329] text-xs font-extrabold text-slate-800 dark:text-[#edd6bb] flex items-center gap-1.5 transition-all shadow-sm"
+                    >
+                      <span>Pilih Project Ini</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-[#e1b329]" />
+                    </button>
+                  ) : (
+                    <span className="text-xs font-extrabold text-[#e1b329] flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Project Aktif Saat Ini</span>
                     </span>
-                  ) : null}
-                </div>
+                  )}
 
-                {project.description && (
-                  <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d] line-clamp-2 leading-relaxed">
-                    {project.description}
-                  </p>
-                )}
-              </div>
-
-              {/* Footer Actions */}
-              <div className="pt-5 mt-4 border-t border-[#8a715e]/15 dark:border-[#edd6bb]/10 flex items-center justify-between gap-2">
-                {!isActive ? (
-                  <button
-                    id={`switch-project-btn-${project.id}`}
-                    onClick={() => {
-                      setActiveProject(project);
-                      showToast(`Project aktif diganti ke "${project.name}"`);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-[#8a715e]/10 hover:bg-[#e1b329]/20 hover:text-[#e1b329] text-xs font-bold text-slate-700 dark:text-[#edd6bb] flex items-center gap-1.5 transition-all"
-                  >
-                    <span>Pilih Project Ini</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
-                ) : (
-                  <span className="text-[11px] font-bold text-[#e1b329]">Sedang Digunakan</span>
-                )}
-
-                <div className="flex items-center gap-1">
-                  <button
-                    id={`edit-project-btn-${project.id}`}
-                    onClick={() => handleOpenEdit(project)}
-                    className="p-2 rounded-xl text-[#8a715e] dark:text-[#8b7e6d] hover:text-[#e1b329] hover:bg-[#8a715e]/15 transition-all"
-                    title="Edit project"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button
-                    id={`delete-project-btn-${project.id}`}
-                    onClick={() => {
-                      setDeletingProject(project);
-                      setDeleteError(null);
-                    }}
-                    disabled={projects.length <= 1}
-                    className="p-2 rounded-xl text-[#8a715e] dark:text-[#8b7e6d] hover:text-rose-500 hover:bg-rose-500/15 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                    title={projects.length <= 1 ? "Tidak dapat menghapus project terakhir" : "Hapus project"}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      id={`edit-project-btn-${project.id}`}
+                      onClick={() => handleOpenEdit(project)}
+                      className="p-2 rounded-xl text-[#8a715e] dark:text-[#8b7e6d] hover:text-[#e1b329] hover:bg-[#8a715e]/15 transition-all"
+                      title="Edit project"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      id={`delete-project-btn-${project.id}`}
+                      onClick={() => {
+                        setDeletingProject(project);
+                        setDeleteError(null);
+                      }}
+                      disabled={projects.length <= 1}
+                      className="p-2 rounded-xl text-[#8a715e] dark:text-[#8b7e6d] hover:text-rose-500 hover:bg-rose-500/15 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                      title={projects.length <= 1 ? "Tidak dapat menghapus project terakhir" : "Hapus project"}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* CREATE MODAL */}
       {showCreateModal && (
@@ -447,7 +654,7 @@ export default function ProjectsManagementPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-900 dark:text-[#edd6bb]">Edit Project</h2>
-                  <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d] font-mono">{editingProject.slug}</p>
+                  <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d] font-mono">{editingProject.id}</p>
                 </div>
               </div>
               <button

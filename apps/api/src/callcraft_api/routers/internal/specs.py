@@ -75,6 +75,9 @@ async def create_new_spec(
     if not db:
         raise HTTPException(status_code=500, detail="Database session unavailable")
 
+    if not payload.project_id or not payload.project_id.strip():
+        raise HTTPException(status_code=400, detail="Parameter 'project_id' wajib diisi.")
+
     raw_slug = payload.slug or payload.name
     base_slug = raw_slug.lower().replace(" ", "-")
     slug = base_slug
@@ -118,11 +121,9 @@ async def duplicate_spec(
     if not existing:
         raise HTTPException(status_code=404, detail="Call Spec tidak ditemukan")
 
-    target_project_id = project_id or existing.get("projectId") or existing.get("project_id")
+    target_project_id = (project_id or existing.get("projectId") or existing.get("project_id") or "").strip()
     if not target_project_id:
-        user_projects = await Repository.list_projects(db, user_id)
-        if user_projects:
-            target_project_id = user_projects[0]["id"]
+        raise HTTPException(status_code=400, detail="Parameter 'project_id' wajib diisi untuk menduplikasi Call Spec.")
 
     name = existing["name"]
     slug_val = existing["slug"]
@@ -573,6 +574,9 @@ async def import_spec_json(
         }
     else:
         # Create new spec
+        if not target_project_id or not str(target_project_id).strip():
+            raise HTTPException(status_code=400, detail="Parameter 'project_id' wajib diisi untuk meng-import Call Spec baru.")
+
         name = raw_data.get("name") or "Imported Call Spec"
         raw_slug = raw_data.get("slug") or name
         base_slug = raw_slug.lower().replace(" ", "-")

@@ -83,13 +83,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { activeProject } = useProject();
+  const { activeProject, isLoading: isProjectLoading } = useProject();
   const [specs, setSpecs] = useState<CallSpec[]>([]);
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   const loadData = async () => {
+    if (isProjectLoading) return;
     setLoading(true);
     try {
       const [specData, logData] = await Promise.all([
@@ -106,8 +107,10 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [activeProject?.id]);
+    if (!isProjectLoading) {
+      loadData();
+    }
+  }, [activeProject?.id, isProjectLoading]);
 
   // Metrics Calculations
   const totalExecutions = logs.length;

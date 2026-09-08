@@ -1,12 +1,38 @@
 import pytest
 import json
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import select
+
 from callcraft_api.app import app
+from callcraft_api.db.session import AsyncSessionLocal
+from callcraft_api.db.init_db import init_db
+from callcraft_api.db.models import User
+from callcraft_api.db.repository import Repository
 
 pytestmark = pytest.mark.asyncio
 
+@pytest.fixture
+async def active_user_id():
+    async with AsyncSessionLocal() as session:
+        await init_db(session)
+        stmt = select(User).where(User.status == "active")
+        res = await session.execute(stmt)
+        users = res.scalars().all()
+        if users:
+            return users[0].id
+        return "usr_default_dev_01"
 
-async def test_mcp_tools_list():
+
+@pytest.fixture
+async def active_spec_id(active_user_id: str):
+    async with AsyncSessionLocal() as session:
+        specs = await Repository.list_call_specs(session, active_user_id)
+        if specs:
+            return specs[0]["id"]
+        return "spc_01HZX01SPEC000000000001"
+
+
+async def test_mcp_tools_list(active_user_id: str):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post(
             "/mcp/v1/rpc",
@@ -15,7 +41,7 @@ async def test_mcp_tools_list():
                 "id": 1,
                 "method": "tools/list",
             },
-            headers={"X-USER-ID": "usr_01HZX01USER0000000000001"},
+            headers={"X-USER-ID": active_user_id},
         )
         assert response.status_code == 200
         data = response.json()
@@ -34,7 +60,7 @@ async def test_mcp_tools_list():
         assert "callcraft_import_spec_json" in tool_names
 
 
-async def test_mcp_tool_call_list_specs():
+async def test_mcp_tool_call_list_specs(active_user_id: str):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post(
             "/mcp/v1/rpc",
@@ -47,7 +73,7 @@ async def test_mcp_tool_call_list_specs():
                     "arguments": {},
                 },
             },
-            headers={"X-USER-ID": "usr_01HZX01USER0000000000001"},
+            headers={"X-USER-ID": active_user_id},
         )
         assert response.status_code == 200
         data = response.json()
@@ -57,19 +83,16 @@ async def test_mcp_tool_call_list_specs():
         assert "specs" in parsed
 
 
-async def test_spec_export_and_import():
-    user_id = "usr_01HZX01USER0000000000001"
-    spec_id = "spc_01HZX01SPEC000000000001"
-
+async def test_spec_export_and_import(active_user_id: str, active_spec_id: str):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Export spec
         exp_res = await ac.get(
-            f"/internal/v1/specs/{spec_id}/export",
-            headers={"X-USER-ID": user_id},
+            f"/internal/v1/specs/{active_spec_id}/export",
+            headers={"X-USER-ID": active_user_id},
         )
         assert exp_res.status_code == 200
         spec_json = exp_res.json()
-        assert spec_json["id"] == spec_id
+        assert spec_json["id"] == active_spec_id
         assert "responseSchema" in spec_json
         assert "prompts" in spec_json
 
@@ -77,24 +100,21 @@ async def test_spec_export_and_import():
         spec_json["prompts"]["positivePrompt"] = "Updated positive prompt from MCP import test"
         
         imp_res = await ac.post(
-            f"/internal/v1/specs/{spec_id}/import",
+            f"/internal/v1/specs/{active_spec_id}/import",
             json=spec_json,
-            headers={"X-USER-ID": user_id},
+            headers={"X-USER-ID": active_user_id},
         )
         assert imp_res.status_code == 200
         imp_data = imp_res.json()
         assert imp_data["spec"]["positivePrompt"] == "Updated positive prompt from MCP import test"
 
 
-async def test_spec_sections_get_and_put():
-    user_id = "usr_01HZX01USER0000000000001"
-    spec_id = "spc_01HZX01SPEC000000000001"
-
+async def test_spec_sections_get_and_put(active_user_id: str, active_spec_id: str):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Get section
         get_res = await ac.get(
-            f"/internal/v1/specs/{spec_id}/sections/prompts",
-            headers={"X-USER-ID": user_id},
+            f"/internal/v1/specs/{active_spec_id}/sections/prompts",
+            headers={"X-USER-ID": active_user_id},
         )
         assert get_res.status_code == 200
         prompts = get_res.json()
@@ -102,9 +122,9 @@ async def test_spec_sections_get_and_put():
 
         # Update section
         put_res = await ac.put(
-            f"/internal/v1/specs/{spec_id}/sections/prompts",
+            f"/internal/v1/specs/{active_spec_id}/sections/prompts",
             json={"positivePrompt": "Granular section update test prompt"},
-            headers={"X-USER-ID": user_id},
+            headers={"X-USER-ID": active_user_id},
         )
         assert put_res.status_code == 200
         put_data = put_res.json()

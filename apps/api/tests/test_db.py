@@ -7,7 +7,7 @@ with the live tables used by test_routes.py and other integration tests.
 import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy import text
+from sqlalchemy import text, select
 from callcraft_api.config import settings
 from callcraft_api.db.models import Base
 from callcraft_api.db.init_db import init_db
@@ -101,6 +101,8 @@ async def test_create_and_verify_api_credential(test_session: AsyncSession):
     assert mismatched is None
 
 
+from callcraft_api.db.models import Base, User, Project
+
 @pytest.mark.asyncio
 async def test_create_and_fetch_call_spec(test_session: AsyncSession):
     schema = {
@@ -109,9 +111,19 @@ async def test_create_and_fetch_call_spec(test_session: AsyncSession):
             "amount": {"type": "number", "required": True},
         }
     }
+    u_stmt = select(User).where(User.status == "active")
+    u_res = await test_session.execute(u_stmt)
+    user_obj = u_res.scalars().first()
+    assert user_obj is not None
+
+    p_stmt = select(Project).where(Project.user_id == user_obj.id)
+    p_res = await test_session.execute(p_stmt)
+    proj_obj = p_res.scalars().first()
+
     created = await Repository.create_call_spec(
         db=test_session,
-        user_id="usr_01HZX01USER0000000000001",
+        user_id=user_obj.id,
+        project_id=proj_obj.id if proj_obj else "prj_01HZX01PROJ000000000001",
         name="Custom Receipt Spec",
         slug="custom-receipt",
         description="Extract custom receipt fields",
@@ -124,7 +136,7 @@ async def test_create_and_fetch_call_spec(test_session: AsyncSession):
     assert created["status"] == "active"
 
     # Fetch spec by slug
-    fetched = await Repository.get_call_spec(test_session, "usr_01HZX01USER0000000000001", "custom-receipt")
+    fetched = await Repository.get_call_spec(test_session, user_obj.id, "custom-receipt")
     assert fetched is not None
     assert fetched["name"] == "Custom Receipt Spec"
     assert fetched["responseSchema"] == schema

@@ -82,7 +82,7 @@ function SlugBadge({ slug }: { slug: string }) {
 }
 
 export default function CallSpecsPage() {
-  const { activeProject } = useProject();
+  const { activeProject, isLoading: isProjectLoading } = useProject();
   const [specs, setSpecs] = useState<CallSpec[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -101,6 +101,7 @@ export default function CallSpecsPage() {
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const loadSpecs = () => {
+    if (isProjectLoading) return;
     setLoading(true);
     fetchCallSpecs(activeProject?.id).then((data) => {
       setSpecs(data);
@@ -109,8 +110,10 @@ export default function CallSpecsPage() {
   };
 
   useEffect(() => {
-    loadSpecs();
-  }, [activeProject?.id]);
+    if (!isProjectLoading) {
+      loadSpecs();
+    }
+  }, [activeProject?.id, isProjectLoading]);
 
   // Summary Metrics Calculation
   const totalCount = specs.length;
@@ -365,7 +368,7 @@ export default function CallSpecsPage() {
       </div>
 
       {/* Main Specs List Content */}
-      {loading ? (
+      {loading || isProjectLoading ? (
         <div className="py-16 text-center text-slate-400">
           <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#e1b329]" />
           <p className="text-xs mt-2 font-bold">Memuat Spesifikasi Callcraft...</p>

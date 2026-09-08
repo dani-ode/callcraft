@@ -89,7 +89,7 @@ const INITIAL_PROVIDERS_STATE: Record<string, ProviderConfig> = {
 
 export default function ApiKeysPage() {
   const { user } = useAuth();
-  const { activeProject } = useProject();
+  const { activeProject, isLoading: isProjectLoading } = useProject();
   const userId = user?.id || getActiveUserId();
 
   const [copiedUserId, setCopiedUserId] = useState(false);
@@ -154,6 +154,7 @@ export default function ApiKeysPage() {
 
   // Fetch Live Customer Keys & Encrypted AI Provider Keys from Backend
   useEffect(() => {
+    if (isProjectLoading) return;
     async function loadData() {
       try {
         const [liveKeys, liveProviders] = await Promise.all([
@@ -187,7 +188,7 @@ export default function ApiKeysPage() {
       }
     }
     loadData();
-  }, [activeProject?.id]);
+  }, [activeProject?.id, isProjectLoading]);
 
   // --- IP Whitelist Validation Function ---
   const isValidIpOrCidr = (ip: string): boolean => {

@@ -33,7 +33,7 @@ import { useProject } from "@/context/project-context";
 
 function PlaygroundContent() {
   const { user } = useAuth();
-  const { activeProject } = useProject();
+  const { activeProject, isLoading: isProjectLoading } = useProject();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -68,6 +68,7 @@ function PlaygroundContent() {
 
   // Load user specs on mount or project switch
   useEffect(() => {
+    if (isProjectLoading) return;
     let isMounted = true;
     setSpecsLoading(true);
     fetchCallSpecs(activeProject?.id)
@@ -85,7 +86,7 @@ function PlaygroundContent() {
     return () => {
       isMounted = false;
     };
-  }, [activeProject?.id]);
+  }, [activeProject?.id, isProjectLoading]);
 
   // Sync selected spec from URL query param or localStorage or default to first spec IN CURRENT PROJECT
   useEffect(() => {
