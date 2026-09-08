@@ -95,6 +95,8 @@ jobs:
               git remote add origin https://github.com/dani-ode/callcraft.git || git remote set-url origin https://github.com/dani-ode/callcraft.git
             fi
             
+            cd "$HOME/callcraft"
+            
             # Fetch latest changes & rebuild via Makefile
             git fetch origin main
             git reset --hard origin/main
