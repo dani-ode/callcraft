@@ -96,6 +96,8 @@ jobs:
             fi
             
             cd "$HOME/callcraft"
-            make pull-rebuild
+            git fetch origin main
+            git reset --hard origin/main
+            make rebuild
             
             echo "✅ Callcraft Studio successfully deployed to VPS!"
