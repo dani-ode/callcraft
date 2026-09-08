@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "callcraft": {
+      "serverUrl": "http://localhost:8081/mcp/v1/sse?user_id=usr_01M1NWASEQ1HQVJXT1G21FT9WC"
+    }
+  }
+}

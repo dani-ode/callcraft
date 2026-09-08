@@ -185,3 +185,70 @@ export async function updateSpecPublicationSettings(
 
   return await res.json();
 }
+
+export async function exportCallSpecJson(specId: string): Promise<Record<string, any>> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/specs/${specId}/export`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+  checkResponseAuth(res);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(extractErrorMessage(errorData, `Gagal meng-export Call Spec ${specId}`));
+  }
+  return await res.json();
+}
+
+export async function importCallSpecJson(
+  specId: string,
+  specJson: Record<string, any>,
+  projectId?: string
+): Promise<{ message: string; spec: CallSpec }> {
+  const params = new URLSearchParams();
+  if (projectId) params.set("project_id", projectId);
+  const endpoint = specId === "new" ? `/internal/v1/specs/import?${params}` : `/internal/v1/specs/${specId}/import?${params}`;
+
+  const res = await fetch(`${PYTHON_API_URL}${endpoint}`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(specJson),
+  });
+  checkResponseAuth(res);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(extractErrorMessage(errorData, "Gagal meng-import Call Spec JSON"));
+  }
+  return await res.json();
+}
+
+export async function fetchCallSpecSection(specId: string, section: string): Promise<Record<string, any>> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/specs/${specId}/sections/${section}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+  checkResponseAuth(res);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(extractErrorMessage(errorData, `Gagal mengambil section ${section}`));
+  }
+  return await res.json();
+}
+
+export async function updateCallSpecSection(
+  specId: string,
+  section: string,
+  content: Record<string, any>
+): Promise<{ message: string; spec: CallSpec }> {
+  const res = await fetch(`${PYTHON_API_URL}/internal/v1/specs/${specId}/sections/${section}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(content),
+  });
+  checkResponseAuth(res);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(extractErrorMessage(errorData, `Gagal meng-update section ${section}`));
+  }
+  return await res.json();
+}
+

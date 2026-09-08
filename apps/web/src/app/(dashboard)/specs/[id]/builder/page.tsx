@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -18,6 +18,15 @@ import {
   AlertTriangle,
   FlaskConical,
   MessageSquarePlus,
+  Download,
+  Upload,
+  Cpu,
+  FileJson,
+  Copy,
+  Check,
+  X,
+  Server,
+  Workflow,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SchemaField } from "@/components/schema-builder/types";
@@ -26,12 +35,23 @@ import { SchemaPreview } from "@/components/schema-builder/schema-preview";
 import { ExecutionSettings } from "@/components/schema-builder/execution-settings";
 import { ToolCallingSettings } from "@/components/schema-builder/tool-calling-settings";
 import { buildJsonSchema, jsonSchemaToSchemaFields } from "@/components/schema-builder/schema-helpers";
-import { updateCallSpec, createCallSpec, deleteCallSpec, fetchCallSpecById } from "@/lib/api-client";
+import {
+  updateCallSpec,
+  createCallSpec,
+  deleteCallSpec,
+  fetchCallSpecById,
+  exportCallSpecJson,
+  importCallSpecJson,
+} from "@/lib/api-client";
+import { getActiveUserId } from "@/lib/api/core";
+import { useAuth } from "@/context/auth-context";
 import { ToolCallingConfig } from "@/lib/types";
+
 
 function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<"response" | "tools" | "request" | "settings">("response");
   const [specName, setSpecName] = useState("");
@@ -59,6 +79,134 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Export, Import & MCP Modal States
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importJsonText, setImportJsonText] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
+
+  const [showMcpModal, setShowMcpModal] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Handle Export JSON
+  const handleExportJson = async () => {
+    try {
+      if (params.id !== "new") {
+        const specJson = await exportCallSpecJson(params.id);
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(specJson, null, 2));
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `${specSlug || "callcraft"}-spec.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+      } else {
+        const localExport = {
+          version: "1.0",
+          name: specName || "New Custom Spec",
+          slug: specSlug || "my-custom-spec",
+          description: "New CallCraft Spec Draft",
+          requestSchema: buildJsonSchema(requestFields),
+          responseSchema: buildJsonSchema(responseFields),
+          prompts: {
+            positivePrompt: extractionPrompt,
+            negativePrompt: negativePrompt,
+            additionalPrompt: additionalPrompt,
+          },
+          toolsConfig: toolsConfig,
+          config: {
+            allowAdditionalPrompt,
+            useExternalApiKey,
+            externalModelName: selectedModel,
+          },
+        };
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localExport, null, 2));
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `${specSlug || "draft"}-spec.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+      }
+    } catch (err: any) {
+      console.error("Export JSON error:", err);
+      alert(err.message || "Gagal meng-export JSON");
+    }
+  };
+
+  // Handle Import JSON File Select
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        setImportJsonText(text);
+        setImportError(null);
+      } catch (err: any) {
+        setImportError("Gagal membaca file JSON");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Handle Import Confirm
+  const handleImportConfirm = async () => {
+    if (!importJsonText.trim()) {
+      setImportError("Isi JSON atau upload file JSON terlebih dahulu");
+      return;
+    }
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(importJsonText);
+    } catch (err: any) {
+      setImportError("Format JSON tidak valid: " + err.message);
+      return;
+    }
+
+    setIsImporting(true);
+    setImportError(null);
+    try {
+      const res = await importCallSpecJson(params.id, parsed);
+      const updatedSpec = res.spec;
+      if (updatedSpec) {
+        if (updatedSpec.name) setSpecName(updatedSpec.name);
+        if (updatedSpec.slug) setSpecSlug(updatedSpec.slug);
+        if (updatedSpec.positivePrompt !== undefined || updatedSpec.extractionPrompt !== undefined) {
+          setExtractionPrompt(updatedSpec.positivePrompt || updatedSpec.extractionPrompt || "");
+        }
+        if (updatedSpec.negativePrompt !== undefined) setNegativePrompt(updatedSpec.negativePrompt || "");
+        if (updatedSpec.additionalPrompt !== undefined) setAdditionalPrompt(updatedSpec.additionalPrompt || "");
+        if (updatedSpec.allowAdditionalPrompt !== undefined) setAllowAdditionalPrompt(updatedSpec.allowAdditionalPrompt);
+        if (updatedSpec.useExternalApiKey !== undefined) setUseExternalApiKey(updatedSpec.useExternalApiKey);
+        if (updatedSpec.externalModelName) setSelectedModel(updatedSpec.externalModelName);
+        if (updatedSpec.toolsConfig) setToolsConfig(updatedSpec.toolsConfig);
+        if (updatedSpec.responseSchema) setResponseFields(jsonSchemaToSchemaFields(updatedSpec.responseSchema));
+        if (updatedSpec.requestSchema) setRequestFields(jsonSchemaToSchemaFields(updatedSpec.requestSchema));
+      }
+
+      setImportSuccessMsg("Spec JSON berhasil di-import!");
+      setTimeout(() => {
+        setShowImportModal(false);
+        setImportSuccessMsg(null);
+      }, 1500);
+    } catch (err: any) {
+      setImportError(err.message || "Gagal meng-import JSON");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleCopyText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedSnippet(key);
+    setTimeout(() => setCopiedSnippet(null), 2000);
+  };
+
 
   // Read active tab from URL query parameter on mount/refresh
   useEffect(() => {
@@ -329,9 +477,45 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
               title="Coba spec ini di Interactive API Playground"
             >
               <FlaskConical className="w-4 h-4 text-indigo-400" />
-              <span className="hidden sm:inline">Test in Playground</span>
+              <span className="hidden sm:inline">Playground</span>
             </Link>
           )}
+
+          {/* MCP Server Integration Button */}
+          <button
+            type="button"
+            onClick={() => setShowMcpModal(true)}
+            className="px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-600 dark:text-purple-300 border border-purple-500/30 text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm"
+            title="Koneksikan ke IDE / Cursor / Claude / Langflow / n8n via MCP Server"
+          >
+            <Cpu className="w-4 h-4 text-purple-400" />
+            <span className="hidden sm:inline">MCP Server</span>
+          </button>
+
+          {/* Export Spec JSON Button */}
+          <button
+            type="button"
+            onClick={handleExportJson}
+            disabled={isLoading}
+            className="px-3 py-2 rounded-xl glass-panel hover:bg-[#e1b329]/15 text-[#8a715e] dark:text-[#edd6bb] border border-[#edd6bb]/30 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+            title="Download spesifikasi lengkap dalam format JSON"
+          >
+            <Download className="w-4 h-4 text-[#e1b329]" />
+            <span className="hidden sm:inline">Export JSON</span>
+          </button>
+
+          {/* Import Spec JSON Button */}
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            disabled={isLoading}
+            className="px-3 py-2 rounded-xl glass-panel hover:bg-[#e1b329]/15 text-[#8a715e] dark:text-[#edd6bb] border border-[#edd6bb]/30 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+            title="Import file JSON untuk mengganti atau memperbarui spesifikasi"
+          >
+            <Upload className="w-4 h-4 text-[#e1b329]" />
+            <span className="hidden sm:inline">Import JSON</span>
+          </button>
+
 
           {params.id !== "new" && (
             <button
@@ -666,6 +850,263 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           </div>
         </div>
       )}
+
+      {/* Import Spec JSON Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl p-6 rounded-3xl glass-card border border-[#edd6bb]/30 bg-[#fdfbf7] dark:bg-[#1a1612] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#edd6bb]/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-[#e1b329]/15 text-[#e1b329]">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+                    Import Spec JSON
+                  </h3>
+                  <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d]">
+                    Upload file .json atau tempel kode JSON spesifikasi CallCraft.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-500/10 text-slate-400 hover:text-slate-600 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-[#5c4b3c] dark:text-[#edd6bb]/90">
+                  Upload File JSON:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-xl bg-[#e1b329]/15 hover:bg-[#e1b329]/25 text-[#e1b329] text-xs font-bold flex items-center gap-1.5 transition-all border border-[#e1b329]/30"
+                >
+                  <FileJson className="w-4 h-4" />
+                  <span>Pilih File JSON</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-[#5c4b3c] dark:text-[#edd6bb]/90 block mb-1">
+                  Konten JSON Spesifikasi:
+                </label>
+                <textarea
+                  rows={10}
+                  value={importJsonText}
+                  onChange={(e) => setImportJsonText(e.target.value)}
+                  placeholder={`{\n  "name": "Custom Spec",\n  "responseSchema": { ... },\n  "prompts": { "positivePrompt": "..." }\n}`}
+                  className="w-full p-3 rounded-2xl bg-slate-900 text-slate-100 font-mono text-xs border border-slate-700 focus:outline-none focus:border-[#e1b329] focus:ring-1 focus:ring-[#e1b329]"
+                />
+              </div>
+
+              {importError && (
+                <div className="p-3 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5 border border-rose-500/30">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{importError}</span>
+                </div>
+              )}
+
+              {importSuccessMsg && (
+                <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 border border-emerald-500/30">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                  <span>{importSuccessMsg}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isImporting}
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 rounded-xl glass-panel text-xs font-bold border border-[#8a715e]/25 hover:bg-[#8a715e]/15 text-[#5c4b3c] dark:text-[#edd6bb] transition-all"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isImporting}
+                onClick={handleImportConfirm}
+                className="px-4 py-2 rounded-xl bg-[#e1b329] hover:bg-[#d0a21f] disabled:opacity-50 text-slate-950 text-xs font-extrabold shadow-lg shadow-[#e1b329]/30 flex items-center gap-1.5 transition-all"
+              >
+                {isImporting ? (
+                  <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                <span>{isImporting ? "Importing..." : "Replace & Import JSON"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MCP Server Info & Configuration Modal */}
+      {showMcpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-3xl p-6 rounded-3xl glass-card border border-purple-500/30 bg-[#fdfbf7] dark:bg-[#181424] shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-purple-500/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-purple-500/15 text-purple-400">
+                  <Cpu className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <span>CallCraft Model Context Protocol (MCP) Server</span>
+                  </h3>
+                  <p className="text-xs text-purple-400 font-medium">
+                    Manipulasi spesifikasi CallCraft langsung dari Cursor, Antigravity, Claude, Langflow, atau n8n
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMcpModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-500/10 text-slate-400 hover:text-slate-600 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Endpoint URLs */}
+              <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 space-y-2">
+                <h4 className="font-extrabold text-purple-300 flex items-center gap-2">
+                  <Server className="w-4 h-4" />
+                  <span>Koneksi MCP Server Transport</span>
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">SSE Endpoint (Cursor/Claude)</span>
+                    <div className="flex items-center justify-between text-purple-300 font-mono text-[11px]">
+                      <span className="truncate">http://localhost:8081/mcp/v1/sse</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(`http://localhost:8081/mcp/v1/sse?user_id=${user?.id || getActiveUserId() || "<YOUR_USER_ID>"}`, "sse")}
+                        className="p-1 hover:text-white transition-all shrink-0"
+                      >
+                        {copiedSnippet === "sse" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">HTTP RPC Endpoint (Langflow/n8n)</span>
+                    <div className="flex items-center justify-between text-purple-300 font-mono text-[11px]">
+                      <span className="truncate">http://localhost:8081/mcp/v1/rpc</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText("http://localhost:8081/mcp/v1/rpc", "rpc")}
+                        className="p-1 hover:text-white transition-all shrink-0"
+                      >
+                        {copiedSnippet === "rpc" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* IDE Stdio Config */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-slate-200 flex items-center gap-2">
+                    <Code className="w-4 h-4 text-amber-400" />
+                    <span>Konfigurasi Cursor / Claude Desktop / Antigravity (Stdio Mode)</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCopyText(
+                        JSON.stringify(
+                          {
+                            mcpServers: {
+                              callcraft: {
+                                command: "python",
+                                args: [
+                                  "-m",
+                                  "callcraft_api.mcp_stdio",
+                                  "--user-id",
+                                  user?.id || getActiveUserId() || "<YOUR_USER_ID>",
+                                ],
+                              },
+                            },
+                          },
+                          null,
+                          2
+                        ),
+                        "stdio_json"
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-300 font-bold flex items-center gap-1 text-[11px] transition-all"
+                  >
+                    {copiedSnippet === "stdio_json" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedSnippet === "stdio_json" ? "Copied!" : "Copy Config JSON"}</span>
+                  </button>
+                </div>
+
+                <pre className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[11px] overflow-x-auto">
+{`{
+  "mcpServers": {
+    "callcraft": {
+      "command": "python",
+      "args": [
+        "-m", "callcraft_api.mcp_stdio",
+        "--user-id", "${user?.id || getActiveUserId() || "<YOUR_USER_ID>"}"
+      ]
+    }
+  }
+}`}
+                </pre>
+              </div>
+
+              {/* Langflow & n8n workflow guide */}
+              <div className="space-y-2">
+                <h4 className="font-extrabold text-slate-200 flex items-center gap-2">
+                  <Workflow className="w-4 h-4 text-emerald-400" />
+                  <span>Integrasi Workflow Langflow & n8n</span>
+                </h4>
+                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-300 text-[11px] leading-relaxed space-y-1.5">
+                  <p>
+                    Gunakan <strong>HTTP Request Node</strong> di n8n atau Langflow dengan method <code>POST</code> ke <code>http://localhost:8081/mcp/v1/rpc</code>.
+                  </p>
+                  <p>
+                    Sertakan Header: <code>X-USER-ID: {user?.id || getActiveUserId() || "<YOUR_USER_ID>"}</code>
+                  </p>
+                  <p className="font-mono text-purple-300 text-[10px] pt-1">
+                    Body: {"{"} "jsonrpc": "2.0", "id": "1", "method": "tools/call", "params": {"{"} "name": "callcraft_get_spec_section", "arguments": {"{"} "spec_id": "{params.id}", "section": "prompts" {"}"} {"}"} {"}"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowMcpModal(false)}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold shadow-lg shadow-purple-600/30 transition-all"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
