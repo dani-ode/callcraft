@@ -10,14 +10,18 @@ help: ## Tampilkan daftar perintah Makefile yang tersedia
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
-pull-rebuild: ## Pull git terbaru (origin main), rebuild Docker tanpa cache & restart service
+pull-rebuild: ## Pull git terbaru (origin main), rebuild Docker & restart service
 	git fetch origin main
 	git reset --hard origin/main
-	docker compose build --no-cache
+	docker builder prune -f || true
+	docker image prune -f || true
+	docker compose build
 	docker compose up -d --force-recreate
 
-rebuild: ## Rebuild Docker containers tanpa cache & restart service di server
-	docker compose build --no-cache
+rebuild: ## Bersihkan cache docker lama, rebuild Docker containers & restart service
+	docker builder prune -f || true
+	docker image prune -f || true
+	docker compose build
 	docker compose up -d --force-recreate
 
 up: ## Jalankan Docker containers di background
