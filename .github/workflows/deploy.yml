@@ -96,10 +96,6 @@ jobs:
             fi
             
             cd "$HOME/callcraft"
-            
-            # Fetch latest changes & rebuild via Makefile
-            git fetch origin main
-            git reset --hard origin/main
             make pull-rebuild
             
             echo "✅ Callcraft Studio successfully deployed to VPS!"
