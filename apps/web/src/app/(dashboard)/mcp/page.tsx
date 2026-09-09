@@ -22,13 +22,49 @@ import { getActiveUserId, PYTHON_API_URL } from "@/lib/api/core";
 export default function McpServerPage() {
   const { user } = useAuth();
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const [dshTab, setDshTab] = useState<"streamable" | "stdio" | "proxy">("streamable");
   
   const activeUserId = user?.id || getActiveUserId() || "";
   const baseUrl = PYTHON_API_URL || "http://localhost:8081";
+  const streamableHttpUrl = `${baseUrl}/mcp/v1`;
   const sseUrl = `${baseUrl}/mcp/v1/sse?user_id=${activeUserId}`;
   const rpcUrl = `${baseUrl}/mcp/v1/rpc`;
   const stdioCmd = `python -m callcraft_api.mcp_stdio --user-id ${activeUserId || "<YOUR_USER_ID>"}`;
 
+  const dshStreamableConfig = `- insert:
+    - id: callcraft
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: streamable-http
+        serverName: callcraft
+        url: '${streamableHttpUrl}'
+        headers:
+          X-USER-ID: '${activeUserId || "<YOUR_USER_ID>"}'`;
+
+  const dshStdioConfig = `- insert:
+    - id: callcraft
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        command: python
+        args:
+          - -m
+          - callcraft_api.mcp_stdio
+          - --user-id
+          - '${activeUserId || "<YOUR_USER_ID>"}'`;
+
+  const dshProxyConfig = `- insert:
+    - id: callcraft
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        command: npx
+        args:
+          - -y
+          - mcp-proxy
+          - --streamEndpoint
+          - /mcp/v1
+          - ${baseUrl}`;
 
   const claudeConfigObj = {
     mcpServers: {
@@ -137,7 +173,34 @@ export default function McpServerPage() {
       </div>
 
       {/* Connection Endpoint Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Streamable HTTP Card */}
+        <div className="p-5 rounded-3xl glass-card border border-cyan-500/30 bg-[#fdfbf7] dark:bg-[#101b2b] space-y-3 shadow-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-cyan-400 font-extrabold text-sm">
+              <Sparkles className="w-4 h-4" />
+              <span>Streamable HTTP</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 text-[10px] font-bold border border-cyan-500/30">
+              DeepSeek & Claude
+            </span>
+          </div>
+          <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d]">
+            Endpoint Streamable HTTP resmi untuk DeepSeek Harness (DSH) dan klien MCP modern.
+          </p>
+          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between text-cyan-300 font-mono text-xs">
+            <span className="truncate pr-2">{streamableHttpUrl}</span>
+            <button
+              type="button"
+              onClick={() => handleCopy(streamableHttpUrl, "stream_card")}
+              className="p-1.5 hover:text-white transition-all shrink-0 rounded-lg hover:bg-slate-800"
+              title="Copy Streamable HTTP URL"
+            >
+              {copiedSnippet === "stream_card" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
         {/* SSE Endpoint Card */}
         <div className="p-5 rounded-3xl glass-card border border-purple-500/30 bg-[#fdfbf7] dark:bg-[#181424] space-y-3 shadow-xl">
           <div className="flex items-center justify-between">
@@ -146,7 +209,7 @@ export default function McpServerPage() {
               <span>SSE Transport</span>
             </div>
             <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
-              Active
+              Antigravity & Cursor
             </span>
           </div>
           <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d]">
@@ -222,6 +285,103 @@ export default function McpServerPage() {
 
       {/* Configuration Code Blocks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* DeepSeek Harness (DSH) Configuration Card */}
+        <div className="col-span-1 lg:col-span-2 p-6 rounded-3xl glass-card border border-cyan-500/30 bg-[#fdfbf7] dark:bg-[#0e1726] space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-cyan-500/20 gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <span>DeepSeek Harness (DSH) Configuration</span>
+                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-bold border border-cyan-500/30">
+                  Streamable HTTP / Stdio
+                </span>
+              </h3>
+            </div>
+
+            {/* Mode Switcher Tabs */}
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setDshTab("streamable")}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  dshTab === "streamable"
+                    ? "bg-cyan-500 text-slate-950 shadow-md"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Streamable HTTP
+              </button>
+              <button
+                type="button"
+                onClick={() => setDshTab("stdio")}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  dshTab === "stdio"
+                    ? "bg-cyan-500 text-slate-950 shadow-md"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Local Stdio
+              </button>
+              <button
+                type="button"
+                onClick={() => setDshTab("proxy")}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  dshTab === "proxy"
+                    ? "bg-cyan-500 text-slate-950 shadow-md"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                mcp-proxy
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-[#8a715e] dark:text-[#8b7e6d] leading-relaxed">
+            {dshTab === "streamable" && (
+              <>
+                Tambahkan konfigurasi YAML ini ke file <code className="text-cyan-400">cordis.patch.yml</code> atau menu MCP Settings di DeepSeek Harness untuk menghubungkan MCP via <strong>Streamable HTTP</strong> ke endpoint <code className="text-cyan-400">{streamableHttpUrl}</code>.
+              </>
+            )}
+            {dshTab === "stdio" && (
+              <>
+                Gunakan transport <strong>stdio</strong> langsung tanpa overhead jaringan jika DeepSeek Harness berjalan di mesin yang sama dengan CallCraft.
+              </>
+            )}
+            {dshTab === "proxy" && (
+              <>
+                Gunakan adapter <strong>mcp-proxy</strong> jika DeepSeek Harness memerlukan bridge stdio menuju endpoint streamable HTTP remote CallCraft.
+              </>
+            )}
+          </p>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() =>
+                handleCopy(
+                  dshTab === "streamable"
+                    ? dshStreamableConfig
+                    : dshTab === "stdio"
+                    ? dshStdioConfig
+                    : dshProxyConfig,
+                  "dsh_yaml"
+                )
+              }
+              className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-400 text-xs font-bold flex items-center gap-1.5 border border-cyan-500/30 transition-all z-10"
+            >
+              {copiedSnippet === "dsh_yaml" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedSnippet === "dsh_yaml" ? "Copied!" : "Copy YAML"}</span>
+            </button>
+
+            <pre className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-cyan-200 font-mono text-xs overflow-x-auto">
+              {dshTab === "streamable"
+                ? dshStreamableConfig
+                : dshTab === "stdio"
+                ? dshStdioConfig
+                : dshProxyConfig}
+            </pre>
+          </div>
+        </div>
         {/* Claude Desktop & Antigravity Config */}
         <div className="p-6 rounded-3xl glass-card border border-[#edd6bb]/30 bg-[#fdfbf7] dark:bg-[#1a1612] space-y-4 shadow-xl">
           <div className="flex items-center justify-between pb-2 border-b border-[#edd6bb]/15">

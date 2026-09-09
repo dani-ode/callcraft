@@ -200,3 +200,96 @@ async def test_spec_sections_get_and_put(active_user_id: str, active_spec_id: st
         assert put_res.status_code == 200
         put_data = put_res.json()
         assert put_data["spec"]["positivePrompt"] == "Granular section update test prompt"
+
+
+async def test_mcp_streamable_http_json(active_user_id: str):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # Test initialize on root /mcp/v1
+        init_res = await ac.post(
+            "/mcp/v1",
+            json={
+                "jsonrpc": "2.0",
+                "id": 101,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "deepseek-harness", "version": "1.0.0"},
+                },
+            },
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert init_res.status_code == 200
+        init_data = init_res.json()
+        assert init_data["result"]["protocolVersion"] == "2024-11-05"
+        assert init_data["result"]["serverInfo"]["name"] == "CallCraft MCP Server"
+
+        # Test ping method
+        ping_res = await ac.post(
+            "/mcp/v1",
+            json={
+                "jsonrpc": "2.0",
+                "id": 102,
+                "method": "ping",
+            },
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert ping_res.status_code == 200
+        assert ping_res.json()["result"] == {}
+
+        # Test notifications return 204
+        notif_res = await ac.post(
+            "/mcp/v1",
+            json={
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+            },
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert notif_res.status_code == 204
+
+
+async def test_mcp_streamable_http_event_stream(active_user_id: str):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # POST with Accept: text/event-stream (DeepSeek Harness / streamable HTTP style)
+        stream_res = await ac.post(
+            "/mcp/v1",
+            json={
+                "jsonrpc": "2.0",
+                "id": 201,
+                "method": "ping",
+            },
+            headers={
+                "X-USER-ID": active_user_id,
+                "Accept": "text/event-stream",
+            },
+        )
+        assert stream_res.status_code == 200
+        assert "text/event-stream" in stream_res.headers["content-type"]
+        text_body = stream_res.text
+        assert "event: message" in text_body
+        assert '"jsonrpc": "2.0"' in text_body
+        assert '"id": 201' in text_body
+
+
+async def test_mcp_streamable_http_discovery_get_and_delete(active_user_id: str):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # GET probe on /mcp/v1
+        get_res = await ac.get(
+            "/mcp/v1",
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert get_res.status_code == 200
+        get_data = get_res.json()
+        assert get_data["status"] == "active"
+        assert get_data["transport"] == "streamable-http"
+        assert get_data["protocolVersion"] == "2024-11-05"
+        assert get_data["capabilities"]["streamableHttp"] is True
+        assert get_data["authenticated"] is True
+        assert get_data["userId"] == active_user_id
+
+        # DELETE session terminate
+        del_res = await ac.delete("/mcp/v1")
+        assert del_res.status_code == 200
+        assert del_res.json()["status"] == "session_terminated"
+

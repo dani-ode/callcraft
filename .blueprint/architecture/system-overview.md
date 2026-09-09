@@ -11,33 +11,35 @@ This is the high-level map of Callcraft. For current capability status, use
 ## 1. Current topology
 
 ```text
- Client applications                         Platform users
-        │                                          │
-        │ POST /v1/call                            │ dashboard browser
-        ▼                                          ▼
-┌──────────────────────┐                 ┌──────────────────────┐
-│ Data Plane           │                 │ Control Plane        │
-│ FastAPI, apps/api    │                 │ Next.js, apps/web    │
-└──────┬───────┬───────┘                 └──────────┬───────────┘
-       │       │                                      │ /internal/v1/*
-       │       │                                      ▼
-       │       │                           ┌──────────────────────┐
-       │       └──────────────────────────►│ FastAPI management API│
-       │                                   └──────────────────────┘
-       ▼                 ▼                              │
-┌──────────────┐  ┌──────────────┐                       │
-│ AI providers │  │ PostgreSQL   │◄──────────────────────┘
+ Client applications           External AI Agents            Platform users
+        │                     (DSH, Cursor, Claude)                │
+        │ POST /v1/call                 │                          │ dashboard browser
+        ▼                               ▼                          ▼
+┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────────┐
+│ Data Plane           │    │ MCP Server Plane     │    │ Control Plane        │
+│ FastAPI, apps/api    │    │ Streamable HTTP/SSE  │    │ Next.js, apps/web    │
+└──────┬───────┬───────┘    └──────────┬───────────┘    └──────────┬───────────┘
+       │       │                       │                           │ /internal/v1/*
+       │       │                       ▼                           ▼
+       │       │            ┌──────────────────────────────────────────────┐
+       │       └───────────►│ FastAPI Internal & MCP Execution Handlers    │
+       │                    └──────────────────────────────────────────────┘
+       ▼                 ▼                         │
+┌──────────────┐  ┌──────────────┐                 │
+│ AI providers │  │ PostgreSQL   │◄────────────────┘
 └──────────────┘  └──────┬───────┘
-                          │
-       ┌──────────────────┼──────────────────┐
-       ▼                  ▼                  ▼
-   Redis cache        Redis outbox      Worker process
-                                         (currently drains but
-                                          does not persist logs)
+                         │
+       ┌─────────────────┼─────────────────┐
+       ▼                 ▼                 ▼
+   Redis cache       Redis outbox     Worker process
+                                       (currently drains but
+                                        does not persist logs)
 ```
 
 - **Data Plane:** `POST /v1/call` in
   `apps/api/src/callcraft_api/routers/public.py` executes a project-scoped call specification.
+- **MCP Server Plane:** `/mcp/v1/*` and `mcp_stdio.py` expose CallCraft tools and spec manipulation to
+  external AI agent runtimes via Streamable HTTP, Legacy SSE, and Stdio.
 - **Control Plane:** `apps/web` calls the FastAPI internal API directly. It is not presently a
   server-side proxy or credential boundary.
 - **Persistence:** PostgreSQL stores platform metadata such as users, projects, specs, and keys.
@@ -90,5 +92,6 @@ The canonical evidence and remediation priority are in
 
 The governing decisions are: separate planes (ADR-0001), ephemeral payload processing (ADR-0002),
 tool calling for structured output (ADR-0003), camelCase public JSON (ADR-0004), prefixed ULIDs
-(ADR-0005), one header-routed execution endpoint (ADR-0006), and actionable errors (ADR-0007).
+(ADR-0005), one header-routed execution endpoint (ADR-0006), actionable errors (ADR-0007), and
+multi-transport Model Context Protocol agent access (ADR-0008).
 Review [decisions/README.md](../decisions/README.md) before altering any of these boundaries.

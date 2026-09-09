@@ -84,7 +84,44 @@ Liveness probe. `apps/api/src/callcraft_api/routers/health.py:7`.
 
 ---
 
-## 2. Internal management API — `/internal/v1/*`
+## 2. Model Context Protocol (MCP) Server Plane — `/mcp/v1/*`
+
+Supports AI agent integrations (DeepSeek Harness, Antigravity IDE, Cursor, Claude Desktop, Langflow, n8n) with dual-transport negotiation ([ADR-0008](../decisions/0008-mcp-server-and-multi-transport.md)).
+
+**Authentication:** Inbound identity is resolved via header `X-USER-ID: <id>`, query param `?user_id=<id>`, or header `Authorization: Bearer <id>`. Optional scoping via `X-PROJECT-ID: <id>` or `?project_id=<id>`.
+
+### Transports & Endpoints
+
+| Method | Path | Transport | Purpose |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/mcp/v1` (also `/mcp/v1/stream`, `/mcp/v1/rpc`) | **Streamable HTTP** | Primary MCP endpoint. Negotiates `Accept: text/event-stream` (SSE event streaming) or `application/json` (direct response). Handles single and batched JSON-RPC 2.0 payloads |
+| `GET` | `/mcp/v1` (also `/mcp/v1/stream`) | **Streamable HTTP** | Capability discovery probe (`protocolVersion: 2024-11-05`), or opens a persistent SSE event stream if `Accept: text/event-stream` is requested |
+| `DELETE` | `/mcp/v1` (also `/mcp/v1/stream`) | **Streamable HTTP** | Gracefully closes active streamable sessions |
+| `GET` | `/mcp/v1/sse` | **Legacy SSE** | Handshake endpoint for Antigravity & Cursor; yields an `endpoint` event pointing to `/mcp/v1/messages` |
+| `POST` | `/mcp/v1/messages?session_id=` | **Legacy SSE** | Inbound JSON-RPC message ingress for established SSE sessions |
+| `CLI` | `python -m callcraft_api.mcp_stdio` | **Local Stdio** | Full duplex JSON-RPC 2.0 via `stdin`/`stdout` for Claude Desktop & local CLI agents |
+
+### Catalog of 13 CallCraft MCP Tools
+
+| Tool Name | Parameters | Purpose |
+| :--- | :--- | :--- |
+| `callcraft_list_projects` | — | List all projects in user's workspace |
+| `callcraft_list_specs` | `project_id?` | List CallCraft endpoint specs with optional project filter |
+| `callcraft_get_spec` | `spec_id` | Get complete spec by ID or slug |
+| `callcraft_get_spec_section` | `spec_id`, `section` | Get granular section (`request-schema`, `response-schema`, `prompts`, `tools-config`, `config`) |
+| `callcraft_create_spec` | `name`, `slug?`, `project_id`, `positive_prompt?`, `schemas?` | Create a new CallCraft spec |
+| `callcraft_update_spec` | `spec_id`, `name?`, `description?`, `positive_prompt?`, `schemas?` | Update an existing spec |
+| `callcraft_update_spec_section` | `spec_id`, `section`, `content` | Granularly update a specific section |
+| `callcraft_delete_spec` | `spec_id` | Delete a spec by ID or slug |
+| `callcraft_export_spec_json` | `spec_id` | Export complete spec as a standardized JSON document |
+| `callcraft_import_spec_json` | `project_id?`, `spec_json` | Import full JSON spec to create or replace in DB |
+| `callcraft_list_user_ai_providers` | `project_id?` | List configured AI provider keys, masked keys, and custom base URLs |
+| `callcraft_list_ai_models` | — | List available AI models with capability flags and pricing |
+| `callcraft_verify_ai_provider` | `provider_id`, `api_key`, `base_url?` | Live-verify connectivity of AI provider or custom gateway |
+
+---
+
+## 3. Internal management API — `/internal/v1/*`
 
 Consumed by the dashboard. **Identity comes from the `X-USER-ID` header alone**
 (`routers/internal/_deps.py:12`): the header is checked to correspond to an existing user, and
@@ -102,6 +139,8 @@ Most collection endpoints accept `?project_id=` to scope results to one project.
 | `POST` | `/internal/v1/auth/verify-email` | Consume a verification token / OTP |
 | `POST` | `/internal/v1/auth/resend-verification` | Re-send the activation mail |
 | `POST` | `/internal/v1/auth/login` | Verify credentials; returns the user object (no token is issued) |
+| `POST` | `/internal/v1/auth/forgot-password` | Request password reset token / email dispatch |
+| `POST` | `/internal/v1/auth/reset-password` | Submit reset token and apply new password |
 
 ### Platform (`routers/internal/app.py`)
 
@@ -131,10 +170,14 @@ Most collection endpoints accept `?project_id=` to scope results to one project.
 | `PUT` | `/internal/v1/specs/{spec_id}` | Update; writes a new version row |
 | `DELETE` | `/internal/v1/specs/{spec_id}` | Delete |
 | `POST` | `/internal/v1/specs/{spec_id}/duplicate?project_id=` | Copy into the same or another project |
+| `GET` | `/internal/v1/specs/{spec_id}/sections/{section}` | Fetch granular section (`prompts`, `schemas`, `config`) |
+| `PUT` | `/internal/v1/specs/{spec_id}/sections/{section}` | Granularly update section without full payload |
+| `GET` | `/internal/v1/specs/{spec_id}/export` | Export standardized spec JSON document |
+| `POST` | `/internal/v1/specs/{spec_id}/import` | Import full JSON spec to replace spec configuration |
 | `GET` | `/internal/v1/specs/{spec_id}/publication` | Marketplace publication state |
 | `POST` | `/internal/v1/specs/{spec_id}/publication` | Publish / unpublish to the marketplace |
 | `GET` | `/internal/v1/specs/{spec_id}/playground-state` | Saved playground form state |
-| `POST` | `/internal/v1/specs/{spec_id}/playground-state` | Persist playground form state |
+| `POST` | `/internal/v1/specs/{spec_id}/playground-state` | Persist playground form state (includes `baseUrl`) |
 
 ### Credentials and provider keys (`routers/internal/keys.py`)
 
@@ -183,7 +226,7 @@ Most collection endpoints accept `?project_id=` to scope results to one project.
 
 ---
 
-## 3. Admin plane — `/admin/v1/*`
+## 4. Admin plane — `/admin/v1/*`
 
 | Method | Path | Status |
 | :--- | :--- | :--- |
@@ -195,7 +238,7 @@ blueprint do not exist. Their nearest working equivalents are the `/internal/v1/
 
 ---
 
-## 4. What is not here
+## 5. What is not here
 
 📐 Designed in the original blueprint, absent from the code: `/internal/v1/auth/verify-service`,
 `/internal/v1/call-specs` (the surface is `/internal/v1/specs`), `/internal/v1/api-credentials`

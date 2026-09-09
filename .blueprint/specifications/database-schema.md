@@ -210,9 +210,11 @@ CREATE INDEX idx_ai_models_provider ON ai_models(provider_id);
 -- TABLE 10: USER_AI_PROVIDERS (User Encrypted Keys)
 -- =============================================================================
 CREATE TABLE user_ai_providers (
-    id VARCHAR(26) PRIMARY KEY,
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    provider_id VARCHAR(26) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id VARCHAR(50) REFERENCES projects(id) ON DELETE CASCADE,
+    provider_id VARCHAR(50) NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+    base_url VARCHAR(500), -- Optional third-party AI gateway base URL override (0004_add_base_url.sql)
     encrypted_api_key TEXT NOT NULL, -- AES-256-GCM encrypted string
     key_nonce VARCHAR(100) NOT NULL, -- Nonce AES-256-GCM
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -226,7 +228,7 @@ CREATE TABLE user_ai_providers (
 -- TABLE 11: TEMPLATES
 -- =============================================================================
 CREATE TABLE templates (
-    id VARCHAR(26) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     code VARCHAR(50) NOT NULL UNIQUE, -- 'invoice', 'document-parser', 'receipt'
     name VARCHAR(100) NOT NULL,
     description TEXT,
@@ -245,12 +247,14 @@ CREATE TABLE templates (
 -- TABLE 12: CALL_SPECS
 -- =============================================================================
 CREATE TABLE call_specs (
-    id VARCHAR(26) PRIMARY KEY,
-    user_id VARCHAR(26) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    template_id VARCHAR(26) REFERENCES templates(id) ON DELETE SET NULL,
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id VARCHAR(50) REFERENCES projects(id) ON DELETE CASCADE,
+    template_id VARCHAR(50) REFERENCES templates(id) ON DELETE SET NULL,
     name VARCHAR(100) NOT NULL,
     slug VARCHAR(100) NOT NULL,
     description TEXT,
+    base_url VARCHAR(500), -- Optional third-party AI gateway base URL (0004_add_base_url.sql)
     active_version_number INT NOT NULL DEFAULT 1,
     status VARCHAR(50) NOT NULL DEFAULT 'active', -- 'active', 'archived'
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -265,14 +269,15 @@ CREATE INDEX idx_call_specs_user_id ON call_specs(user_id);
 -- TABLE 13: CALL_SPEC_VERSIONS
 -- =============================================================================
 CREATE TABLE call_spec_versions (
-    id VARCHAR(26) PRIMARY KEY,
-    call_spec_id VARCHAR(26) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    call_spec_id VARCHAR(50) NOT NULL REFERENCES call_specs(id) ON DELETE CASCADE,
     version_number INT NOT NULL,
     request_schema JSONB NOT NULL,
     response_schema JSONB NOT NULL,
     system_prompt TEXT,
     extraction_prompt TEXT,
-    preferred_model_id VARCHAR(26) REFERENCES ai_models(id),
+    preferred_model_id VARCHAR(50) REFERENCES ai_models(id),
+    base_url VARCHAR(500), -- Optional version-pinned gateway base URL (0004_add_base_url.sql)
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_spec_version UNIQUE (call_spec_id, version_number)
 );

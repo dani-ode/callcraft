@@ -20,6 +20,7 @@ changes have something specific to argue against.
 | [0005](0005-prefixed-ulid-identifiers.md) | Prefixed ULIDs as primary keys | Accepted |
 | [0006](0006-header-routed-call-endpoint.md) | One header-routed public endpoint, `POST /v1/call` | Accepted — supersedes `/v1/call/{user_id}` |
 | [0007](0007-actionable-error-contract.md) | Errors carry a code, details, and an actionable step | Accepted |
+| [0008](0008-mcp-server-and-multi-transport.md) | Multi-Transport Model Context Protocol (MCP) Server | Accepted |
 
 ---
 

@@ -6,7 +6,7 @@ import ulid
 import httpx
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,37 @@ class McpContext:
 
 from fastapi import status
 from callcraft_api.db.models import Project
+
+async def resolve_mcp_context_optional(
+    x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
+    x_project_id: Optional[str] = Header(None, alias="X-PROJECT-ID"),
+    user_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Optional[AsyncSession] = Depends(get_db_session),
+) -> Optional[McpContext]:
+    """Optional user context resolver for MCP server discovery and health probes."""
+    uid = x_user_id or user_id
+    if not uid and authorization:
+        if authorization.startswith("Bearer "):
+            uid = authorization.replace("Bearer ", "").strip()
+        else:
+            uid = authorization.strip()
+
+    if not uid or not uid.strip():
+        return None
+
+    clean_uid = uid.strip()
+    if db:
+        stmt_u = select(User).where(User.id == clean_uid)
+        res_u = await db.execute(stmt_u)
+        user_obj = res_u.scalar_one_or_none()
+        if not user_obj:
+            return None
+
+    target_project_id = (x_project_id or project_id or "").strip() or None
+    return McpContext(user_id=clean_uid, project_id=target_project_id)
+
 
 async def resolve_mcp_context(
     x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
@@ -708,6 +739,8 @@ async def handle_jsonrpc_request(
     params = request_data.get("params") or {}
 
     if not method:
+        if req_id is None:
+            return None
         return {
             "jsonrpc": "2.0",
             "id": req_id,
@@ -730,8 +763,15 @@ async def handle_jsonrpc_request(
             },
         }
 
-    elif method == "notifications/initialized":
+    elif method == "notifications/initialized" or method.startswith("notifications/"):
         return None
+
+    elif method == "ping":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {},
+        }
 
     elif method == "tools/list":
         return {
@@ -783,6 +823,8 @@ async def handle_jsonrpc_request(
             }
 
     else:
+        if req_id is None:
+            return None
         return {
             "jsonrpc": "2.0",
             "id": req_id,
@@ -791,24 +833,31 @@ async def handle_jsonrpc_request(
 
 
 # ============================================================================
-# HTTP & SSE TRANSPORTS
+# STREAMABLE HTTP & SSE MCP TRANSPORTS
 # ============================================================================
 
+@router.post("")
+@router.post("/")
+@router.post("/stream")
 @router.post("/rpc")
-async def mcp_http_rpc_endpoint(
+async def mcp_streamable_http_endpoint(
     request: Request,
     ctx: McpContext = Depends(resolve_mcp_context),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Direct HTTP POST JSON-RPC 2.0 endpoint for MCP calls (Langflow, n8n, curl, Postman)."""
+    """Streamable HTTP and direct JSON-RPC 2.0 endpoint for DeepSeek Harness (DSH), Claude, Langflow, n8n, curl."""
     try:
         body = await request.json()
     except Exception as e:
-        return {
+        err_payload = {
             "jsonrpc": "2.0",
             "id": None,
             "error": {"code": -32700, "message": f"Parse error: {str(e)}"},
         }
+        return JSONResponse(status_code=400, content=err_payload)
+
+    accept_header = request.headers.get("accept", "")
+    wants_sse = "text/event-stream" in accept_header
 
     if isinstance(body, list):
         results = []
@@ -816,10 +865,108 @@ async def mcp_http_rpc_endpoint(
             res = await handle_jsonrpc_request(req, ctx.user_id, db, default_project_id=ctx.project_id)
             if res:
                 results.append(res)
-        return results
+        response_payload = results
+    else:
+        res = await handle_jsonrpc_request(body, ctx.user_id, db, default_project_id=ctx.project_id)
+        response_payload = res
 
-    res = await handle_jsonrpc_request(body, ctx.user_id, db, default_project_id=ctx.project_id)
-    return res or {"jsonrpc": "2.0", "result": "ok"}
+    if wants_sse:
+        async def sse_stream():
+            if response_payload is not None:
+                if isinstance(response_payload, list):
+                    for item in response_payload:
+                        yield f"event: message\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
+                else:
+                    yield f"event: message\ndata: {json.dumps(response_payload, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            sse_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
+
+    if response_payload is None:
+        return Response(status_code=204)
+
+    return JSONResponse(content=response_payload)
+
+
+@router.get("")
+@router.get("/")
+@router.get("/stream")
+async def mcp_streamable_http_get_endpoint(
+    request: Request,
+    ctx: Optional[McpContext] = Depends(resolve_mcp_context_optional),
+):
+    """GET endpoint for Streamable HTTP discovery, health probes, and event streams."""
+    accept_header = request.headers.get("accept", "")
+    if "text/event-stream" in accept_header:
+        if not ctx:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Header 'X-USER-ID' atau query param 'user_id' wajib diisi untuk membuka SSE stream.",
+            )
+        session_id = f"mcp_stream_{str(ulid.new())}"
+        queue: asyncio.Queue = asyncio.Queue()
+        sse_sessions[session_id] = queue
+
+        async def event_generator():
+            try:
+                yield f": connected to callcraft streamable http session {session_id}\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        msg = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        yield f"event: message\ndata: {json.dumps(msg, ensure_ascii=False)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": heartbeat\n\n"
+            finally:
+                sse_sessions.pop(session_id, None)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
+
+    return JSONResponse(
+        content={
+            "status": "active",
+            "transport": "streamable-http",
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "CallCraft MCP Server",
+                "version": "1.0.0",
+            },
+            "capabilities": {
+                "tools": True,
+                "streamableHttp": True,
+                "stdio": True,
+                "sse": True,
+            },
+            "authenticated": ctx is not None,
+            "userId": ctx.user_id if ctx else None,
+            "projectId": ctx.project_id if ctx else None,
+        }
+    )
+
+
+@router.delete("")
+@router.delete("/")
+@router.delete("/stream")
+async def mcp_streamable_http_delete_endpoint(
+    request: Request,
+    ctx: Optional[McpContext] = Depends(resolve_mcp_context_optional),
+):
+    """Gracefully handles MCP session termination."""
+    return JSONResponse(content={"status": "session_terminated"})
 
 
 @router.get("/sse")

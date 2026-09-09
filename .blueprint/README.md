@@ -71,3 +71,4 @@ outbox work. Review the implementation-status register before relying on any cap
 - Identifiers are prefixed ULIDs — [ADR-0005](decisions/0005-prefixed-ulid-identifiers.md).
 - Public execution is header-routed through `POST /v1/call` — [ADR-0006](decisions/0006-header-routed-call-endpoint.md).
 - Errors must be actionable — [ADR-0007](decisions/0007-actionable-error-contract.md).
+- Model Context Protocol (MCP) server provides multi-transport agent access — [ADR-0008](decisions/0008-mcp-server-and-multi-transport.md).

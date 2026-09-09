@@ -2,7 +2,7 @@
 
 > **Status:** As-Built
 > **Source of truth:** the code paths cited in each row
-> **Last verified against code:** 2026-08-31 (commit `0ab3d71`)
+> **Last verified against code:** 2026-09-09 (commit `2c2515f` + Streamable HTTP MCP)
 
 This is the reconciliation table between what the blueprint describes and what
 `apps/api`, `apps/worker`, and `apps/web` actually do. When a blueprint document and this table
@@ -30,6 +30,7 @@ Markers follow [CONVENTIONS.md](CONVENTIONS.md#2-status-markers): ✅ implemente
 | camelCase success/error envelopes | ✅ | `utils/envelope.py:151`, `utils/envelope.py:91` | [envelope-contract.md](specifications/envelope-contract.md) |
 | Cost estimation from model pricing rows | ✅ | `public.py:512` | Uses `ai_models.cost_per_1k_*` |
 | Outbox push after execution | ✅ | `public.py:517`, `services/redis_cache.py:81` | Success path only |
+| Third-party AI Gateway & `base_url` override | ✅ | `public.py:461`, `adapters/*.py` | Universal custom gateway endpoint support across all 6 adapters |
 | Request body size limit (10 MB) | ⚠️ | not enforced in app code | Only the documented Apache `LimitRequestBody` would enforce it; `buffer_handler.py` applies no size cap to downloads either |
 | Rate limiting (60 req/min) | ⚠️ | `middleware/rate_limiter.py:15` | Middleware exists and is unit-tested, **but is never added to the app** in `app.py` — no rate limiting is active |
 | Hallucination auto-retry (1–2 attempts) | ⚠️ | — | Not implemented anywhere; a malformed tool result fails immediately |
@@ -40,19 +41,34 @@ Markers follow [CONVENTIONS.md](CONVENTIONS.md#2-status-markers): ✅ implemente
 
 ---
 
-## 2. Control Plane and internal API
+## 2. Model Context Protocol (MCP) Server Plane
 
 | Capability | Status | Where | Notes |
 | :--- | :---: | :--- | :--- |
-| Specs CRUD, duplicate, publication, playground state | ✅ | `routers/internal/specs.py` | 10 endpoints |
-| Projects CRUD | ✅ | `routers/internal/projects.py` | Undocumented in the original blueprint |
+| Streamable HTTP Transport | ✅ | `routers/mcp.py:824` | `POST /mcp/v1`, `GET /mcp/v1`, `DELETE /mcp/v1`. Native support for DeepSeek Harness (DSH), Claude, and modern MCP clients with `Accept: text/event-stream` & `application/json` negotiation — [ADR-0008](decisions/0008-mcp-server-and-multi-transport.md) |
+| Server-Sent Events (SSE) Transport | ✅ | `routers/mcp.py:950` | `GET /mcp/v1/sse` handshake and `POST /mcp/v1/messages` ingress for Antigravity IDE and Cursor |
+| Stdio CLI Transport | ✅ | `callcraft_api/mcp_stdio.py:17` | `python -m callcraft_api.mcp_stdio --user-id <UID>` for Claude Desktop & local terminal execution |
+| JSON-RPC 2.0 MCP Protocol Handlers | ✅ | `routers/mcp.py:733` | `initialize`, `ping`, notification sink, `tools/list`, and `tools/call` |
+| Catalog of 13 CallCraft MCP Tools | ✅ | `routers/mcp.py:90` | Granular workspace control: projects, specs CRUD, section editing, spec JSON export/import, AI provider key listing & vendor verification |
+| Workspace user & project scoping | ✅ | `routers/mcp.py:36` | Strict identity verification via `X-USER-ID` header, `user_id` query param, or `Authorization: Bearer <UID>` |
+
+---
+
+## 3. Control Plane and internal API
+
+| Capability | Status | Where | Notes |
+| :--- | :---: | :--- | :--- |
+| Specs CRUD, duplicate, publication, playground state | ✅ | `routers/internal/specs.py` | Full lifecycle management |
+| Specs granular section reads & updates | ✅ | `routers/internal/specs.py:530` | Dedicated `/sections/{section}` endpoints for request-schema, response-schema, prompts, config |
+| Specs full JSON export and import | ✅ | `routers/internal/specs.py:638` | Standardized JSON export and import endpoints (`/export`, `/import`) |
+| Projects CRUD & workspace isolation | ✅ | `routers/internal/projects.py` | Project-scoped isolation enforced across specs and credentials |
 | API credential management + IP allowlist | ✅ | `routers/internal/keys.py:35` | |
-| User AI provider keys (save / list / verify) | ✅ | `routers/internal/keys.py:127` | AES-256-GCM at rest |
-| Template marketplace: list, publish, fork, like, comment | ✅ | `routers/internal/templates.py` | Undocumented in the original blueprint |
+| User AI provider keys (save / list / verify) + `base_url` | ✅ | `routers/internal/keys.py:127` | AES-256-GCM at rest, supports custom AI gateway URLs |
+| Template marketplace: list, publish, fork, like, comment | ✅ | `routers/internal/templates.py` | Community template exchange |
 | AI model & provider catalog reads | ✅ | `routers/internal/models.py:38` | Dashboard reads models from the DB, not a hardcoded list |
 | Platform settings (`app_init`) | ✅ | `routers/internal/app.py:52` | Branding, registration policy, default prompts |
 | User profile, close account, admin status/verify actions | ✅ | `routers/internal/users.py` | Admin actions live under `/internal/v1/admin/users/*` |
-| Registration, email verification, login | ✅ | `routers/auth.py:63` | SMTP mail via `services/email.py:36` |
+| Registration, email verification, login, password reset | ✅ | `routers/auth.py:63` | Includes forgot-password & reset-password flow (`auth.py:280`) |
 | Service-client authentication on `/internal/v1/*` | ⚠️ | `routers/internal/_deps.py:12` | `get_current_user_id` trusts the `X-USER-ID` header; `service_clients` rows are seeded but never verified. `/internal/v1/status` echoes the service headers without checking them |
 | Session tokens / JWT after login | ⚠️ | `routers/auth.py:258` | Login returns a user object; the browser stores the user id in `localStorage` and sends it as `X-USER-ID` |
 | Next.js server-side proxy for management calls | ⚠️ | `apps/web/src/lib/api/core.ts:1` | The browser calls the Python API directly via `NEXT_PUBLIC_API_URL`; there is no server-side credential boundary as the blueprint described |
@@ -95,7 +111,8 @@ Markers follow [CONVENTIONS.md](CONVENTIONS.md#2-status-markers): ✅ implemente
 | Table count | 16 | 21 (19 entities + `role_permissions`, `user_roles`) — `migrations/0001_initial_schema.sql` |
 | Tables absent from the old blueprint | — | `projects`, `template_likes`, `template_comments`, `app_init`, `playground_states` |
 | Primary key format | `VARCHAR(26)` bare ULID | `VARCHAR(50)` prefixed ULID (`usr_01HZX…`) |
-| Schema application | migration scripts | `Base.metadata.create_all` at startup (`app.py:22`), with `migrations/*.sql` kept in parallel — no migration runner |
+| Schema application | migration scripts | `Base.metadata.create_all` at startup (`app.py:22`), with `migrations/*.sql` kept in parallel — `0004_add_base_url.sql` auto-applied via startup alter statements |
+| Custom Gateway column | — | `base_url VARCHAR(500)` in `user_ai_providers`, `call_specs`, `call_spec_versions`, `playground_states` |
 | `api_requests` columns | includes `trace_id`, `execution_mode` | neither column exists on the model |
 
 Details: [specifications/database-schema.md](specifications/database-schema.md).
@@ -108,10 +125,10 @@ Details: [specifications/database-schema.md](specifications/database-schema.md).
 | :--- | :--- |
 | React Flow for the visual schema builder | Not a dependency of `apps/web`; the builder uses Monaco plus custom React components |
 | Playwright E2E, k6 load tests, testcontainers | None present |
-| Pytest unit and integration tests | 32 test functions across 9 files in `apps/api/tests` |
+| Pytest unit and integration tests | 49 test functions across 11 files in `apps/api/tests` (100% pass rate) |
 | `bun test` frontend tests | Script exists; no test files |
-| Models: Gemini 1.5, GPT-4o, Claude 3.5 | Seeded catalog is a different generation — `gemini-3.6-flash`, `gpt-5.6-luna`, `claude-opus-5`, `mistral-medium-3.5`, `deepseek-v4-pro`, `ocr-4.1` (`db/init_db.py:124`) |
-| Adapters: Gemini, OpenAI, Anthropic, DeepSeek | Five adapters — Gemini, OpenAI, Anthropic, Mistral, DeepSeek. The seeded `ocr-engine` provider has no adapter and silently falls back to Gemini (`adapters/factory.py:22`) |
+| Models: Gemini 1.5, GPT-4o, Claude 3.5 | Seeded catalog includes `gemini-3.6-flash`, `gpt-5.6-luna`, `claude-opus-5`, `claude-fable-5.1`, `mistral-medium-3.5`, `deepseek-v4-pro`, `ocr-4.1` (`db/init_db.py:124`) |
+| Adapters: Gemini, OpenAI, Anthropic, DeepSeek | Six adapters — Gemini, OpenAI, Anthropic, Mistral, DeepSeek, and Experiential (`adapters/experiential.py`). All 6 adapters support optional `base_url` custom gateway endpoints |
 
 ---
 
