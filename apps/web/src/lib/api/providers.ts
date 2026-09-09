@@ -3,13 +3,15 @@ import { PYTHON_API_URL, checkResponseAuth, extractErrorMessage, getActiveUserId
 export async function verifyProviderApiKey(payload: {
   provider: string;
   apiKey: string;
+  baseUrl?: string;
 }): Promise<{ valid: boolean; status_code: number; message: string }> {
   const res = await fetch(`${PYTHON_API_URL}/internal/v1/providers/verify-key`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify({
       provider: payload.provider,
-      api_key: payload.apiKey,
+      apiKey: payload.apiKey,
+      baseUrl: payload.baseUrl || null,
     }),
   });
   checkResponseAuth(res);
@@ -26,14 +28,16 @@ export async function saveProviderApiKey(payload: {
   provider: string;
   apiKey: string;
   projectId?: string;
+  baseUrl?: string;
 }): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${PYTHON_API_URL}/internal/v1/providers/save-key`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify({
       provider: payload.provider,
-      api_key: payload.apiKey,
-      project_id: payload.projectId || null,
+      apiKey: payload.apiKey,
+      projectId: payload.projectId || null,
+      baseUrl: payload.baseUrl || null,
     }),
   });
   checkResponseAuth(res);
@@ -53,6 +57,7 @@ export async function fetchUserAiProviders(projectId?: string): Promise<
     providerCode: string;
     providerName: string;
     key: string;
+    baseUrl?: string;
     isActive: boolean;
     updatedAt: string;
   }>

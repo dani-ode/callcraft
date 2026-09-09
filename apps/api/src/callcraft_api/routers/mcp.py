@@ -3,14 +3,16 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 import ulid
+import httpx
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from callcraft_api.db.session import AsyncSessionLocal, get_db_session
-from callcraft_api.db.models import User, CallSpec
+from callcraft_api.db.models import User, CallSpec, AiModel
 from callcraft_api.db.repository import Repository
 from callcraft_api.services.redis_cache import redis_service
 
@@ -149,6 +151,7 @@ MCP_TOOLS = [
                 "tools_config": {"type": "object", "description": "Tool calling configuration"},
                 "use_external_api_key": {"type": "boolean", "default": True},
                 "external_model_name": {"type": "string", "default": "gemini-3.6-flash"},
+                "external_base_url": {"type": "string", "description": "Optional custom third-party base URL / gateway"},
             },
             "required": ["name", "response_schema", "project_id"],
         },
@@ -173,6 +176,7 @@ MCP_TOOLS = [
                 "use_external_api_key": {"type": "boolean"},
                 "external_model_name": {"type": "string"},
                 "external_api_key": {"type": "string"},
+                "external_base_url": {"type": "string", "description": "Optional custom third-party base URL / gateway"},
             },
             "required": ["spec_id"],
         },
@@ -227,6 +231,39 @@ MCP_TOOLS = [
                 "spec_json": {"type": "object", "description": "Full spec JSON content object"},
             },
             "required": ["spec_json"],
+        },
+    },
+    {
+        "name": "callcraft_list_user_ai_providers",
+        "description": "List AI provider API keys and third-party base URLs currently activated/configured by the user in CallCraft.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "Optional project ID to filter provider keys"}
+            },
+        },
+    },
+    {
+        "name": "callcraft_list_ai_models",
+        "description": "List all active AI models and providers supported in CallCraft (including capabilities like image input and tool calling).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "provider": {"type": "string", "description": "Optional provider code filter: openai, gemini, anthropic, deepseek, mistral"}
+            },
+        },
+    },
+    {
+        "name": "callcraft_verify_ai_provider",
+        "description": "Verify connection and health of an AI Provider (test stored API key or a custom base_url / third-party gateway).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "provider": {"type": "string", "description": "Provider code to verify: gemini, openai, anthropic, deepseek, mistral"},
+                "base_url": {"type": "string", "description": "Optional custom base URL / third-party gateway to test"},
+                "api_key": {"type": "string", "description": "Optional raw API key to test. If omitted, uses user's active configured key in CallCraft."},
+            },
+            "required": ["provider"],
         },
     },
 ]
@@ -285,6 +322,7 @@ async def execute_mcp_tool(
                 "useExternalApiKey": spec.get("useExternalApiKey", True),
                 "externalModelName": spec.get("externalModelName"),
                 "externalApiKey": spec.get("externalApiKey"),
+                "externalBaseUrl": spec.get("externalBaseUrl"),
             }
         else:
             raise ValueError(f"Unknown section '{section}'")
@@ -312,6 +350,7 @@ async def execute_mcp_tool(
             additional_prompt=arguments.get("additional_prompt"),
             use_external_api_key=arguments.get("use_external_api_key", True),
             external_model_name=arguments.get("external_model_name", "gemini-3.6-flash"),
+            external_base_url=arguments.get("external_base_url") or arguments.get("externalBaseUrl"),
             tools_config=arguments.get("tools_config"),
         )
         return {"message": "Spec created successfully", "spec": spec}
@@ -335,6 +374,7 @@ async def execute_mcp_tool(
             use_external_api_key=arguments.get("use_external_api_key"),
             external_model_name=arguments.get("external_model_name"),
             external_api_key=arguments.get("external_api_key"),
+            external_base_url=arguments.get("external_base_url") or arguments.get("externalBaseUrl"),
             tools_config=arguments.get("tools_config"),
         )
         if not updated:
@@ -375,6 +415,8 @@ async def execute_mcp_tool(
                     update_kwargs["external_model_name"] = content["externalModelName"]
                 if "externalApiKey" in content:
                     update_kwargs["external_api_key"] = content["externalApiKey"]
+                if "externalBaseUrl" in content or "external_base_url" in content:
+                    update_kwargs["external_base_url"] = content.get("externalBaseUrl") or content.get("external_base_url")
 
         updated = await Repository.update_call_spec(
             db=db,
@@ -449,6 +491,7 @@ async def execute_mcp_tool(
         use_ext_key = bool(cfg_obj.get("useExternalApiKey", spec_json.get("use_external_api_key", True)))
         ext_model = spec_json.get("externalModelName") or cfg_obj.get("externalModelName") or spec_json.get("external_model_name")
         ext_key = spec_json.get("externalApiKey") or cfg_obj.get("externalApiKey") or spec_json.get("external_api_key")
+        ext_base = spec_json.get("externalBaseUrl") or cfg_obj.get("externalBaseUrl") or spec_json.get("external_base_url") or cfg_obj.get("external_base_url")
 
         existing = None
         if spec_id and spec_id != "new":
@@ -471,6 +514,7 @@ async def execute_mcp_tool(
                 use_external_api_key=use_ext_key,
                 external_model_name=ext_model,
                 external_api_key=ext_key,
+                external_base_url=ext_base,
                 tools_config=tools_cfg,
             )
             await redis_service.delete_spec(user_id, spec_id)
@@ -500,9 +544,152 @@ async def execute_mcp_tool(
                 use_external_api_key=use_ext_key,
                 external_model_name=ext_model,
                 external_api_key=ext_key,
+                external_base_url=ext_base,
                 tools_config=tools_cfg,
             )
             return {"message": "Spec imported and created successfully", "spec": new_spec}
+
+    elif name == "callcraft_list_user_ai_providers":
+        target_project_id = arguments.get("project_id") or default_project_id
+        providers = await Repository.list_user_ai_providers(db, user_id, project_id=target_project_id)
+        sanitized = []
+        for p in providers:
+            raw_key = p.get("key") or ""
+            if len(raw_key) > 8:
+                masked_key = f"{raw_key[:4]}...{raw_key[-4:]}"
+            elif raw_key:
+                masked_key = "***"
+            else:
+                masked_key = ""
+            sanitized.append({
+                "id": p.get("id"),
+                "providerCode": p.get("providerCode"),
+                "providerName": p.get("providerName"),
+                "isActive": p.get("isActive", True),
+                "baseUrl": p.get("baseUrl") or None,
+                "keyConfigured": bool(raw_key),
+                "keyMasked": masked_key,
+                "projectId": p.get("projectId"),
+                "updatedAt": p.get("updatedAt"),
+            })
+        return {"providers": sanitized}
+
+    elif name == "callcraft_list_ai_models":
+        provider_filter = arguments.get("provider", "").lower().strip() if arguments.get("provider") else None
+
+        stmt = (
+            select(AiModel)
+            .options(joinedload(AiModel.provider))
+            .where(AiModel.is_active.is_(True))
+            .order_by(AiModel.provider_id, AiModel.name)
+        )
+        res = await db.execute(stmt)
+        models = res.scalars().all()
+
+        output_models = []
+        for m in models:
+            p_code = m.provider.code if m.provider else ""
+            if provider_filter and p_code.lower() != provider_filter:
+                continue
+            output_models.append({
+                "id": m.id,
+                "name": m.name,
+                "modelIdentifier": m.model_identifier,
+                "providerCode": p_code,
+                "providerName": m.provider.name if m.provider else "",
+                "supportsImage": m.supports_image,
+                "supportsToolCalling": m.supports_tool_calling,
+                "supportsStructuredOutput": m.supports_structured_output,
+                "costPer1kPromptTokens": m.cost_per_1k_prompt_tokens or 0.0,
+                "costPer1kCompletionTokens": m.cost_per_1k_completion_tokens or 0.0,
+                "isDefault": m.is_default,
+            })
+        return {"models": output_models}
+
+    elif name == "callcraft_verify_ai_provider":
+        provider = arguments.get("provider", "").lower().strip()
+        if not provider:
+            raise ValueError("Parameter 'provider' wajib diisi (contoh: gemini, openai, anthropic, deepseek, mistral).")
+
+        raw_key = arguments.get("api_key")
+        custom_base = arguments.get("base_url")
+
+        # If key or base_url not explicitly passed, fallback to user's stored provider credentials in DB
+        if not raw_key or not custom_base:
+            creds = await Repository.get_user_ai_provider_credentials(
+                db=db, user_id=user_id, provider_code=provider, project_id=default_project_id
+            )
+            if creds:
+                if not raw_key:
+                    raw_key = creds.get("apiKey")
+                if not custom_base and creds.get("baseUrl"):
+                    custom_base = creds.get("baseUrl")
+
+        if not raw_key:
+            return {
+                "valid": False,
+                "statusCode": 404,
+                "message": f"Kredensial API Key untuk provider '{provider}' belum dikonfigurasi oleh user di CallCraft.",
+            }
+
+        key = raw_key.strip()
+        clean_base = custom_base.strip().rstrip("/") if custom_base and custom_base.strip() else None
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                if provider == "gemini":
+                    if clean_base:
+                        url = f"{clean_base}/models?key={key}"
+                    else:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+                    resp = await client.get(url)
+                elif provider == "openai":
+                    url = f"{clean_base}/models" if clean_base else "https://api.openai.com/v1/models"
+                    resp = await client.get(url, headers={"Authorization": f"Bearer {key}"})
+                elif provider == "anthropic":
+                    url = f"{clean_base}/models" if clean_base else "https://api.anthropic.com/v1/models"
+                    resp = await client.get(url, headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
+                elif provider in ("deepseek", "ocr"):
+                    url = f"{clean_base}/models" if clean_base else "https://api.deepseek.com/models"
+                    resp = await client.get(url, headers={"Authorization": f"Bearer {key}"})
+                elif provider == "mistral":
+                    url = f"{clean_base}/models" if clean_base else "https://api.mistral.ai/v1/models"
+                    resp = await client.get(url, headers={"Authorization": f"Bearer {key}"})
+                else:
+                    return {
+                        "valid": False,
+                        "statusCode": 400,
+                        "message": f"Unsupported provider code: '{provider}'",
+                    }
+
+                if resp.status_code == 200:
+                    return {
+                        "valid": True,
+                        "statusCode": 200,
+                        "provider": provider,
+                        "baseUrlUsed": clean_base or "Official Provider Endpoint",
+                        "message": f"{provider.capitalize()} API Key and endpoint verified successfully!",
+                    }
+                else:
+                    try:
+                        err_msg = resp.json().get("error", {}).get("message", resp.text)
+                    except Exception:
+                        err_msg = resp.text
+                    return {
+                        "valid": False,
+                        "statusCode": resp.status_code,
+                        "provider": provider,
+                        "baseUrlUsed": clean_base or "Official Provider Endpoint",
+                        "message": f"{provider.capitalize()} test failed ({resp.status_code}): {err_msg}",
+                    }
+            except httpx.RequestError as exc:
+                return {
+                    "valid": False,
+                    "statusCode": 500,
+                    "provider": provider,
+                    "baseUrlUsed": clean_base or "Official Provider Endpoint",
+                    "message": f"Connection network error while testing {provider}: {str(exc)}",
+                }
 
     else:
         raise ValueError(f"Unknown tool '{name}'")

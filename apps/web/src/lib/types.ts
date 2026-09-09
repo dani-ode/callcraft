@@ -98,6 +98,7 @@ export interface CallSpec {
   useExternalApiKey?: boolean;
   externalApiKey?: string;
   externalModelName?: string;
+  externalBaseUrl?: string;
   provider?: string;
   isPublished?: boolean;
   publishedTemplateId?: string;

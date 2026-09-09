@@ -97,6 +97,9 @@ export default function McpServerPage() {
     { name: "callcraft_delete_spec", desc: "Delete a spec by ID or slug" },
     { name: "callcraft_export_spec_json", desc: "Export spec as a complete, standardized JSON document" },
     { name: "callcraft_import_spec_json", desc: "Import full JSON spec to create or replace spec in DB" },
+    { name: "callcraft_list_user_ai_providers", desc: "List user's configured AI Provider API keys, masked keys, and custom base URLs" },
+    { name: "callcraft_list_ai_models", desc: "List available AI models in CallCraft with capability flags (multimodal, tool calling)" },
+    { name: "callcraft_verify_ai_provider", desc: "Verify connectivity and health of AI providers / custom gateways directly" },
   ];
 
   return (

@@ -58,6 +58,9 @@ async def test_mcp_tools_list(active_user_id: str):
         assert "callcraft_delete_spec" in tool_names
         assert "callcraft_export_spec_json" in tool_names
         assert "callcraft_import_spec_json" in tool_names
+        assert "callcraft_list_user_ai_providers" in tool_names
+        assert "callcraft_list_ai_models" in tool_names
+        assert "callcraft_verify_ai_provider" in tool_names
 
 
 async def test_mcp_tool_call_list_specs(active_user_id: str):
@@ -81,6 +84,74 @@ async def test_mcp_tool_call_list_specs(active_user_id: str):
         text_content = data["result"]["content"][0]["text"]
         parsed = json.loads(text_content)
         assert "specs" in parsed
+
+
+async def test_mcp_tool_call_list_ai_providers_and_models(active_user_id: str):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # 1. Test callcraft_list_user_ai_providers
+        prov_res = await ac.post(
+            "/mcp/v1/rpc",
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "callcraft_list_user_ai_providers",
+                    "arguments": {},
+                },
+            },
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert prov_res.status_code == 200
+        prov_data = prov_res.json()
+        assert "result" in prov_data
+        prov_content = json.loads(prov_data["result"]["content"][0]["text"])
+        assert "providers" in prov_content
+        assert isinstance(prov_content["providers"], list)
+
+        # 2. Test callcraft_list_ai_models
+        models_res = await ac.post(
+            "/mcp/v1/rpc",
+            json={
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "callcraft_list_ai_models",
+                    "arguments": {},
+                },
+            },
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert models_res.status_code == 200
+        models_data = models_res.json()
+        assert "result" in models_data
+        models_content = json.loads(models_data["result"]["content"][0]["text"])
+        assert "models" in models_content
+        assert len(models_content["models"]) > 0
+        first_model = models_content["models"][0]
+        assert "modelIdentifier" in first_model
+        assert "providerCode" in first_model
+
+        # 3. Test callcraft_verify_ai_provider without active key (returns valid=False gracefully)
+        verify_res = await ac.post(
+            "/mcp/v1/rpc",
+            json={
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "callcraft_verify_ai_provider",
+                    "arguments": {"provider": "unsupported_xyz"},
+                },
+            },
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert verify_res.status_code == 200
+        verify_data = verify_res.json()
+        assert "result" in verify_data
+        verify_content = json.loads(verify_data["result"]["content"][0]["text"])
+        assert verify_content["valid"] is False
 
 
 async def test_spec_export_and_import(active_user_id: str, active_spec_id: str):

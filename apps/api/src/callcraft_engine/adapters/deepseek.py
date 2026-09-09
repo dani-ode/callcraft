@@ -19,11 +19,16 @@ class DeepSeekAdapter(BaseAIAdapter):
         api_key: str,
         model_identifier: str = "deepseek-v4-pro",
         images: Optional[List[Tuple[bytes, str]]] = None,
+        base_url: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         if not api_key or not api_key.strip():
             raise ValueError("DeepSeek AI API Key is missing. Please configure a valid API key in settings or request header.")
 
-        url = "https://api.deepseek.com/chat/completions"
+        if base_url and base_url.strip():
+            cleaned_base = base_url.strip().rstrip("/")
+            url = cleaned_base if cleaned_base.endswith("/chat/completions") else f"{cleaned_base}/chat/completions"
+        else:
+            url = "https://api.deepseek.com/chat/completions"
 
         messages = []
         if system_prompt:

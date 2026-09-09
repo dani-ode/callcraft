@@ -107,12 +107,54 @@ class Repository:
             return None
 
     @staticmethod
+    async def get_user_ai_provider_credentials(
+        db: Optional[AsyncSession],
+        user_id: str,
+        provider_code: str,
+        project_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieves and decrypts user-supplied AI Provider API key and base_url using AES-256-GCM, optionally filtered by project_id."""
+        if db is None:
+            return None
+
+        stmt = select(UserAiProvider, AiProvider).join(
+            AiProvider, UserAiProvider.provider_id == AiProvider.id
+        ).where(
+            UserAiProvider.user_id == user_id,
+            AiProvider.code == provider_code.lower(),
+            UserAiProvider.is_active.is_(True),
+        )
+        if project_id:
+            stmt = stmt.where(UserAiProvider.project_id == project_id)
+
+        res = await db.execute(stmt)
+        row = res.first()
+        if not row:
+            return None
+
+        user_prov, _ = row
+        try:
+            decrypted = decrypt_aes_256_gcm(
+                user_prov.encrypted_api_key,
+                user_prov.key_nonce,
+                settings.master_encryption_key,
+            )
+            return {
+                "apiKey": decrypted,
+                "baseUrl": user_prov.base_url,
+            }
+        except Exception as e:
+            logger.error(f"Failed to decrypt provider key: {e}")
+            return None
+
+    @staticmethod
     async def save_user_ai_provider_key(
         db: AsyncSession,
         user_id: str,
         provider_code: str,
         raw_api_key: str,
         project_id: Optional[str] = None,
+        base_url: Optional[str] = None,
     ) -> bool:
         """Encrypts and persists user AI provider API key using AES-256-GCM, optionally scoped per project."""
         stmt = select(AiProvider).where(AiProvider.code == provider_code.lower())
@@ -135,9 +177,12 @@ class Repository:
         existing_res = await db.execute(existing_stmt)
         user_prov = existing_res.scalar_one_or_none()
 
+        clean_base_url = base_url.strip() if base_url and base_url.strip() else None
+
         if user_prov:
             user_prov.encrypted_api_key = enc_key
             user_prov.key_nonce = nonce
+            user_prov.base_url = clean_base_url
             user_prov.is_active = True
             user_prov.updated_at = datetime.now(timezone.utc)
         else:
@@ -148,6 +193,7 @@ class Repository:
                 provider_id=prov.id,
                 encrypted_api_key=enc_key,
                 key_nonce=nonce,
+                base_url=clean_base_url,
                 is_active=True,
             )
             db.add(user_prov)
@@ -196,6 +242,7 @@ class Repository:
                 "providerCode": prov.code,
                 "providerName": prov.name,
                 "key": decrypted or "",
+                "baseUrl": user_prov.base_url or "",
                 "isActive": user_prov.is_active,
                 "updatedAt": user_prov.updated_at.isoformat() if user_prov.updated_at else None,
             })
@@ -276,6 +323,7 @@ class Repository:
         allow_add_prompt = (ver.allow_additional_prompt if (ver and ver.allow_additional_prompt is not None) else (tmpl.allow_additional_prompt if (tmpl and tmpl.allow_additional_prompt is not None) else getattr(spec, "allow_additional_prompt", True)))
         ext_model = (ver.external_model_name if (ver and ver.external_model_name) else spec.external_model_name)
         ext_key = (ver.external_api_key if (ver and ver.external_api_key) else spec.external_api_key)
+        ext_base_url = (ver.external_base_url if (ver and ver.external_base_url) else getattr(spec, "external_base_url", None))
 
         use_ext_key = (ver.use_external_api_key if (ver and ver.use_external_api_key is not None) else spec.use_external_api_key)
         tools_cfg = (ver.tools_config if (ver and ver.tools_config is not None) else (tmpl.tools_config if tmpl else spec.tools_config)) or {}
@@ -293,6 +341,7 @@ class Repository:
             "useExternalApiKey": use_ext_key,
             "externalModelName": ext_model,
             "externalApiKey": ext_key,
+            "externalBaseUrl": ext_base_url,
             "isPublished": spec.is_published,
             "publishedTemplateId": spec.published_template_id,
             "requestSchema": req_schema,
@@ -361,6 +410,7 @@ class Repository:
         use_external_api_key: Optional[bool] = None,
         external_model_name: Optional[str] = None,
         external_api_key: Optional[str] = None,
+        external_base_url: Optional[str] = None,
         tools_config: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Updates Call Spec and creates or updates active version in database."""
@@ -388,6 +438,8 @@ class Repository:
             spec.external_model_name = external_model_name
         if external_api_key is not None:
             spec.external_api_key = external_api_key
+        if external_base_url is not None:
+            spec.external_base_url = external_base_url.strip() if external_base_url and external_base_url.strip() else None
         if tools_config is not None:
             spec.tools_config = tools_config
 
@@ -408,6 +460,7 @@ class Repository:
                 use_external_api_key=spec.use_external_api_key,
                 external_model_name=spec.external_model_name,
                 external_api_key=spec.external_api_key,
+                external_base_url=spec.external_base_url,
                 tools_config=spec.tools_config,
             )
             db.add(ver)
@@ -430,6 +483,8 @@ class Repository:
             ver.external_model_name = external_model_name
         if external_api_key is not None:
             ver.external_api_key = external_api_key
+        if external_base_url is not None:
+            ver.external_base_url = external_base_url.strip() if external_base_url and external_base_url.strip() else None
         if tools_config is not None:
             ver.tools_config = tools_config
 
@@ -511,6 +566,7 @@ class Repository:
         use_external_api_key: bool = True,
         external_model_name: Optional[str] = None,
         external_api_key: Optional[str] = None,
+        external_base_url: Optional[str] = None,
         tools_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Creates a new Call Spec and version in database."""
@@ -518,6 +574,8 @@ class Repository:
             raise ValueError("Parameter 'project_id' wajib diisi untuk membuat Call Spec.")
 
         spec_id = f"spc_{str(ulid.new())}"
+
+        clean_ext_base_url = external_base_url.strip() if external_base_url and external_base_url.strip() else None
 
         spec = CallSpec(
             id=spec_id,
@@ -532,6 +590,7 @@ class Repository:
             use_external_api_key=use_external_api_key,
             external_model_name=external_model_name,
             external_api_key=external_api_key,
+            external_base_url=clean_ext_base_url,
             tools_config=tools_config or {},
         )
         db.add(spec)
@@ -550,6 +609,7 @@ class Repository:
             use_external_api_key=use_external_api_key,
             external_model_name=external_model_name,
             external_api_key=external_api_key,
+            external_base_url=clean_ext_base_url,
             tools_config=tools_config or {},
         )
         db.add(ver)
@@ -789,6 +849,7 @@ class Repository:
             "imageUrl": state.image_url,
             "aiModelName": state.ai_model_name,
             "aiApiKey": state.ai_api_key,
+            "aiBaseUrl": state.ai_base_url,
             "updatedAt": state.updated_at.isoformat() if state.updated_at else datetime.now(timezone.utc).isoformat(),
         }
 
@@ -827,6 +888,7 @@ class Repository:
         image_url = payload.get("imageUrl")
         ai_model_name = payload.get("aiModelName")
         ai_api_key = payload.get("aiApiKey")
+        ai_base_url = payload.get("aiBaseUrl") or payload.get("ai_base_url")
 
         if existing:
             existing.selected_credential_id = selected_credential_id
@@ -836,6 +898,7 @@ class Repository:
             existing.image_url = image_url
             existing.ai_model_name = ai_model_name
             existing.ai_api_key = ai_api_key
+            existing.ai_base_url = ai_base_url
             existing.updated_at = datetime.now(timezone.utc)
         else:
             new_id = f"pgs_{ulid.new().str}"
@@ -850,6 +913,7 @@ class Repository:
                 image_url=image_url,
                 ai_model_name=ai_model_name,
                 ai_api_key=ai_api_key,
+                ai_base_url=ai_base_url,
             )
             db.add(existing)
 
@@ -867,6 +931,7 @@ class Repository:
             "imageUrl": existing.image_url,
             "aiModelName": existing.ai_model_name,
             "aiApiKey": existing.ai_api_key,
+            "aiBaseUrl": existing.ai_base_url,
             "updatedAt": existing.updated_at.isoformat() if existing.updated_at else datetime.now(timezone.utc).isoformat(),
         }
 

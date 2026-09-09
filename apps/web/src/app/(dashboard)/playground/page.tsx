@@ -47,6 +47,7 @@ function PlaygroundContent() {
   const [aiModelName, setAiModelName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [aiApiKey, setAiApiKey] = useState("");
+  const [aiBaseUrl, setAiBaseUrl] = useState("");
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [extraInputs, setExtraInputs] = useState<Record<string, any>>({});
@@ -132,6 +133,7 @@ function PlaygroundContent() {
       setProvider(found.provider || "");
       setAiModelName(found.externalModelName || "");
       setAiApiKey(found.externalApiKey || "");
+      setAiBaseUrl(found.externalBaseUrl || "");
 
       // Restore session data for this spec if present in sessionStorage
       if (typeof window !== "undefined") {
@@ -177,8 +179,9 @@ function PlaygroundContent() {
     setResult(null);
 
     const useExternalKey = activeSpec.useExternalApiKey ?? false;
-    const sendModelHeader = !useExternalKey || (checkedHeaders["X-AI-MODEL-NAME"] === true);
-    const sendKeyHeader   = !useExternalKey || (checkedHeaders["X-AI-API-KEY"] === true);
+    const sendModelHeader   = !useExternalKey || (checkedHeaders["X-AI-MODEL-NAME"] === true);
+    const sendKeyHeader     = !useExternalKey || (checkedHeaders["X-AI-API-KEY"] === true);
+    const sendBaseUrlHeader = !useExternalKey || (checkedHeaders["X-AI-BASE-URL"] === true);
 
     const currentSpecKey = activeSpec.id || specId;
 
@@ -193,6 +196,7 @@ function PlaygroundContent() {
         negativePrompt: negativePrompt || undefined,
         aiApiKey: sendKeyHeader ? (aiApiKey || undefined) : undefined,
         aiModelName: sendModelHeader ? (aiModelName || undefined) : undefined,
+        aiBaseUrl: sendBaseUrlHeader ? (aiBaseUrl || undefined) : undefined,
         data: extraInputs,
       });
       setResult(data);
@@ -357,6 +361,8 @@ function PlaygroundContent() {
             setApiKey={setApiKey}
             aiApiKey={aiApiKey}
             setAiApiKey={setAiApiKey}
+            aiBaseUrl={aiBaseUrl}
+            setAiBaseUrl={setAiBaseUrl}
             prompt={prompt}
             setPrompt={setPrompt}
             extraInputs={extraInputs}

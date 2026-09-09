@@ -43,6 +43,7 @@ export async function updateCallSpec(
     allowAdditionalPrompt?: boolean;
     useExternalApiKey?: boolean;
     externalModelName?: string;
+    externalBaseUrl?: string;
   }
 ): Promise<CallSpec> {
   const res = await fetch(`${PYTHON_API_URL}/internal/v1/specs/${specId}`, {
@@ -61,6 +62,8 @@ export async function updateCallSpec(
       allow_additional_prompt: payload.allowAdditionalPrompt,
       use_external_api_key: payload.useExternalApiKey,
       external_model_name: payload.externalModelName,
+      external_base_url: payload.externalBaseUrl,
+      externalBaseUrl: payload.externalBaseUrl,
     }),
   });
 
@@ -87,6 +90,7 @@ export async function createCallSpec(payload: {
   allowAdditionalPrompt?: boolean;
   useExternalApiKey?: boolean;
   externalModelName?: string;
+  externalBaseUrl?: string;
 }): Promise<CallSpec> {
   const res = await fetch(`${PYTHON_API_URL}/internal/v1/specs`, {
     method: "POST",
@@ -105,6 +109,8 @@ export async function createCallSpec(payload: {
       allow_additional_prompt: payload.allowAdditionalPrompt,
       use_external_api_key: payload.useExternalApiKey,
       external_model_name: payload.externalModelName,
+      external_base_url: payload.externalBaseUrl,
+      externalBaseUrl: payload.externalBaseUrl,
     }),
   });
 

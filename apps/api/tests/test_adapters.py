@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from callcraft_engine.adapters.factory import get_adapter
 from callcraft_engine.adapters.gemini import GeminiAdapter
 from callcraft_engine.adapters.openai import OpenAIAdapter
@@ -83,3 +83,106 @@ async def test_gemini_adapter_http_error_reporting():
             user_prompt="usr",
             api_key="invalid_test_key",
         )
+
+
+@pytest.mark.asyncio
+async def test_openai_adapter_custom_base_url_and_fallback():
+    adapter = OpenAIAdapter()
+    tool_schema = {"name": "extract_data", "parameters": {"properties": {"field": {"type": "string"}}}}
+    
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = {"content-type": "application/json"}
+    mock_resp.json.return_value = {
+        "choices": [{
+            "message": {
+                "tool_calls": [{
+                    "function": {
+                        "arguments": '{"field": "test_val"}'
+                    }
+                }]
+            }
+        }],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+    }
+
+    # Test with custom base_url (e.g. OpenRouter or local gateway)
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+        result, tokens = await adapter.execute_structured_extraction(
+            image_bytes=None,
+            mime_type=None,
+            tool_schema=tool_schema,
+            system_prompt=None,
+            user_prompt="Extract",
+            api_key="sk-test-key",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        assert result.get("field") == "test_val"
+        assert mock_post.call_args[0][0] == "https://openrouter.ai/api/v1/chat/completions"
+
+    # Test fallback to official provider URL when base_url is None
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+        result, tokens = await adapter.execute_structured_extraction(
+            image_bytes=None,
+            mime_type=None,
+            tool_schema=tool_schema,
+            system_prompt=None,
+            user_prompt="Extract",
+            api_key="sk-test-key",
+            base_url=None,
+        )
+        assert mock_post.call_args[0][0] == "https://api.openai.com/v1/chat/completions"
+
+
+@pytest.mark.asyncio
+async def test_gemini_adapter_custom_base_url_and_fallback():
+    adapter = GeminiAdapter()
+    tool_schema = {"name": "extract_data", "parameters": {"properties": {"field": {"type": "string"}}}}
+    
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = {"content-type": "application/json"}
+    mock_resp.json.return_value = {
+        "candidates": [{
+            "content": {
+                "parts": [{
+                    "functionCall": {
+                        "name": "extract_data",
+                        "args": {"field": "gemini_val"}
+                    }
+                }]
+            }
+        }],
+        "usageMetadata": {"promptTokenCount": 15, "candidatesTokenCount": 7},
+    }
+
+    # Test with custom base_url (third-party proxy)
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+        result, tokens = await adapter.execute_structured_extraction(
+            image_bytes=None,
+            mime_type=None,
+            tool_schema=tool_schema,
+            system_prompt=None,
+            user_prompt="Extract",
+            api_key="ai-gemini-key",
+            model_identifier="gemini-1.5-flash",
+            base_url="https://custom-proxy.internal/v1beta",
+        )
+        assert result.get("field") == "gemini_val"
+        assert mock_post.call_args[0][0] == "https://custom-proxy.internal/v1beta/models/gemini-1.5-flash:generateContent?key=ai-gemini-key"
+
+    # Test fallback to official Gemini URL when base_url is None
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+        result, tokens = await adapter.execute_structured_extraction(
+            image_bytes=None,
+            mime_type=None,
+            tool_schema=tool_schema,
+            system_prompt=None,
+            user_prompt="Extract",
+            api_key="ai-gemini-key",
+            model_identifier="gemini-1.5-flash",
+            base_url=None,
+        )
+        assert mock_post.call_args[0][0] == "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=ai-gemini-key"
+
+

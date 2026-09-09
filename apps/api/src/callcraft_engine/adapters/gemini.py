@@ -19,11 +19,20 @@ class GeminiAdapter(BaseAIAdapter):
         api_key: str,
         model_identifier: str = "gemini-1.5-flash",
         images: Optional[List[Tuple[bytes, str]]] = None,
+        base_url: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         if not api_key or not api_key.strip():
             raise ValueError("Google Gemini API Key is missing. Please configure a valid API key in settings or request header.")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_identifier}:generateContent?key={api_key}"
+        if base_url and base_url.strip():
+            cleaned_base = base_url.strip().rstrip("/")
+            if ":generateContent" in cleaned_base:
+                sep = "&" if "?" in cleaned_base else "?"
+                url = f"{cleaned_base}{sep}key={api_key}"
+            else:
+                url = f"{cleaned_base}/models/{model_identifier}:generateContent?key={api_key}"
+        else:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_identifier}:generateContent?key={api_key}"
 
         contents = []
         parts = []

@@ -81,6 +81,10 @@ async def init_db(session: AsyncSession) -> None:
             "ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS project_id VARCHAR(255);",
             "ALTER TABLE user_ai_providers ADD COLUMN IF NOT EXISTS project_id VARCHAR(255);",
             "ALTER TABLE call_specs ADD COLUMN IF NOT EXISTS project_id VARCHAR(255);",
+            "ALTER TABLE user_ai_providers ADD COLUMN IF NOT EXISTS base_url VARCHAR(500);",
+            "ALTER TABLE call_specs ADD COLUMN IF NOT EXISTS external_base_url VARCHAR(500);",
+            "ALTER TABLE call_spec_versions ADD COLUMN IF NOT EXISTS external_base_url VARCHAR(500);",
+            "ALTER TABLE playground_states ADD COLUMN IF NOT EXISTS ai_base_url VARCHAR(500);",
         ]
         for stmt in alter_statements:
             try:

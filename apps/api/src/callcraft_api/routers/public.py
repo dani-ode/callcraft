@@ -70,6 +70,7 @@ class CallRequestPayload(BaseModel):
     variables: Optional[Dict[str, Any]] = Field(default=None, description="Dynamic JSON context variables")
     ai_api_key: Optional[str] = Field(default=None, alias="aiApiKey", description="External AI API Key when external key mode is active")
     ai_model_name: Optional[str] = Field(default=None, alias="aiModelName", description="External AI Model Name when external key mode is active")
+    ai_base_url: Optional[str] = Field(default=None, alias="aiBaseUrl", description="External AI Base URL when third-party provider or custom proxy is used")
 
 
 @router.post("/call")
@@ -83,6 +84,7 @@ async def execute_callcraft(
     x_call_provider: Optional[str] = Header(None, alias="X-CALL-PROVIDER"),
     x_ai_api_key: Optional[str] = Header(None, alias="X-AI-API-KEY"),
     x_ai_model_name: Optional[str] = Header(None, alias="X-AI-MODEL-NAME"),
+    x_ai_base_url: Optional[str] = Header(None, alias="X-AI-BASE-URL"),
     x_call_show_prompt: Optional[str] = Header(None, alias="X-CALL-SHOW-PROMPT"),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ):
@@ -203,7 +205,9 @@ async def execute_callcraft(
     # 3. Model & AI Provider Resolution Flow from Database
     header_key = x_ai_api_key
     header_model = x_ai_model_name
+    header_base_url = (x_ai_base_url or payload.ai_base_url or "").strip() or None
     spec_model = cached_spec.get("externalModelName")
+    spec_base_url = cached_spec.get("externalBaseUrl")
     use_external_key = cached_spec.get("useExternalApiKey", True)
 
     active_model = header_model or spec_model
@@ -232,14 +236,20 @@ async def execute_callcraft(
 
     provider_code = model_info["providerCode"]
 
+    user_cred = await Repository.get_user_ai_provider_credentials(db, user_id, provider_code, project_id=spec_project_id)
+    user_ai_key = user_cred.get("apiKey") if user_cred else None
+    user_base_url = user_cred.get("baseUrl") if user_cred else None
+
     if active_model == "claude-fable-5.1":
         # This model is gateway-only. The adapter reads EXPLABS_API_KEY and refuses provider-key fallback.
         active_api_key = "experiential-gateway"
+        active_base_url = (header_base_url if use_external_key else None) or spec_base_url or user_base_url
     elif use_external_key and header_key:
         active_api_key = header_key
+        active_base_url = header_base_url or spec_base_url or user_base_url
     else:
-        user_ai_key = await Repository.get_user_ai_provider_key(db, user_id, provider_code, project_id=spec_project_id)
         active_api_key = user_ai_key or cached_spec.get("externalApiKey")
+        active_base_url = (header_base_url if (use_external_key and header_base_url) else None) or spec_base_url or user_base_url
 
     if not active_api_key:
         return create_error_response(
@@ -399,14 +409,14 @@ async def execute_callcraft(
     extra_fields = (payload.model_extra or {}) if hasattr(payload, "model_extra") else {}
     if extra_fields:
         for k, v in extra_fields.items():
-            if k in ("prompt", "negativePrompt", "negative_prompt", "variables", "ai_api_key", "ai_model_name", "image", "file", "pdf"):
+            if k in ("prompt", "negativePrompt", "negative_prompt", "variables", "ai_api_key", "ai_model_name", "ai_base_url", "aiApiKey", "aiModelName", "aiBaseUrl", "image", "file", "pdf"):
                 continue
             request_inputs[k] = v
 
     payload_data = getattr(payload, "data", None)
     if payload_data and isinstance(payload_data, dict):
         for k, v in payload_data.items():
-            if k in ("prompt", "negativePrompt", "negative_prompt", "variables", "ai_api_key", "ai_model_name", "image", "file", "pdf"):
+            if k in ("prompt", "negativePrompt", "negative_prompt", "variables", "ai_api_key", "ai_model_name", "ai_base_url", "aiApiKey", "aiModelName", "aiBaseUrl", "image", "file", "pdf"):
                 continue
             request_inputs[k] = v
 
@@ -516,6 +526,7 @@ async def execute_callcraft(
             user_prompt=full_user_prompt,
             api_key=active_api_key,
             model_identifier=active_model,
+            base_url=active_base_url,
         )
     except Exception as e:
         logger.error(f"AI Provider execution failed: {e}")

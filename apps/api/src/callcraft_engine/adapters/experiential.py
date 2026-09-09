@@ -26,6 +26,7 @@ class ExperientialAdapter(BaseAIAdapter):
         api_key: str,
         model_identifier: str = EXPERIENTIAL_MODEL_ID,
         images: Optional[List[Tuple[bytes, str]]] = None,
+        base_url: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         if model_identifier != EXPERIENTIAL_MODEL_ID:
             raise ValueError(
@@ -82,10 +83,16 @@ class ExperientialAdapter(BaseAIAdapter):
             "Content-Type": "application/json",
         }
 
+        if base_url and base_url.strip():
+            cleaned_base = base_url.strip().rstrip("/")
+            endpoint_url = cleaned_base if cleaned_base.endswith("/chat/completions") else f"{cleaned_base}/chat/completions"
+        else:
+            endpoint_url = f"{EXPERIENTIAL_BASE_URL}/chat/completions"
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{EXPERIENTIAL_BASE_URL}/chat/completions", json=payload, headers=headers
+                    endpoint_url, json=payload, headers=headers
                 )
         except httpx.RequestError as exc:
             raise ValueError(f"Network error connecting to Experiential gateway: {exc}") from exc

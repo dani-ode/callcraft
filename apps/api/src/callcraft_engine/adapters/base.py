@@ -14,6 +14,7 @@ class BaseAIAdapter(ABC):
         api_key: str,
         model_identifier: str,
         images: Optional[List[Tuple[bytes, str]]] = None,
+        base_url: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         """
         Executes structured JSON extraction.

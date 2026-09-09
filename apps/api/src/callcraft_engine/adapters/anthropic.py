@@ -19,11 +19,16 @@ class AnthropicAdapter(BaseAIAdapter):
         api_key: str,
         model_identifier: str = "claude-sonnet-5",
         images: Optional[List[Tuple[bytes, str]]] = None,
+        base_url: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, int]]:
         if not api_key or not api_key.strip():
             raise ValueError("Anthropic API Key is missing. Please configure a valid API key in settings or request header.")
 
-        url = "https://api.anthropic.com/v1/messages"
+        if base_url and base_url.strip():
+            cleaned_base = base_url.strip().rstrip("/")
+            url = cleaned_base if cleaned_base.endswith("/messages") else f"{cleaned_base}/messages"
+        else:
+            url = "https://api.anthropic.com/v1/messages"
 
         tools_list = tool_schema if isinstance(tool_schema, list) else [tool_schema]
         anthropic_tools = []

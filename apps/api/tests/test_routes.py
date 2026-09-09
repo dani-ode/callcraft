@@ -154,7 +154,7 @@ async def test_public_call_execution_header_and_spec_fallback():
                 res_content = data_fallback["data"]["primaryResult"]["content"] if isinstance(data_fallback["data"], dict) and "primaryResult" in data_fallback["data"] else data_fallback["data"]
                 assert res_content["name"] == "John Doe"
 
-                # 2. Hit with override headers
+                # 2. Hit with override headers including X-AI-BASE-URL
                 resp_override = await ac.post(
                     "/v1/call",
                     headers={
@@ -164,6 +164,7 @@ async def test_public_call_execution_header_and_spec_fallback():
                         "X-CALL-SPEC-ID": "ktp-parser",
                         "X-AI-API-KEY": "sk-user-custom-key-12345",
                         "X-AI-MODEL-NAME": "gpt-5.6-luna",
+                        "X-AI-BASE-URL": "https://custom-gateway.io/v1",
                     },
                     json={"prompt": "Extract name"}
                 )
@@ -171,6 +172,23 @@ async def test_public_call_execution_header_and_spec_fallback():
                 data_override = resp_override.json()
                 assert "openai" in data_override["data"]["humanReadableMessage"]
                 assert "gpt-5.6-luna" in data_override["data"]["humanReadableMessage"]
+                assert mock_adapter.execute_structured_extraction.call_args.kwargs["base_url"] == "https://custom-gateway.io/v1"
+
+                # 3. Hit with body aiBaseUrl
+                resp_body_url = await ac.post(
+                    "/v1/call",
+                    headers={
+                        "Authorization": "Bearer call_sk_valid_key",
+                        "X-USER-ID": "usr_test123",
+                        "X-CALL-PUBLIC-KEY": "pk_live_test_123",
+                        "X-CALL-SPEC-ID": "ktp-parser",
+                        "X-AI-API-KEY": "sk-user-custom-key-12345",
+                        "X-AI-MODEL-NAME": "gpt-5.6-luna",
+                    },
+                    json={"prompt": "Extract name", "aiBaseUrl": "https://payload-gateway.io/v1"}
+                )
+                assert resp_body_url.status_code == 200
+                assert mock_adapter.execute_structured_extraction.call_args.kwargs["base_url"] == "https://payload-gateway.io/v1"
         except Exception as exc:
             import traceback
             traceback.print_exc()

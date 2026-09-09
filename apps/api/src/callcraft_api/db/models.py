@@ -182,6 +182,7 @@ class UserAiProvider(Base):
     provider_id: Mapped[str] = mapped_column(VARCHAR(50), ForeignKey("ai_providers.id", ondelete="CASCADE"), nullable=False)
     encrypted_api_key: Mapped[str] = mapped_column(TEXT, nullable=False)
     key_nonce: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
+    base_url: Mapped[Optional[str]] = mapped_column(VARCHAR(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -277,6 +278,7 @@ class CallSpec(Base):
     use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     external_api_key: Mapped[Optional[str]] = mapped_column(TEXT)
     external_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
+    external_base_url: Mapped[Optional[str]] = mapped_column(VARCHAR(500), nullable=True)
     tools_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
 
     # Marketplace Publication status & link
@@ -312,6 +314,7 @@ class CallSpecVersion(Base):
     use_external_api_key: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
     external_api_key: Mapped[Optional[str]] = mapped_column(TEXT)
     external_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
+    external_base_url: Mapped[Optional[str]] = mapped_column(VARCHAR(500), nullable=True)
     tools_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -396,6 +399,7 @@ class PlaygroundState(Base):
     image_url: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
     ai_model_name: Mapped[Optional[str]] = mapped_column(VARCHAR(100), nullable=True)
     ai_api_key: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
+    ai_base_url: Mapped[Optional[str]] = mapped_column(VARCHAR(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

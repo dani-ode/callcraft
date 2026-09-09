@@ -23,6 +23,8 @@ interface ExecutionSettingsProps {
   setAllowAdditionalPrompt?: (val: boolean) => void;
   useExternalApiKey?: boolean;
   setUseExternalApiKey?: (val: boolean) => void;
+  externalBaseUrl?: string;
+  setExternalBaseUrl?: (val: string) => void;
   currentProviderStatus: { active: boolean; label: string };
 }
 
@@ -44,6 +46,8 @@ export function ExecutionSettings({
   setAllowAdditionalPrompt,
   useExternalApiKey = true,
   setUseExternalApiKey,
+  externalBaseUrl = "",
+  setExternalBaseUrl,
   currentProviderStatus,
 }: ExecutionSettingsProps) {
   const [dbModels, setDbModels] = useState<AiModelItem[]>([]);
@@ -179,6 +183,23 @@ export function ExecutionSettings({
               ))
             )}
           </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold opacity-90 flex items-center justify-between">
+            <span>Custom Base URL / Gateway (Optional)</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Proxy / OpenRouter</span>
+          </label>
+          <input
+            type="url"
+            value={externalBaseUrl}
+            onChange={(e) => setExternalBaseUrl?.(e.target.value)}
+            className="w-full mt-1 glass-panel border border-[#edd6bb]/25 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#e1b329]"
+            placeholder="e.g. https://api.groq.com/openai/v1 or https://openrouter.ai/api/v1"
+          />
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+            Kosongkan untuk menggunakan endpoint resmi provider AI secara langsung.
+          </p>
         </div>
 
         <div>

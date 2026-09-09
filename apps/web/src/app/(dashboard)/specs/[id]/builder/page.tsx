@@ -64,6 +64,7 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
   const [additionalPrompt, setAdditionalPrompt] = useState("");
   const [allowAdditionalPrompt, setAllowAdditionalPrompt] = useState(true);
   const [useExternalApiKey, setUseExternalApiKey] = useState(true);
+  const [externalBaseUrl, setExternalBaseUrl] = useState("");
   const [toolsConfig, setToolsConfig] = useState<ToolCallingConfig>({
     enabled: true,
     toolChoice: "auto",
@@ -123,6 +124,7 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
             allowAdditionalPrompt,
             useExternalApiKey,
             externalModelName: selectedModel,
+            externalBaseUrl,
           },
         };
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localExport, null, 2));
@@ -260,6 +262,11 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
         if (specObj.useExternalApiKey !== undefined) {
           setUseExternalApiKey(specObj.useExternalApiKey);
         }
+        if (specObj.externalBaseUrl !== undefined) {
+          setExternalBaseUrl(specObj.externalBaseUrl || "");
+        } else if ((specObj as any).external_base_url !== undefined) {
+          setExternalBaseUrl((specObj as any).external_base_url || "");
+        }
         if (specObj.externalModelName) {
           setSelectedModel(specObj.externalModelName);
         }
@@ -369,6 +376,7 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           allowAdditionalPrompt: allowAdditionalPrompt,
           useExternalApiKey: useExternalApiKey,
           externalModelName: selectedModel,
+          externalBaseUrl: externalBaseUrl || undefined,
         });
 
         setSaveSuccess(true);
@@ -389,6 +397,7 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           allowAdditionalPrompt: allowAdditionalPrompt,
           useExternalApiKey: useExternalApiKey,
           externalModelName: selectedModel,
+          externalBaseUrl: externalBaseUrl || undefined,
         });
 
         if (updatedSpec) {
@@ -400,6 +409,8 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           if (specObj.additionalPrompt !== undefined) setAdditionalPrompt(specObj.additionalPrompt || "");
           if (specObj.allowAdditionalPrompt !== undefined) setAllowAdditionalPrompt(specObj.allowAdditionalPrompt);
           if (specObj.useExternalApiKey !== undefined) setUseExternalApiKey(specObj.useExternalApiKey);
+          if (specObj.externalBaseUrl !== undefined) setExternalBaseUrl(specObj.externalBaseUrl || "");
+          else if (specObj.external_base_url !== undefined) setExternalBaseUrl(specObj.external_base_url || "");
           if (specObj.externalModelName) setSelectedModel(specObj.externalModelName);
 
           const resSchema = specObj.responseSchema;
@@ -694,6 +705,8 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
                 setNegativePrompt={setNegativePrompt}
                 useExternalApiKey={useExternalApiKey}
                 setUseExternalApiKey={setUseExternalApiKey}
+                externalBaseUrl={externalBaseUrl}
+                setExternalBaseUrl={setExternalBaseUrl}
                 currentProviderStatus={providerKeyStatus[getProviderFromModel(selectedModel)] || { active: true, label: "Provider Active" }}
               />
             ) : (

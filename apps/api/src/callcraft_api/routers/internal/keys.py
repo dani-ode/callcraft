@@ -1,7 +1,7 @@
 import httpx
 from typing import Optional
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from callcraft_api.db.repository import Repository
@@ -11,14 +11,20 @@ from callcraft_engine import validate_ip_or_cidr
 
 
 class SaveProviderKeyRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     provider: str = Field(..., description="Provider code: gemini, openai, anthropic, or deepseek")
-    api_key: str = Field(..., description="Raw AI Provider API key to encrypt and save")
-    project_id: Optional[str] = Field(None, description="Project this AI provider key belongs to")
+    api_key: str = Field(..., alias="apiKey", description="Raw AI Provider API key to encrypt and save")
+    project_id: Optional[str] = Field(None, alias="projectId", description="Project this AI provider key belongs to")
+    base_url: Optional[str] = Field(None, alias="baseUrl", description="Optional custom third-party base URL")
 
 
 class VerifyProviderKeyRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     provider: str = Field(..., description="Provider code: gemini, openai, anthropic, or deepseek")
-    api_key: str = Field(..., description="API key to verify against provider endpoint")
+    api_key: str = Field(..., alias="apiKey", description="API key to verify against provider endpoint")
+    base_url: Optional[str] = Field(None, alias="baseUrl", description="Optional custom third-party base URL")
 
 
 class CreateApiKeyRequest(BaseModel):
@@ -138,7 +144,12 @@ async def save_provider_key(
         raise HTTPException(status_code=400, detail="API Key cannot be empty")
 
     success = await Repository.save_user_ai_provider_key(
-        db=db, user_id=user_id, provider_code=provider, raw_api_key=key, project_id=payload.project_id
+        db=db,
+        user_id=user_id,
+        provider_code=provider,
+        raw_api_key=key,
+        project_id=payload.project_id,
+        base_url=payload.base_url,
     )
     if not success:
         raise HTTPException(status_code=400, detail=f"Invalid or unsupported AI provider code: '{provider}'")
@@ -170,6 +181,7 @@ async def list_system_providers(
 async def verify_provider_key(payload: VerifyProviderKeyRequest):
     provider = payload.provider.lower().strip()
     key = payload.api_key.strip()
+    custom_base = payload.base_url.strip().rstrip("/") if payload.base_url and payload.base_url.strip() else None
 
     if not key:
         raise HTTPException(status_code=400, detail="API Key cannot be empty")
@@ -177,19 +189,22 @@ async def verify_provider_key(payload: VerifyProviderKeyRequest):
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             if provider == "gemini":
-                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+                if custom_base:
+                    url = f"{custom_base}/models?key={key}"
+                else:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
                 resp = await client.get(url)
             elif provider == "openai":
-                url = "https://api.openai.com/v1/models"
+                url = f"{custom_base}/models" if custom_base else "https://api.openai.com/v1/models"
                 resp = await client.get(url, headers={"Authorization": f"Bearer {key}"})
             elif provider == "anthropic":
-                url = "https://api.anthropic.com/v1/models"
+                url = f"{custom_base}/models" if custom_base else "https://api.anthropic.com/v1/models"
                 resp = await client.get(url, headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
             elif provider in ("deepseek", "ocr"):
-                url = "https://api.deepseek.com/models"
+                url = f"{custom_base}/models" if custom_base else "https://api.deepseek.com/models"
                 resp = await client.get(url, headers={"Authorization": f"Bearer {key}"})
             elif provider == "mistral":
-                url = "https://api.mistral.ai/v1/models"
+                url = f"{custom_base}/models" if custom_base else "https://api.mistral.ai/v1/models"
                 resp = await client.get(url, headers={"Authorization": f"Bearer {key}"})
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")

@@ -27,8 +27,9 @@ class CreateSpecRequest(BaseModel):
     allow_additional_prompt: bool = Field(True, description="Allow request additional prompt")
     allow_pdf_input: bool = Field(True, description="Allow PDF input files")
     use_external_api_key: bool = Field(True, description="Allow external AI API Key & Model Name on request headers")
-    external_api_key: Optional[str] = Field(None)
-    external_model_name: Optional[str] = Field(None)
+    external_api_key: Optional[str] = Field(None, alias="externalApiKey")
+    external_model_name: Optional[str] = Field(None, alias="externalModelName")
+    external_base_url: Optional[str] = Field(None, alias="externalBaseUrl", description="Optional third-party / custom AI Provider Base URL")
     tools_config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Tool calling configuration JSON")
 
 
@@ -36,17 +37,18 @@ class UpdateSpecPayload(BaseModel):
     name: Optional[str] = Field(None)
     slug: Optional[str] = Field(None)
     description: Optional[str] = Field(None)
-    request_schema: Optional[Dict[str, Any]] = Field(None)
-    response_schema: Optional[Dict[str, Any]] = Field(None)
-    positive_prompt: Optional[str] = Field(None)
-    extraction_prompt: Optional[str] = Field(None)
-    negative_prompt: Optional[str] = Field(None)
-    additional_prompt: Optional[str] = Field(None)
-    allow_additional_prompt: Optional[bool] = Field(None)
-    use_external_api_key: Optional[bool] = Field(None)
-    external_model_name: Optional[str] = Field(None)
-    external_api_key: Optional[str] = Field(None)
-    tools_config: Optional[Dict[str, Any]] = Field(None)
+    request_schema: Optional[Dict[str, Any]] = Field(None, alias="requestSchema")
+    response_schema: Optional[Dict[str, Any]] = Field(None, alias="responseSchema")
+    positive_prompt: Optional[str] = Field(None, alias="positivePrompt")
+    extraction_prompt: Optional[str] = Field(None, alias="extractionPrompt")
+    negative_prompt: Optional[str] = Field(None, alias="negativePrompt")
+    additional_prompt: Optional[str] = Field(None, alias="additionalPrompt")
+    allow_additional_prompt: Optional[bool] = Field(None, alias="allowAdditionalPrompt")
+    use_external_api_key: Optional[bool] = Field(None, alias="useExternalApiKey")
+    external_model_name: Optional[str] = Field(None, alias="externalModelName")
+    external_api_key: Optional[str] = Field(None, alias="externalApiKey")
+    external_base_url: Optional[str] = Field(None, alias="externalBaseUrl")
+    tools_config: Optional[Dict[str, Any]] = Field(None, alias="toolsConfig")
 
 
 class UpdatePublicationRequest(BaseModel):
@@ -102,6 +104,7 @@ async def create_new_spec(
         use_external_api_key=payload.use_external_api_key,
         external_model_name=payload.external_model_name,
         external_api_key=payload.external_api_key,
+        external_base_url=payload.external_base_url,
         tools_config=payload.tools_config,
     )
     return spec
@@ -147,6 +150,7 @@ async def duplicate_spec(
         use_external_api_key=existing.get("useExternalApiKey", True),
         external_model_name=existing.get("externalModelName"),
         external_api_key=existing.get("externalApiKey"),
+        external_base_url=existing.get("externalBaseUrl"),
         tools_config=existing.get("toolsConfig"),
     )
     return new_spec
@@ -190,6 +194,7 @@ async def update_spec_by_id(
         use_external_api_key=payload.use_external_api_key,
         external_model_name=payload.external_model_name,
         external_api_key=payload.external_api_key,
+        external_base_url=payload.external_base_url,
         tools_config=payload.tools_config,
     )
     if not spec:
@@ -384,6 +389,7 @@ class SavePlaygroundStateRequest(BaseModel):
     imageUrl: Optional[str] = None
     aiModelName: Optional[str] = None
     aiApiKey: Optional[str] = None
+    aiBaseUrl: Optional[str] = None
 
 
 @router.get("/specs/{spec_id}/playground-state")
@@ -538,6 +544,7 @@ async def import_spec_json(
     use_ext_key = bool(cfg_obj.get("useExternalApiKey", raw_data.get("use_external_api_key", True)))
     ext_model = cfg_obj.get("externalModelName", raw_data.get("external_model_name"))
     ext_key = cfg_obj.get("externalApiKey", raw_data.get("external_api_key"))
+    ext_base = cfg_obj.get("externalBaseUrl", raw_data.get("external_base_url"))
 
     target_project_id = project_id or raw_data.get("projectId") or raw_data.get("project_id")
 
@@ -563,6 +570,7 @@ async def import_spec_json(
             use_external_api_key=use_ext_key,
             external_model_name=ext_model,
             external_api_key=ext_key,
+            external_base_url=ext_base,
             tools_config=tools_cfg,
         )
         await redis_service.delete_spec(user_id, spec_id)
@@ -598,6 +606,7 @@ async def import_spec_json(
             use_external_api_key=use_ext_key,
             external_model_name=ext_model,
             external_api_key=ext_key,
+            external_base_url=ext_base,
             tools_config=tools_cfg,
         )
         return {
@@ -688,6 +697,8 @@ async def update_spec_section(
             update_kwargs["external_model_name"] = payload["externalModelName"]
         if "externalApiKey" in payload:
             update_kwargs["external_api_key"] = payload["externalApiKey"]
+        if "externalBaseUrl" in payload or "external_base_url" in payload:
+            update_kwargs["external_base_url"] = payload.get("externalBaseUrl") or payload.get("external_base_url")
     else:
         raise HTTPException(
             status_code=400,

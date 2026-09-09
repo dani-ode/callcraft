@@ -29,6 +29,7 @@ export async function executeCallcraftApi(payload: {
   negativePrompt?: string;
   aiApiKey?: string;
   aiModelName?: string;
+  aiBaseUrl?: string;
   data?: Record<string, any>;
 }): Promise<any> {
   const cleanApiKey = sanitizeHeaderValue(payload.apiKey);
@@ -37,6 +38,7 @@ export async function executeCallcraftApi(payload: {
   const cleanProvider = sanitizeHeaderValue(payload.provider);
   const cleanAiApiKey = sanitizeHeaderValue(payload.aiApiKey);
   const cleanAiModelName = sanitizeHeaderValue(payload.aiModelName);
+  const cleanAiBaseUrl = sanitizeHeaderValue(payload.aiBaseUrl);
 
   if (!cleanPublicKey) {
     throw new Error("Public Key wajib dipilih sebelum menjalankan eksekusi. Pilih API Key pada tab Headers.");
@@ -61,6 +63,9 @@ export async function executeCallcraftApi(payload: {
   if (cleanAiModelName) {
     headers["X-AI-MODEL-NAME"] = cleanAiModelName;
   }
+  if (cleanAiBaseUrl) {
+    headers["X-AI-BASE-URL"] = cleanAiBaseUrl;
+  }
 
   const reqBody: Record<string, any> = {
     ...(payload.data || {}),
@@ -70,8 +75,9 @@ export async function executeCallcraftApi(payload: {
   if (payload.pdf) reqBody.pdf = payload.pdf;
   if (payload.prompt) reqBody.prompt = payload.prompt;
   if (payload.negativePrompt) reqBody.negativePrompt = payload.negativePrompt;
-  if (payload.aiApiKey) reqBody.ai_api_key = payload.aiApiKey;
-  if (payload.aiModelName) reqBody.ai_model_name = payload.aiModelName;
+  if (payload.aiApiKey) reqBody.aiApiKey = payload.aiApiKey;
+  if (payload.aiModelName) reqBody.aiModelName = payload.aiModelName;
+  if (payload.aiBaseUrl) reqBody.aiBaseUrl = payload.aiBaseUrl;
 
   const res = await fetch(`${PYTHON_API_URL}/v1/call`, {
     method: "POST",
@@ -113,6 +119,7 @@ export interface PlaygroundStateData {
   imageUrl?: string | null;
   aiModelName?: string | null;
   aiApiKey?: string | null;
+  aiBaseUrl?: string | null;
   updatedAt?: string;
 }
 

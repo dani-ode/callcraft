@@ -41,6 +41,8 @@ interface ProviderConfig {
   code: string;
   name: string;
   key: string;
+  baseUrl: string;
+  defaultBaseUrl?: string;
   getKeyUrl: string;
   isActive: boolean;
   testStatus: "idle" | "testing" | "success" | "error";
@@ -53,6 +55,8 @@ const INITIAL_PROVIDERS_STATE: Record<string, ProviderConfig> = {
     code: "gemini",
     name: "Google Gemini AI",
     key: "",
+    baseUrl: "",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
     getKeyUrl: "https://aistudio.google.com/app/apikey",
     isActive: false,
     testStatus: "idle",
@@ -62,6 +66,8 @@ const INITIAL_PROVIDERS_STATE: Record<string, ProviderConfig> = {
     code: "openai",
     name: "OpenAI",
     key: "",
+    baseUrl: "",
+    defaultBaseUrl: "https://api.openai.com/v1",
     getKeyUrl: "https://platform.openai.com/api-keys",
     isActive: false,
     testStatus: "idle",
@@ -71,6 +77,8 @@ const INITIAL_PROVIDERS_STATE: Record<string, ProviderConfig> = {
     code: "anthropic",
     name: "Anthropic Claude",
     key: "",
+    baseUrl: "",
+    defaultBaseUrl: "https://api.anthropic.com/v1",
     getKeyUrl: "https://console.anthropic.com/settings/keys",
     isActive: false,
     testStatus: "idle",
@@ -80,6 +88,8 @@ const INITIAL_PROVIDERS_STATE: Record<string, ProviderConfig> = {
     code: "deepseek",
     name: "DeepSeek AI",
     key: "",
+    baseUrl: "",
+    defaultBaseUrl: "https://api.deepseek.com",
     getKeyUrl: "https://platform.deepseek.com/api_keys",
     isActive: false,
     testStatus: "idle",
@@ -173,6 +183,7 @@ export default function ApiKeysPage() {
                 updated[code] = {
                   ...updated[code],
                   key: p.key || "",
+                  baseUrl: p.baseUrl || "",
                   isActive: p.isActive,
                   saved: true,
                   testStatus: "success",
@@ -354,6 +365,13 @@ export default function ApiKeysPage() {
     }));
   };
 
+  const handleBaseUrlChange = (code: string, value: string) => {
+    setProviders((prev) => ({
+      ...prev,
+      [code]: { ...prev[code], baseUrl: value, saved: false, testStatus: "idle" },
+    }));
+  };
+
   const handleToggleActive = async (code: string) => {
     const prov = providers[code];
     const newStatus = !prov.isActive;
@@ -363,7 +381,12 @@ export default function ApiKeysPage() {
     }));
 
     if (prov.key) {
-      await saveProviderApiKey({ provider: code, apiKey: prov.key, projectId: activeProject?.id });
+      await saveProviderApiKey({
+        provider: code,
+        apiKey: prov.key,
+        baseUrl: prov.baseUrl,
+        projectId: activeProject?.id,
+      });
     }
   };
 
@@ -377,8 +400,17 @@ export default function ApiKeysPage() {
     }));
 
     try {
-      const res = await verifyProviderApiKey({ provider: code, apiKey: prov.key });
-      await saveProviderApiKey({ provider: code, apiKey: prov.key, projectId: activeProject?.id });
+      const res = await verifyProviderApiKey({
+        provider: code,
+        apiKey: prov.key,
+        baseUrl: prov.baseUrl,
+      });
+      await saveProviderApiKey({
+        provider: code,
+        apiKey: prov.key,
+        baseUrl: prov.baseUrl,
+        projectId: activeProject?.id,
+      });
 
       setProviders((prev) => ({
         ...prev,
@@ -727,6 +759,26 @@ export default function ApiKeysPage() {
                         <span className="font-extrabold">{prov.testStatus === "testing" ? "Testing..." : "Test Connection"}</span>
                       </button>
                     </div>
+                  </div>
+
+                  {/* Custom Base URL / Third-Party Proxy Input (Optional) */}
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold opacity-80 flex items-center gap-1.5">
+                        <Globe className="w-3 h-3 text-[#e1b329]" />
+                        <span>Custom Base URL / Third-Party Gateway (Optional)</span>
+                      </label>
+                      <span className="text-[10px] opacity-60">
+                        Leave blank to use default provider endpoint
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={prov.baseUrl}
+                      onChange={(e) => handleBaseUrlChange(prov.code, e.target.value)}
+                      className="w-full glass-panel border border-[#edd6bb]/25 rounded-xl px-3.5 py-2 text-xs font-mono focus:outline-none focus:border-[#e1b329]"
+                      placeholder={`Default: ${prov.defaultBaseUrl || "Official Provider Endpoint"}`}
+                    />
                   </div>
 
                   {prov.testStatus !== "idle" && prov.testMessage && (

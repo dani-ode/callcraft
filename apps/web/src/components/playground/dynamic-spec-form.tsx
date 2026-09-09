@@ -49,6 +49,8 @@ interface DynamicSpecFormProps {
   setApiKey: (k: string) => void;
   aiApiKey: string;
   setAiApiKey: (k: string) => void;
+  aiBaseUrl?: string;
+  setAiBaseUrl?: (u: string) => void;
   prompt: string;
   setPrompt: (p: string) => void;
   extraInputs: Record<string, any>;
@@ -81,6 +83,8 @@ export function DynamicSpecForm({
   setApiKey,
   aiApiKey,
   setAiApiKey,
+  aiBaseUrl = "",
+  setAiBaseUrl,
   prompt,
   setPrompt,
   extraInputs,
@@ -186,6 +190,9 @@ export function DynamicSpecForm({
         if (state.aiApiKey !== undefined && state.aiApiKey !== null) {
           setAiApiKey(state.aiApiKey);
         }
+        if (state.aiBaseUrl !== undefined && state.aiBaseUrl !== null && setAiBaseUrl) {
+          setAiBaseUrl(state.aiBaseUrl);
+        }
         if (state.selectedCredentialId) {
           setSelectedKeyId(state.selectedCredentialId);
           if (state.publicKey) {
@@ -211,6 +218,7 @@ export function DynamicSpecForm({
         prompt: prompt,
         aiModelName: aiModelName,
         aiApiKey: aiApiKey,
+        aiBaseUrl: aiBaseUrl,
       });
       setSaveSuccessMsg("Playground state berhasil disimpan di Database!");
       setTimeout(() => setSaveSuccessMsg(null), 4000);
@@ -241,7 +249,7 @@ export function DynamicSpecForm({
   }, [checkedState]);
 
   const isChecked = (key: string) => {
-    if (key === "X-AI-MODEL-NAME" || key === "X-AI-API-KEY") {
+    if (key === "X-AI-MODEL-NAME" || key === "X-AI-API-KEY" || key === "X-AI-BASE-URL") {
       return checkedState[key] ?? false;
     }
     return checkedState[key] ?? true;
@@ -284,6 +292,9 @@ export function DynamicSpecForm({
     }
     if (isChecked("X-AI-API-KEY") && aiApiKey) {
       curlHeaderLines.push(`  -H "X-AI-API-KEY: ${aiApiKey}"`);
+    }
+    if (isChecked("X-AI-BASE-URL") && aiBaseUrl) {
+      curlHeaderLines.push(`  -H "X-AI-BASE-URL: ${aiBaseUrl}"`);
     }
   }
 
@@ -412,6 +423,8 @@ export function DynamicSpecForm({
             setAiModelName={setAiModelName}
             aiApiKey={aiApiKey}
             setAiApiKey={setAiApiKey}
+            aiBaseUrl={aiBaseUrl}
+            setAiBaseUrl={setAiBaseUrl}
           />
         )}
 
