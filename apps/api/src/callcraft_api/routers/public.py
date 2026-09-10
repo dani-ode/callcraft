@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import ulid
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,10 +53,347 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client and request.client.host else "127.0.0.1"
 
 
+async def authenticate_customer_credential(
+    request: Request,
+    authorization: Optional[str],
+    x_user_id: Optional[str],
+    x_call_public_key: Optional[str],
+    db: Optional[AsyncSession],
+    request_id: str,
+    start_time: float,
+) -> Tuple[Optional[Dict[str, Any]], Optional[JSONResponse]]:
+    """Strictly authenticates customer API credentials (Bearer secret + public key + user ID) with IP whitelisting."""
+    if not x_user_id or not x_user_id.strip():
+        return None, create_error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="MISSING_USER_ID",
+            message="Header 'X-USER-ID' wajib diisi untuk verifikasi identitas user",
+            actionable_step="Sertakan header 'X-USER-ID: <user_id>' pada request API Anda.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    user_id = x_user_id.strip()
+
+    if not authorization or not authorization.startswith("Bearer "):
+        return None, create_error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            error_code="UNAUTHORIZED_MISSING_TOKEN",
+            message="Bearer API key tidak ditemukan dalam header Authorization",
+            actionable_step="Sertakan header 'Authorization: Bearer <secret_key>' dalam request API Anda.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    if not x_call_public_key or not x_call_public_key.strip():
+        return None, create_error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="MISSING_PUBLIC_KEY",
+            message="Header 'X-CALL-PUBLIC-KEY' wajib diisi untuk verifikasi identitas API Key",
+            actionable_step="Sertakan header 'X-CALL-PUBLIC-KEY: pk_live_...' pada request API Anda.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    secret_key = authorization.replace("Bearer ", "").strip()
+    cred = await Repository.verify_api_credential(
+        db, secret_key, public_key=x_call_public_key.strip(), user_id=user_id
+    )
+
+    if not cred:
+        return None, create_error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            error_code="INVALID_API_KEY",
+            message="Kunci API (Public Key / Secret Key) tidak valid, tidak cocok, atau telah dicabut",
+            actionable_step="Gunakan pasangan Public Key dan Secret Key aktif dari akun Anda.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    client_ip = get_client_ip(request)
+    if cred and cred.get("ip_whitelist"):
+        allowed = is_ip_allowed(client_ip, cred.get("ip_whitelist"))
+        if not allowed:
+            logger.warning(
+                f"Rejected API request from IP '{client_ip}' for key ID '{cred.get('id')}' (Not whitelisted)"
+            )
+            return None, create_error_response(
+                status_code=status.HTTP_403_FORBIDDEN,
+                error_code="IP_NOT_WHITELISTED",
+                message=f"Akses ditolak: IP Client '{client_ip}' tidak terdaftar di IP Whitelist API Key ini",
+                details=[{"field": "client_ip", "issue": client_ip}],
+                actionable_step="Tambahkan IP server Anda ke daftar IP Whitelist API Key di dashboard.",
+                request_id=request_id,
+                start_time=start_time,
+            )
+
+    if cred and "user_id" not in cred:
+        cred["user_id"] = user_id
+
+    return cred, None
+
+
+def extract_prompt_placeholders(prompt_texts: List[Optional[str]]) -> List[str]:
+    """Extracts dynamic mustache-style {{variable}} placeholder keys from prompt strings."""
+    seen = set()
+    result = []
+    for text in prompt_texts:
+        if not text:
+            continue
+        matches = re.findall(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", text)
+        for m in matches:
+            if m not in seen:
+                seen.add(m)
+                result.append(m)
+    return result
+
+
+async def _get_single_spec_response(
+    db: Optional[AsyncSession],
+    user_id: str,
+    spec_id_or_slug: str,
+    cred_project_id: Optional[str],
+    request_id: str,
+    start_time: float,
+) -> JSONResponse:
+    """Helper returning a standardized spec detail response with extracted prompt variables and input requirements."""
+    spec = await Repository.get_call_spec(db, user_id, spec_id_or_slug)
+    if not spec:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="SPEC_NOT_FOUND",
+            message=f"Callcraft Spec '{spec_id_or_slug}' tidak ditemukan untuk user '{user_id}'",
+            details=[{"field": "spec_id", "issue": spec_id_or_slug}],
+            actionable_step="Pastikan ID atau slug spec sesuai dengan yang dibuat di dashboard.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    spec_project_id = spec.get("projectId")
+    if cred_project_id and spec_project_id and cred_project_id != spec_project_id:
+        return create_error_response(
+            status_code=status.HTTP_403_FORBIDDEN,
+            error_code="PROJECT_MISMATCH",
+            message="Akses Ditolak: Kunci API yang Anda gunakan terikat dengan project yang berbeda dari Call Spec ini.",
+            details=[{"cred_project_id": cred_project_id, "spec_project_id": spec_project_id}],
+            actionable_step="Gunakan API Key yang terdaftar pada project yang sama dengan Call Spec yang diminta.",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    prompt_texts = [
+        spec.get("positivePrompt"),
+        spec.get("negativePrompt"),
+        spec.get("additionalPrompt"),
+    ]
+    prompt_variables = extract_prompt_placeholders(prompt_texts)
+
+    required_inputs = ["image", "file"]
+    if spec.get("allowPdfInput"):
+        required_inputs.append("pdf")
+
+    spec_data = dict(spec)
+    spec_data["promptVariables"] = prompt_variables
+    spec_data["requiredInputs"] = required_inputs
+    spec_data["executionEndpoint"] = "/v1/call"
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "meta": {
+                "requestId": request_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "completed",
+                "apiVersion": "v1.0",
+            },
+            "data": spec_data,
+        },
+    )
+
+
 from callcraft_api.services.execution_service import (
     build_execution_trace_steps,
     parse_dict_to_field_def,
 )
+
+
+@router.get("/projects")
+async def list_customer_projects(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
+    x_call_public_key: Optional[str] = Header(None, alias="X-CALL-PUBLIC-KEY"),
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    """Lists all active projects accessible to the caller's credentials for workflow automation (n8n, Langflow)."""
+    start_time = time.time()
+    request_id = f"req_{str(ulid.new())}"
+
+    cred, err_resp = await authenticate_customer_credential(
+        request=request,
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_call_public_key=x_call_public_key,
+        db=db,
+        request_id=request_id,
+        start_time=start_time,
+    )
+    if err_resp or not cred:
+        return err_resp or create_error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            error_code="UNAUTHORIZED_MISSING_TOKEN",
+            message="Kredensial API tidak valid",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    user_id = str(cred.get("user_id") or (x_user_id or "").strip())
+    cred_project_id = cred.get("project_id")
+
+    if cred_project_id:
+        proj = await Repository.get_project(db, cred_project_id, user_id)
+        projects = [proj] if proj else []
+    else:
+        projects = await Repository.list_projects(db, user_id)
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "meta": {
+                "requestId": request_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "completed",
+                "apiVersion": "v1.0",
+            },
+            "data": projects,
+        },
+    )
+
+
+@router.get("/specs")
+async def list_or_get_customer_specs(
+    request: Request,
+    project_id: Optional[str] = Query(None, alias="projectId"),
+    project_id_snake: Optional[str] = Query(None, alias="project_id"),
+    spec_id: Optional[str] = Query(None, alias="specId"),
+    spec_id_snake: Optional[str] = Query(None, alias="spec_id"),
+    slug: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
+    x_call_public_key: Optional[str] = Header(None, alias="X-CALL-PUBLIC-KEY"),
+    x_call_spec_id: Optional[str] = Header(None, alias="X-CALL-SPEC-ID"),
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    """Lists Call Specs or retrieves single spec details based on query parameters or headers."""
+    start_time = time.time()
+    request_id = f"req_{str(ulid.new())}"
+
+    cred, err_resp = await authenticate_customer_credential(
+        request=request,
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_call_public_key=x_call_public_key,
+        db=db,
+        request_id=request_id,
+        start_time=start_time,
+    )
+    if err_resp or not cred:
+        return err_resp or create_error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            error_code="UNAUTHORIZED_MISSING_TOKEN",
+            message="Kredensial API tidak valid",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    user_id = str(cred.get("user_id") or (x_user_id or "").strip())
+    target_spec_id = spec_id or spec_id_snake or slug or x_call_spec_id
+    target_project_id = project_id or project_id_snake
+    cred_project_id = cred.get("project_id")
+
+    # Enforce strict Project Isolation if API Key is project-scoped
+    if cred_project_id:
+        if target_project_id and target_project_id != cred_project_id:
+            return create_error_response(
+                status_code=status.HTTP_403_FORBIDDEN,
+                error_code="PROJECT_MISMATCH",
+                message="Akses Ditolak: Kunci API yang Anda gunakan terikat dengan project yang berbeda.",
+                details=[{"cred_project_id": cred_project_id, "requested_project_id": target_project_id}],
+                actionable_step="Gunakan API Key yang terdaftar pada project yang diminta atau hapus filter project_id.",
+                request_id=request_id,
+                start_time=start_time,
+            )
+        target_project_id = cred_project_id
+
+    # If spec identifier is provided, return single spec detail
+    if target_spec_id:
+        return await _get_single_spec_response(
+            db=db,
+            user_id=user_id,
+            spec_id_or_slug=target_spec_id,
+            cred_project_id=cred_project_id,
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    # Otherwise return list of specs for user / project
+    specs = await Repository.list_call_specs(db, user_id, project_id=target_project_id)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "meta": {
+                "requestId": request_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "completed",
+                "apiVersion": "v1.0",
+            },
+            "data": specs,
+        },
+    )
+
+
+@router.get("/specs/{spec_id_or_slug}")
+async def get_customer_spec_by_path(
+    spec_id_or_slug: str,
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
+    x_call_public_key: Optional[str] = Header(None, alias="X-CALL-PUBLIC-KEY"),
+    db: Optional[AsyncSession] = Depends(get_db_session),
+):
+    """Retrieves full Call Spec details and input schema by path parameter."""
+    start_time = time.time()
+    request_id = f"req_{str(ulid.new())}"
+
+    cred, err_resp = await authenticate_customer_credential(
+        request=request,
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_call_public_key=x_call_public_key,
+        db=db,
+        request_id=request_id,
+        start_time=start_time,
+    )
+    if err_resp or not cred:
+        return err_resp or create_error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            error_code="UNAUTHORIZED_MISSING_TOKEN",
+            message="Kredensial API tidak valid",
+            request_id=request_id,
+            start_time=start_time,
+        )
+
+    user_id = str(cred.get("user_id") or (x_user_id or "").strip())
+    cred_project_id = cred.get("project_id")
+
+    return await _get_single_spec_response(
+        db=db,
+        user_id=user_id,
+        spec_id_or_slug=spec_id_or_slug,
+        cred_project_id=cred_project_id,
+        request_id=request_id,
+        start_time=start_time,
+    )
 
 
 class CallRequestPayload(BaseModel):
@@ -92,71 +429,26 @@ async def execute_callcraft(
     request_id = f"req_{str(ulid.new())}"
     trace_id = f"trc_{str(ulid.new())[:12]}"
 
-    if not x_user_id or not x_user_id.strip():
-        return create_error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            error_code="MISSING_USER_ID",
-            message="Header 'X-USER-ID' wajib diisi untuk verifikasi identitas user",
-            actionable_step="Sertakan header 'X-USER-ID: <user_id>' pada request API Anda.",
-            request_id=request_id,
-            start_time=start_time,
-        )
-
-    user_id = x_user_id.strip()
-
-    should_show_prompt = bool(x_call_show_prompt and x_call_show_prompt.strip().lower() == "true")
-
-    # 1. Authenticate Bearer API Key dynamically against DB credentials (STRICT - NO FALLBACKS)
-    if not authorization or not authorization.startswith("Bearer "):
-        return create_error_response(
+    cred, err_resp = await authenticate_customer_credential(
+        request=request,
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_call_public_key=x_call_public_key,
+        db=db,
+        request_id=request_id,
+        start_time=start_time,
+    )
+    if err_resp or not cred:
+        return err_resp or create_error_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
             error_code="UNAUTHORIZED_MISSING_TOKEN",
-            message="Bearer API key tidak ditemukan dalam header Authorization",
-            actionable_step="Sertakan header 'Authorization: Bearer <secret_key>' dalam request API Anda.",
+            message="Kredensial API tidak valid",
             request_id=request_id,
             start_time=start_time,
         )
 
-    if not x_call_public_key or not x_call_public_key.strip():
-        return create_error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            error_code="MISSING_PUBLIC_KEY",
-            message="Header 'X-CALL-PUBLIC-KEY' wajib diisi untuk verifikasi identitas API Key",
-            actionable_step="Sertakan header 'X-CALL-PUBLIC-KEY: pk_live_...' pada request API Anda.",
-            request_id=request_id,
-            start_time=start_time,
-        )
-
-    secret_key = authorization.replace("Bearer ", "").strip()
-    cred = await Repository.verify_api_credential(
-        db, secret_key, public_key=x_call_public_key.strip(), user_id=user_id
-    )
-
-    if not cred:
-        return create_error_response(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            error_code="INVALID_API_KEY",
-            message="Kunci API (Public Key / Secret Key) tidak valid, tidak cocok, atau telah dicabut",
-            actionable_step="Gunakan pasangan Public Key dan Secret Key aktif dari akun Anda.",
-            request_id=request_id,
-            start_time=start_time,
-        )
-
-    # 1b. Enforce IP Whitelist authorization if configured on credential
-    client_ip = get_client_ip(request)
-    if cred and cred.get("ip_whitelist"):
-        allowed = is_ip_allowed(client_ip, cred.get("ip_whitelist"))
-        if not allowed:
-            logger.warning(f"Rejected API request from IP '{client_ip}' for key ID '{cred.get('id')}' (Not whitelisted)")
-            return create_error_response(
-                status_code=status.HTTP_403_FORBIDDEN,
-                error_code="IP_NOT_WHITELISTED",
-                message=f"Akses ditolak: IP Client '{client_ip}' tidak terdaftar di IP Whitelist API Key ini",
-                details=[{"field": "client_ip", "issue": client_ip}],
-                actionable_step="Tambahkan IP server Anda ke daftar IP Whitelist API Key di dashboard.",
-                request_id=request_id,
-                start_time=start_time,
-            )
+    user_id = str(cred.get("user_id") or (x_user_id or "").strip())
+    should_show_prompt = bool(x_call_show_prompt and x_call_show_prompt.strip().lower() == "true")
 
     # 2. Fetch Call Spec (Redis Cache -> DB Repo)
     spec_slug = x_call_spec_id
@@ -336,7 +628,8 @@ async def execute_callcraft(
 
     # Resolve configured Tool Name and Agent Name from "Tool Calling & Multi-Agent Execution Configuration"
     tools_cfg = cached_spec.get("tools_config") or cached_spec.get("toolsConfig") or {}
-    tools_list = tools_cfg.get("tools") if isinstance(tools_cfg.get("tools"), list) else []
+    raw_tools = tools_cfg.get("tools")
+    tools_list: List[Dict[str, Any]] = [t for t in raw_tools if isinstance(t, dict)] if isinstance(raw_tools, list) else []
 
     configured_tool_name = None
     configured_tool_desc = None
@@ -344,12 +637,13 @@ async def execute_callcraft(
 
     if tools_list:
         first_tool = tools_list[0]
-        if isinstance(first_tool, dict) and first_tool.get("name"):
-            configured_tool_name = first_tool.get("name").strip()
+        if isinstance(first_tool, dict):
+            if first_tool.get("name"):
+                configured_tool_name = str(first_tool.get("name") or "").strip()
             if first_tool.get("description"):
-                configured_tool_desc = first_tool.get("description").strip()
+                configured_tool_desc = str(first_tool.get("description") or "").strip()
             if first_tool.get("agentRole"):
-                configured_agent_name = first_tool.get("agentRole").strip()
+                configured_agent_name = str(first_tool.get("agentRole") or "").strip()
 
     if not configured_tool_name:
         slug_name = (cached_spec.get("slug") or "").replace("-", "_").strip()
@@ -368,8 +662,9 @@ async def execute_callcraft(
             if isinstance(t, dict) and t.get("name"):
                 tn = str(t.get("name")).strip()
                 td = str(t.get("description") or f"Extract structured data for {tn}").strip()
-                ctx = t.get("context") if isinstance(t.get("context"), dict) else {}
-                ctx_imgs = t.get("imagesContext") or ctx.get("imagesContext") or []
+                ctx = t.get("context")
+                ctx_dict = ctx if isinstance(ctx, dict) else {}
+                ctx_imgs = t.get("imagesContext") or ctx_dict.get("imagesContext") or []
                 if ctx_imgs and isinstance(ctx_imgs, list) and len(ctx_imgs) > 0:
                     td += f" [Multimodal Reference Image Context: {len(ctx_imgs)} sample documents attached]"
                 ts = generate_ai_tool_schema(tn, td, response_schema_obj)

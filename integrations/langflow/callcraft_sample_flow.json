@@ -1,0 +1,90 @@
+{
+  "name": "Callcraft AI Document Processing Flow",
+  "description": "Langflow pipeline utilizing Callcraft Component to extract structured data from invoices, IDs, and documents",
+  "data": {
+    "nodes": [
+      {
+        "id": "callcraft-node-1",
+        "type": "genericNode",
+        "position": {
+          "x": 300,
+          "y": 200
+        },
+        "data": {
+          "node": {
+            "template": {
+              "base_url": {
+                "type": "str",
+                "value": "http://localhost:8081"
+              },
+              "user_id": {
+                "type": "str",
+                "value": "usr_01HZX89ABCDEF1234567890XY"
+              },
+              "public_key": {
+                "type": "str",
+                "value": "pk_live_sample12345"
+              },
+              "secret_key": {
+                "type": "str",
+                "value": "call_sk_live_sample67890"
+              },
+              "project_id": {
+                "type": "str",
+                "value": ""
+              },
+              "spec_id": {
+                "type": "str",
+                "value": "ktp-reader"
+              },
+              "document_input": {
+                "type": "str",
+                "value": "https://raw.githubusercontent.com/callcraft/callcraft/main/docs/assets/sample-ktp.jpg"
+              },
+              "custom_prompt": {
+                "type": "str",
+                "value": "Ekstrak seluruh field dengan presisi tinggi"
+              },
+              "variables": {
+                "type": "dict",
+                "value": {}
+              }
+            },
+            "description": "Connects to Callcraft to list projects, fetch specs, and execute AI document & schema extraction",
+            "display_name": "Callcraft AI Spec Execution"
+          },
+          "type": "CallcraftComponent"
+        }
+      },
+      {
+        "id": "chat-output-node-2",
+        "type": "genericNode",
+        "position": {
+          "x": 750,
+          "y": 200
+        },
+        "data": {
+          "node": {
+            "template": {
+              "input_value": {
+                "type": "str",
+                "value": ""
+              }
+            },
+            "description": "Displays extracted result in chat interface",
+            "display_name": "Chat Output"
+          },
+          "type": "ChatOutput"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "callcraft-node-1",
+        "sourceHandle": "result_message",
+        "target": "chat-output-node-2",
+        "targetHandle": "input_value"
+      }
+    ]
+  }
+}

@@ -96,6 +96,27 @@ export default function McpServerPage() {
     },
   };
 
+  const restWorkflowSnippet = `# 1. Get List of Projects
+curl -X GET "${baseUrl}/v1/projects" \\
+  -H "X-USER-ID: ${activeUserId}" \\
+  -H "X-CALL-PUBLIC-KEY: <YOUR_PUBLIC_KEY>" \\
+  -H "Authorization: Bearer <YOUR_SECRET_KEY>"
+
+# 2. Get List of Specs by Project
+curl -X GET "${baseUrl}/v1/specs?projectId=prj_01HZX..." \\
+  -H "X-USER-ID: ${activeUserId}" \\
+  -H "X-CALL-PUBLIC-KEY: <YOUR_PUBLIC_KEY>" \\
+  -H "Authorization: Bearer <YOUR_SECRET_KEY>"
+
+# 3. Execute Call Spec (POST /v1/call)
+curl -X POST "${baseUrl}/v1/call" \\
+  -H "X-USER-ID: ${activeUserId}" \\
+  -H "X-CALL-PUBLIC-KEY: <YOUR_PUBLIC_KEY>" \\
+  -H "Authorization: Bearer <YOUR_SECRET_KEY>" \\
+  -H "X-CALL-SPEC-ID: ktp-reader" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file": "https://example.com/invoice.pdf"}'`;
+
   const n8nBodySnippet = JSON.stringify(
     {
       jsonrpc: "2.0",
@@ -438,29 +459,42 @@ export default function McpServerPage() {
           <div className="flex items-center justify-between pb-2 border-b border-[#edd6bb]/15">
             <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Workflow className="w-4 h-4 text-emerald-400" />
-              <span>Integrasi Node Workflow Langflow / n8n</span>
+              <span>Integrasi Workflow Langflow & n8n</span>
             </h3>
-            <button
-              type="button"
-              onClick={() => handleCopy(n8nBodySnippet, "n8n_json")}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-bold flex items-center gap-1.5 border border-emerald-500/30 transition-all"
-            >
-              {copiedSnippet === "n8n_json" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedSnippet === "n8n_json" ? "Copied!" : "Copy Request Body"}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleCopy(restWorkflowSnippet, "rest_curl")}
+                className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-bold flex items-center gap-1.5 border border-emerald-500/30 transition-all"
+              >
+                {copiedSnippet === "rest_curl" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSnippet === "rest_curl" ? "Copied!" : "Copy REST Flow"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCopy(n8nBodySnippet, "n8n_json")}
+                className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 text-xs font-bold flex items-center gap-1.5 border border-purple-500/30 transition-all"
+              >
+                {copiedSnippet === "n8n_json" ? <Check className="w-3.5 h-3.5 text-purple-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSnippet === "n8n_json" ? "Copied!" : "MCP JSON-RPC"}</span>
+              </button>
+            </div>
           </div>
           <div className="space-y-2 text-xs text-[#8a715e] dark:text-[#8b7e6d] leading-relaxed">
             <p>
-              Di n8n atau Langflow, tambahkan node <strong>HTTP Request</strong>:
+              Di n8n atau Langflow, masukkan kredensial API Anda (User ID, Public Key, Secret Key):
             </p>
-            <ul className="list-disc list-inside space-y-1 text-slate-300 font-medium">
-              <li>Method: <code className="text-amber-400">POST</code></li>
-              <li>URL: <code className="text-purple-400">{rpcUrl}</code></li>
-              <li>Header: <code className="text-emerald-400">X-USER-ID: {activeUserId}</code></li>
+            <ul className="list-disc list-inside space-y-1 text-slate-300 font-medium text-[11px]">
+              <li><strong>Step 1:</strong> Panggil <code>GET /v1/projects</code> untuk list project.</li>
+              <li><strong>Step 2:</strong> Panggil <code>GET /v1/specs?projectId=...</code> untuk list spec.</li>
+              <li><strong>Step 3:</strong> Panggil <code>POST /v1/call</code> untuk eksekusi spec.</li>
             </ul>
+            <p className="text-[11px] text-amber-500 dark:text-amber-400 font-medium">
+              💡 Paket integrasi resmi tersedia di <code>integrations/n8n/</code> (Community Node & Sample Workflow) dan <code>integrations/langflow/</code> (Custom Component).
+            </p>
           </div>
-          <pre className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-purple-300 font-mono text-[11px] overflow-x-auto">
-{n8nBodySnippet}
+          <pre className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-emerald-300 font-mono text-[11px] overflow-x-auto max-h-[160px]">
+{restWorkflowSnippet}
           </pre>
         </div>
 

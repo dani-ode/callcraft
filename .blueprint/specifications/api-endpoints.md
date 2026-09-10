@@ -78,6 +78,25 @@ curl -X POST https://api.example.com/v1/call \
 
 Full code catalog: [envelope-contract.md](envelope-contract.md#7-error-code-catalog).
 
+### `GET /v1/projects`
+
+Lists active projects accessible by caller's API credentials. Used by workflow tools (n8n, Langflow) to populate project dropdowns.
+
+**Headers:** `Authorization: Bearer <call_sk_...>`, `X-CALL-PUBLIC-KEY: <pk_...>`, `X-USER-ID: <usr_...>`.
+**Response:** Standard camelCase envelope with `data` containing the list of projects (including `specsCount`, `keysCount`).
+
+### `GET /v1/specs`
+
+Lists Call Specs or retrieves single spec details. Accepts query parameters:
+- `projectId` / `project_id`: Filters specs by project ID (enforces Project Isolation if key is project-scoped).
+- `specId` / `spec_id` / `slug`: Fetches single spec details directly with extracted `promptVariables` and `requiredInputs`.
+
+**Headers:** `Authorization: Bearer <call_sk_...>`, `X-CALL-PUBLIC-KEY: <pk_...>`, `X-USER-ID: <usr_...>`.
+
+### `GET /v1/specs/{spec_id_or_slug}`
+
+Path-parameter equivalent to fetch complete spec details, input schemas, required media inputs, and dynamic `{{placeholders}}`.
+
 ### `GET /health`
 
 Liveness probe. `apps/api/src/callcraft_api/routers/health.py:7`.

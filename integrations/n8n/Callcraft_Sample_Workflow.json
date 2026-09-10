@@ -1,0 +1,211 @@
+{
+  "name": "Callcraft AI Document Extraction Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "When clicking ‘Test workflow’",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "callcraft_base_url",
+              "value": "http://localhost:8081"
+            },
+            {
+              "name": "user_id",
+              "value": "usr_01HZX89ABCDEF1234567890XY"
+            },
+            {
+              "name": "public_key",
+              "value": "pk_live_sample12345"
+            },
+            {
+              "name": "secret_key",
+              "value": "call_sk_live_sample67890"
+            },
+            {
+              "name": "spec_slug",
+              "value": "ktp-reader"
+            },
+            {
+              "name": "sample_document_url",
+              "value": "https://raw.githubusercontent.com/callcraft/callcraft/main/docs/assets/sample-ktp.jpg"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Set Callcraft Credentials & Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.callcraft_base_url }}/v1/projects",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-USER-ID",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "name": "X-CALL-PUBLIC-KEY",
+              "value": "={{ $json.public_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.secret_key }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Step 1: Get List of Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Set Callcraft Credentials & Config').item.json.callcraft_base_url }}/v1/specs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "projectId",
+              "value": "={{ $json.data[0].id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-USER-ID",
+              "value": "={{ $('Set Callcraft Credentials & Config').item.json.user_id }}"
+            },
+            {
+              "name": "X-CALL-PUBLIC-KEY",
+              "value": "={{ $('Set Callcraft Credentials & Config').item.json.public_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Set Callcraft Credentials & Config').item.json.secret_key }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Step 2: Get List of Specs by Project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Set Callcraft Credentials & Config').item.json.callcraft_base_url }}/v1/call",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-USER-ID",
+              "value": "={{ $('Set Callcraft Credentials & Config').item.json.user_id }}"
+            },
+            {
+              "name": "X-CALL-PUBLIC-KEY",
+              "value": "={{ $('Set Callcraft Credentials & Config').item.json.public_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Set Callcraft Credentials & Config').item.json.secret_key }}"
+            },
+            {
+              "name": "X-CALL-SPEC-ID",
+              "value": "={{ $('Set Callcraft Credentials & Config').item.json.spec_slug }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"file\": \"{{ $('Set Callcraft Credentials & Config').item.json.sample_document_url }}\",\n  \"prompt\": \"Ekstrak seluruh field dengan ketelitian tinggi\"\n}",
+        "options": {}
+      },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Step 3: Execute Call Spec (POST /v1/call)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          {
+            "node": "Set Callcraft Credentials & Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Callcraft Credentials & Config": {
+      "main": [
+        [
+          {
+            "node": "Step 1: Get List of Projects",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Step 3: Execute Call Spec (POST /v1/call)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 1: Get List of Projects": {
+      "main": [
+        [
+          {
+            "node": "Step 2: Get List of Specs by Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

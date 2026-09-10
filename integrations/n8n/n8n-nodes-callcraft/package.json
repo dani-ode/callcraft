@@ -1,0 +1,41 @@
+{
+  "name": "n8n-nodes-callcraft",
+  "version": "1.0.0",
+  "description": "Callcraft integration node for n8n to inspect projects, specs, and execute AI document extraction",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "callcraft",
+    "ai",
+    "ocr",
+    "extraction",
+    "document-processing"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/callcraft",
+  "author": {
+    "name": "Callcraft Team"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && cp src/nodes/Callcraft/callcraft.svg dist/nodes/Callcraft/ 2>/dev/null || true",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/CallcraftApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Callcraft/Callcraft.node.js"
+    ]
+  },
+  "devDependencies": {
+    "n8n-workflow": "^1.70.0",
+    "typescript": "^5.4.0"
+  }
+}
