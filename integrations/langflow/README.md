@@ -22,12 +22,12 @@ Panduan integrasi **Callcraft** dengan **Langflow** menggunakan Custom Component
 6. Klik **Check & Save**.
 7. Komponen akan berubah menjadi **Callcraft AI Spec Execution**.
 8. Masukkan parameter:
-   - **Callcraft Base URL**: `http://localhost:8081` (atau URL API publik Anda)
    - **User ID**: `usr_...` (dari dashboard Callcraft)
    - **Public Key**: `pk_live_...` (dari menu API Keys)
    - **Secret Key**: `call_sk_live_...`
-9. Klik tombol refresh pada dropdown **Project** dan **Call Spec** untuk memuat daftar spec secara otomatis.
-10. Hubungkan output `result_message` atau `result_data` ke node downstream (seperti **Chat Output** atau **Prompt**).
+   - **Callcraft Base URL**: default langsung mengarah ke `https://callcraft-api.daniode.com` (tidak perlu diubah kecuali memakai instance lokal).
+9. Klik tombol refresh pada dropdown **Project** dan **Call Spec** untuk memuat daftar spec secara otomatis (atau ketik langsung jika diinginkan).
+10. Hubungkan output `output_json` ke node downstream berikutnya.
 
 ---
 
