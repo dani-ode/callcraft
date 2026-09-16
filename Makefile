@@ -1,4 +1,4 @@
-.PHONY: help up down restart rebuild pull-rebuild logs dev build-web test clean
+.PHONY: help up down restart rebuild pull-rebuild logs dev build-web test db-reset clean
 
 # Default target
 .DEFAULT_GOAL := help
@@ -46,7 +46,11 @@ build-web: ## Bersihkan cache .next & build Next.js production bundle
 test: ## Jalankan seluruh test suite backend API
 	.venv/bin/pytest apps/api/tests
 
+db-reset: ## Hapus database, buat ulang seluruh tabel & seed data awal
+	uv run python -m callcraft_api.db.reset_and_seed
+
 clean: ## Bersihkan cache Next.js dan temporary files Python (__pycache__)
 	rm -rf apps/web/.next
 	rm -rf apps/web/out
 	find . -type d -name "__pycache__" -exec rm -rf {} +
+
