@@ -3,7 +3,7 @@ import json
 import ulid
 from typing import Any, Dict, List, Optional
 from fastapi import Depends, HTTPException, Response, UploadFile, File
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,26 +74,30 @@ def validate_tools_config(tools_config: Optional[Dict[str, Any]]) -> None:
 
 
 class CreateSpecRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     name: str = Field(..., description="Call Spec name")
     slug: str = Field(..., description="API slug")
-    project_id: Optional[str] = Field(None, description="Project this spec belongs to")
+    project_id: Optional[str] = Field(None, alias="projectId", description="Project this spec belongs to")
     description: Optional[str] = Field(None)
-    request_schema: Optional[Dict[str, Any]] = Field(None, description="JSON Schema of request payload parameters")
-    response_schema: Dict[str, Any] = Field(..., description="JSON Schema of target output")
-    positive_prompt: Optional[str] = Field(None, description="Positive prompt instructions")
-    extraction_prompt: Optional[str] = Field(None, description="Positive prompt alias")
-    negative_prompt: Optional[str] = Field(None, description="Negative prompt (prohibitions & constraints)")
-    additional_prompt: Optional[str] = Field(None, description="Default additional prompt user instruction")
-    allow_additional_prompt: bool = Field(True, description="Allow request additional prompt")
-    allow_pdf_input: bool = Field(True, description="Allow PDF input files")
-    use_external_api_key: bool = Field(True, description="Allow external AI API Key & Model Name on request headers")
+    request_schema: Optional[Dict[str, Any]] = Field(None, alias="requestSchema", description="JSON Schema of request payload parameters")
+    response_schema: Dict[str, Any] = Field(..., alias="responseSchema", description="JSON Schema of target output")
+    positive_prompt: Optional[str] = Field(None, alias="positivePrompt", description="Positive prompt instructions")
+    extraction_prompt: Optional[str] = Field(None, alias="extractionPrompt", description="Positive prompt alias")
+    negative_prompt: Optional[str] = Field(None, alias="negativePrompt", description="Negative prompt (prohibitions & constraints)")
+    additional_prompt: Optional[str] = Field(None, alias="additionalPrompt", description="Default additional prompt user instruction")
+    allow_additional_prompt: bool = Field(True, alias="allowAdditionalPrompt", description="Allow request additional prompt")
+    allow_pdf_input: bool = Field(True, alias="allowPdfInput", description="Allow PDF input files")
+    use_external_api_key: bool = Field(True, alias="useExternalApiKey", description="Allow external AI API Key & Model Name on request headers")
     external_api_key: Optional[str] = Field(None, alias="externalApiKey")
     external_model_name: Optional[str] = Field(None, alias="externalModelName")
     external_base_url: Optional[str] = Field(None, alias="externalBaseUrl", description="Optional third-party / custom AI Provider Base URL")
-    tools_config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Tool calling configuration JSON")
+    tools_config: Optional[Dict[str, Any]] = Field(default_factory=dict, alias="toolsConfig", description="Tool calling configuration JSON")
 
 
 class UpdateSpecPayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     name: Optional[str] = Field(None)
     slug: Optional[str] = Field(None)
     description: Optional[str] = Field(None)
@@ -104,6 +108,7 @@ class UpdateSpecPayload(BaseModel):
     negative_prompt: Optional[str] = Field(None, alias="negativePrompt")
     additional_prompt: Optional[str] = Field(None, alias="additionalPrompt")
     allow_additional_prompt: Optional[bool] = Field(None, alias="allowAdditionalPrompt")
+    allow_pdf_input: Optional[bool] = Field(None, alias="allowPdfInput")
     use_external_api_key: Optional[bool] = Field(None, alias="useExternalApiKey")
     external_model_name: Optional[str] = Field(None, alias="externalModelName")
     external_api_key: Optional[str] = Field(None, alias="externalApiKey")
@@ -112,7 +117,9 @@ class UpdateSpecPayload(BaseModel):
 
 
 class UpdatePublicationRequest(BaseModel):
-    is_published: bool = Field(True, description="Whether to publish or unpublish this spec")
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    is_published: bool = Field(True, alias="isPublished", description="Whether to publish or unpublish this spec")
     name: Optional[str] = Field(None, description="Public display title")
     category: Optional[str] = Field(None, description="Category tag")
     description: Optional[str] = Field(None, description="Rich Markdown documentation file content")
@@ -264,6 +271,7 @@ async def update_spec_by_id(
         negative_prompt=payload.negative_prompt,
         additional_prompt=payload.additional_prompt,
         allow_additional_prompt=payload.allow_additional_prompt,
+        allow_pdf_input=payload.allow_pdf_input,
         use_external_api_key=payload.use_external_api_key,
         external_model_name=payload.external_model_name,
         external_api_key=payload.external_api_key,
@@ -455,6 +463,8 @@ async def update_spec_publication(
 
 
 class SavePlaygroundStateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     selectedCredentialId: Optional[str] = None
     checkedStates: Dict[str, bool] = {}
     extraInputs: Dict[str, Any] = {}
@@ -542,6 +552,8 @@ async def export_spec_json(
 
 
 class ImportSpecPayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     name: Optional[str] = Field(None)
     slug: Optional[str] = Field(None)
     project_id: Optional[str] = Field(None)

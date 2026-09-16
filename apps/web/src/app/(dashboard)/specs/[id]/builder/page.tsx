@@ -443,6 +443,9 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
           if (specObj.externalBaseUrl !== undefined) setExternalBaseUrl(specObj.externalBaseUrl || "");
           else if (specObj.external_base_url !== undefined) setExternalBaseUrl(specObj.external_base_url || "");
           if (specObj.externalModelName) setSelectedModel(specObj.externalModelName);
+          if (specObj.toolsConfig && typeof specObj.toolsConfig === "object") {
+            setToolsConfig(specObj.toolsConfig);
+          }
 
           const resSchema = specObj.responseSchema;
           const reqSchema = specObj.requestSchema;

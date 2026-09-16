@@ -41,6 +41,7 @@ export async function updateCallSpec(
     negativePrompt?: string;
     additionalPrompt?: string;
     allowAdditionalPrompt?: boolean;
+    allowPdfInput?: boolean;
     useExternalApiKey?: boolean;
     externalModelName?: string;
     externalBaseUrl?: string;
@@ -53,20 +54,21 @@ export async function updateCallSpec(
       name: payload.name,
       slug: payload.slug,
       description: payload.description,
-      request_schema: payload.requestSchema,
-      response_schema: payload.responseSchema,
-      tools_config: payload.toolsConfig,
-      positive_prompt: payload.positivePrompt || payload.extractionPrompt,
-      negative_prompt: payload.negativePrompt,
-      additional_prompt: payload.additionalPrompt,
-      allow_additional_prompt: payload.allowAdditionalPrompt,
-      use_external_api_key: payload.useExternalApiKey,
-      external_model_name: payload.externalModelName,
-      external_base_url: payload.externalBaseUrl,
+      requestSchema: payload.requestSchema,
+      responseSchema: payload.responseSchema,
+      toolsConfig: payload.toolsConfig,
+      positivePrompt: payload.positivePrompt || payload.extractionPrompt,
+      negativePrompt: payload.negativePrompt,
+      additionalPrompt: payload.additionalPrompt,
+      allowAdditionalPrompt: payload.allowAdditionalPrompt,
+      allowPdfInput: payload.allowPdfInput,
+      useExternalApiKey: payload.useExternalApiKey,
+      externalModelName: payload.externalModelName,
       externalBaseUrl: payload.externalBaseUrl,
     }),
   });
 
+  checkResponseAuth(res);
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
     throw new Error(extractErrorMessage(errorData, `Gagal meng-update Call Spec ${specId}`));
@@ -88,6 +90,7 @@ export async function createCallSpec(payload: {
   negativePrompt?: string;
   additionalPrompt?: string;
   allowAdditionalPrompt?: boolean;
+  allowPdfInput?: boolean;
   useExternalApiKey?: boolean;
   externalModelName?: string;
   externalBaseUrl?: string;
@@ -98,22 +101,23 @@ export async function createCallSpec(payload: {
     body: JSON.stringify({
       name: payload.name,
       slug: payload.slug,
-      project_id: payload.projectId,
+      projectId: payload.projectId,
       description: payload.description,
-      request_schema: payload.requestSchema,
-      response_schema: payload.responseSchema,
-      tools_config: payload.toolsConfig,
-      positive_prompt: payload.positivePrompt || payload.extractionPrompt,
-      negative_prompt: payload.negativePrompt,
-      additional_prompt: payload.additionalPrompt,
-      allow_additional_prompt: payload.allowAdditionalPrompt,
-      use_external_api_key: payload.useExternalApiKey,
-      external_model_name: payload.externalModelName,
-      external_base_url: payload.externalBaseUrl,
+      requestSchema: payload.requestSchema,
+      responseSchema: payload.responseSchema,
+      toolsConfig: payload.toolsConfig,
+      positivePrompt: payload.positivePrompt || payload.extractionPrompt,
+      negativePrompt: payload.negativePrompt,
+      additionalPrompt: payload.additionalPrompt,
+      allowAdditionalPrompt: payload.allowAdditionalPrompt,
+      allowPdfInput: payload.allowPdfInput,
+      useExternalApiKey: payload.useExternalApiKey,
+      externalModelName: payload.externalModelName,
       externalBaseUrl: payload.externalBaseUrl,
     }),
   });
 
+  checkResponseAuth(res);
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
     throw new Error(extractErrorMessage(errorData, "Gagal membuat Call Spec baru"));
@@ -179,7 +183,7 @@ export async function updateSpecPublicationSettings(
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify({
-      is_published: payload.isPublished,
+      isPublished: payload.isPublished,
       name: payload.name,
       category: payload.category,
       description: payload.description,

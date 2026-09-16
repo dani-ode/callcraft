@@ -293,3 +293,101 @@ async def test_mcp_streamable_http_discovery_get_and_delete(active_user_id: str)
         assert del_res.status_code == 200
         assert del_res.json()["status"] == "session_terminated"
 
+
+async def test_spec_update_persistence_camel_and_snake_case(active_user_id: str, active_spec_id: str):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # 1. Update with camelCase payload (Callcraft UI standard)
+        camel_payload = {
+            "name": "Updated Spec via CamelCase",
+            "requestSchema": {
+                "type": "object",
+                "properties": {
+                    "input_document_url": {"type": "string", "description": "Document URL"},
+                    "doc_category": {"type": "string"}
+                },
+                "required": ["input_document_url"]
+            },
+            "responseSchema": {
+                "type": "object",
+                "properties": {
+                    "extracted_id": {"type": "string"},
+                    "extracted_name": {"type": "string"}
+                },
+                "required": ["extracted_id"]
+            },
+            "positivePrompt": "Extract user document data precisely.",
+            "negativePrompt": "Do not hallucinate fields.",
+            "toolsConfig": {
+                "tools": [
+                    {
+                        "name": "lookup_registry",
+                        "description": "Registry lookup tool",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "reg_id": {"type": "string"}
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+
+        put_res = await ac.put(
+            f"/internal/v1/specs/{active_spec_id}",
+            json=camel_payload,
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert put_res.status_code == 200, f"PUT failed: {put_res.text}"
+        put_data = put_res.json()
+        assert put_data["name"] == "Updated Spec via CamelCase"
+        assert put_data["requestSchema"]["properties"]["input_document_url"]["type"] == "string"
+        assert put_data["responseSchema"]["properties"]["extracted_id"]["type"] == "string"
+        assert put_data["positivePrompt"] == "Extract user document data precisely."
+        assert len(put_data["toolsConfig"]["tools"]) == 1
+
+        # 2. Verify GET returns persisted changes
+        get_res = await ac.get(
+            f"/internal/v1/specs/{active_spec_id}",
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert get_res.status_code == 200
+        get_data = get_res.json()
+        assert get_data["name"] == "Updated Spec via CamelCase"
+        assert get_data["requestSchema"]["properties"]["input_document_url"]["type"] == "string"
+        assert get_data["responseSchema"]["properties"]["extracted_id"]["type"] == "string"
+        assert get_data["positivePrompt"] == "Extract user document data precisely."
+        assert get_data["negativePrompt"] == "Do not hallucinate fields."
+        assert len(get_data["toolsConfig"]["tools"]) == 1
+
+        # 3. Update with snake_case payload (backward compatibility via populate_by_name)
+        snake_payload = {
+            "name": "Updated Spec via SnakeCase",
+            "request_schema": {
+                "type": "object",
+                "properties": {
+                    "snake_req_key": {"type": "string"}
+                }
+            },
+            "response_schema": {
+                "type": "object",
+                "properties": {
+                    "snake_res_key": {"type": "string"}
+                }
+            },
+            "positive_prompt": "Snake case prompt update"
+        }
+
+        put_res_snake = await ac.put(
+            f"/internal/v1/specs/{active_spec_id}",
+            json=snake_payload,
+            headers={"X-USER-ID": active_user_id},
+        )
+        assert put_res_snake.status_code == 200
+        put_snake_data = put_res_snake.json()
+        assert put_snake_data["name"] == "Updated Spec via SnakeCase"
+        assert "snake_req_key" in put_snake_data["requestSchema"]["properties"]
+        assert "snake_res_key" in put_snake_data["responseSchema"]["properties"]
+        assert put_snake_data["positivePrompt"] == "Snake case prompt update"
+
+

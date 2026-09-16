@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import ulid
 from sqlalchemy import select, update, delete, func
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from callcraft_api.config import settings
@@ -407,6 +408,7 @@ class Repository:
         negative_prompt: Optional[str] = None,
         additional_prompt: Optional[str] = None,
         allow_additional_prompt: Optional[bool] = None,
+        allow_pdf_input: Optional[bool] = None,
         use_external_api_key: Optional[bool] = None,
         external_model_name: Optional[str] = None,
         external_api_key: Optional[str] = None,
@@ -432,6 +434,8 @@ class Repository:
             spec.slug = slug
         if description is not None:
             spec.description = description
+        if allow_pdf_input is not None:
+            spec.allow_pdf_input = allow_pdf_input
         if use_external_api_key is not None:
             spec.use_external_api_key = use_external_api_key
         if external_model_name is not None:
@@ -442,6 +446,7 @@ class Repository:
             spec.external_base_url = external_base_url.strip() if external_base_url and external_base_url.strip() else None
         if tools_config is not None:
             spec.tools_config = tools_config
+            flag_modified(spec, "tools_config")
 
         spec.updated_at = datetime.now(timezone.utc)
 
@@ -457,6 +462,7 @@ class Repository:
                 id=f"ver_{spec.id}_{spec.active_version_number}",
                 call_spec_id=spec.id,
                 version_number=spec.active_version_number,
+                allow_pdf_input=spec.allow_pdf_input,
                 use_external_api_key=spec.use_external_api_key,
                 external_model_name=spec.external_model_name,
                 external_api_key=spec.external_api_key,
@@ -465,10 +471,14 @@ class Repository:
             )
             db.add(ver)
 
+        if allow_pdf_input is not None:
+            ver.allow_pdf_input = allow_pdf_input
         if request_schema is not None:
             ver.request_schema = request_schema
+            flag_modified(ver, "request_schema")
         if response_schema is not None:
             ver.response_schema = response_schema
+            flag_modified(ver, "response_schema")
         if positive_prompt is not None:
             ver.positive_prompt = positive_prompt
         if negative_prompt is not None:
@@ -487,6 +497,7 @@ class Repository:
             ver.external_base_url = external_base_url.strip() if external_base_url and external_base_url.strip() else None
         if tools_config is not None:
             ver.tools_config = tools_config
+            flag_modified(ver, "tools_config")
 
         await db.commit()
 
