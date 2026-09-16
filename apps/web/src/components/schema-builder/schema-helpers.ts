@@ -470,3 +470,27 @@ export function deleteFieldFromTree(
   const [cleanedTree] = extractFieldFromTree(tree, fieldId);
   return cleanedTree;
 }
+
+const IDENTIFIER_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Validates that all fields in a SchemaField tree have valid non-empty names
+ * conforming to valid identifier syntax (alphanumeric + underscore, no spaces).
+ */
+export function validateSchemaFieldTree(fields: SchemaField[], treeName: string = "Schema"): string | null {
+  for (const f of fields) {
+    const trimmed = (f.name || "").trim();
+    if (!trimmed) {
+      return `Ada field pada ${treeName} yang namanya masih kosong. Semua field wajib memiliki nama.`;
+    }
+    if (!IDENTIFIER_REGEX.test(trimmed)) {
+      return `Nama field "${trimmed}" pada ${treeName} tidak valid. Nama field hanya boleh terdiri dari huruf, angka, dan underscore (tidak boleh ada spasi atau simbol seperti tanda hubung "-").`;
+    }
+    if (f.properties && f.properties.length > 0) {
+      const err = validateSchemaFieldTree(f.properties, `${treeName} -> "${trimmed}"`);
+      if (err) return err;
+    }
+  }
+  return null;
+}
+

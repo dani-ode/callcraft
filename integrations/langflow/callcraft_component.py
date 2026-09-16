@@ -1,3 +1,4 @@
+import re
 import os
 import json
 import base64
@@ -47,9 +48,16 @@ IGNORED_METADATA_KEYS: set = {
 # Langflow AST validator (validate.py) mewajibkan import top-level langsung
 # tanpa blok try/except bersarang agar simbol Component dikenali saat build.
 # =============================================================================
+from lfx.base.models.unified_models import (
+    get_api_key_for_provider,
+    handle_model_input_update,
+)
+from lfx.base.models.watsonx_constants import IBM_WATSONX_URLS
 from lfx.custom.custom_component.component import Component
-from lfx.io import DataInput, DropdownInput, Output, SecretStrInput, StrInput
+from lfx.inputs.inputs import DictInput, DropdownInput, ModelInput, SecretStrInput, StrInput
+from lfx.io import DataInput, Output
 from lfx.schema.data import Data
+from lfx.schema.dotdict import dotdict
 from lfx.services.deps import get_storage_service
 
 
@@ -115,19 +123,31 @@ class CallcraftAPIComponent(Component):
             value="",
             combobox=True,
             refresh_button=True,
+            real_time_refresh=True,
         ),
         DropdownInput(
             name="spec_id",
             display_name="Call Spec ID / Slug",
-            info="Pilih Callcraft Spec yang ingin dieksekusi (otomatis terfilter berdasarkan project terpilih) atau ketik spec ID/slug langsung.",
+            info="Pilih Callcraft Spec yang ingin dieksekusi atau ketik spec ID/slug langsung.",
             options=[],
             value="",
             combobox=True,
             refresh_button=True,
+            real_time_refresh=True,
             required=True,
         ),
 
-        # 3. Base URL (Default dari konstanta global di atas)
+        # 3. Form Input Payload Key-Value (Dukungan Nilai Statis & Template Parser Dinamis)
+        DictInput(
+            name="payload",
+            display_name="Payload",
+            info="Form input key-value untuk data payload Callcraft. Nilai dapat berupa teks statis atau format template parser (contoh: {text}, {message}, {variable_name}).",
+            value={},
+            required=False,
+            input_types=["Data", "dict", "Message", "Text", "str"],
+        ),
+
+        # 4. Base URL (Default dari konstanta global di atas)
         StrInput(
             name="base_url",
             display_name="Callcraft Base URL",
@@ -155,42 +175,109 @@ class CallcraftAPIComponent(Component):
             advanced=True,
         ),
 
-        # 5. Optional Headers (AI Provider Override)
-        StrInput(
-            name="ai_model_name",
-            display_name="AI Model Name",
-            info="Opsional: Nama model AI override (misal: gemini-2.5-flash, gpt-4o).",
+        # 5. Optional Headers: Interactive AI Model & Provider Override (X-AI-MODEL-NAME, X-AI-API-KEY, X-AI-BASE-URL)
+        ModelInput(
+            name="model",
+            display_name="Language Model",
+            info="Opsional: Pilih provider dan model AI override interaktif (misal: OpenAI, Anthropic, Gemini, Groq, Ollama). Kosongkan jika ingin menggunakan model default dari Call Spec.",
+            real_time_refresh=True,
             required=False,
-            advanced=True,
         ),
         SecretStrInput(
-            name="ai_api_key",
+            name="api_key",
             display_name="AI API Key",
-            info="Opsional: API Key provider AI override. Hanya dikirim jika AI Model Name diisi.",
-            required=False,
+            info="Opsional: API Key provider AI override (header X-AI-API-KEY). Kosongkan jika sudah dikonfigurasi di global variables Langflow atau Callcraft dashboard.",
+            real_time_refresh=True,
             advanced=True,
+        ),
+        DropdownInput(
+            name="base_url_ibm_watsonx",
+            display_name="watsonx API Endpoint",
+            info="The base URL of the API (IBM watsonx.ai only)",
+            options=IBM_WATSONX_URLS,
+            value=IBM_WATSONX_URLS[0],
+            combobox=True,
+            show=False,
+            real_time_refresh=True,
+        ),
+        StrInput(
+            name="ollama_base_url",
+            display_name="Ollama API URL",
+            info="Endpoint of the Ollama API (Ollama only)",
+            show=False,
+            real_time_refresh=True,
         ),
         StrInput(
             name="ai_base_url",
             display_name="AI Base URL",
-            info="Opsional: Base URL custom provider AI override.",
+            info="Opsional: Base URL custom provider AI override (header X-AI-BASE-URL), misal: endpoint vLLM atau proxy custom.",
+            required=False,
+            advanced=True,
+        ),
+        StrInput(
+            name="ai_model_name",
+            display_name="AI Model Name Override",
+            info="Opsional: Nama model AI manual override jika tidak memilih dari dropdown Language Model.",
             required=False,
             advanced=True,
         ),
 
-        # 6. Input Data dari Node Sebelumnya (Chat Input, File, Data, Message, JSON)
-        DataInput(
-            name="input_data",
-            display_name="Input Data (Payload)",
-            input_types=["Message", "Data", "dict", "Text", "str", "list"],
-            info="Hubungkan node sebelumnya di sini (Chat Input, File, Data, Message, atau JSON). File gambar/PDF akan otomatis diekstrak ke Base64.",
-            required=False,
-        ),
     ]
 
     outputs = [
         Output(display_name="Output JSON", name="output_json", method="call_api"),
     ]
+
+    def _resolve_variable_value(self, val: Any) -> str:
+        """
+        Mendukung resolusi otomatis nilai Global Variable Langflow atau Environment Variable.
+        Jika pengguna memasukkan nama variabel global seperti CALLCRAFT_USER_ID atau CALLCRAFT_SECRET_KEY,
+        fungsi ini akan mengambil nilai aslinya dari Langflow Database / os.environ.
+        """
+        if not val:
+            return ""
+        if hasattr(val, "get_secret_value") and callable(val.get_secret_value):
+            val = val.get_secret_value()
+        elif hasattr(val, "value"):
+            val = val.value
+        raw = str(val).strip()
+        if not raw:
+            return ""
+
+        # 1. Cek Environment Variable langsung
+        if raw in os.environ:
+            return os.environ[raw].strip()
+
+        # 2. Cek Langflow Database Variable Service
+        try:
+            from lfx.services.deps import get_variable_service, session_scope
+            from lfx.utils.async_helpers import run_until_complete
+            import uuid
+
+            async def _fetch():
+                async with session_scope() as session:
+                    var_svc = get_variable_service()
+                    if not var_svc:
+                        return None
+                    u_id = getattr(self, "_user_id", None) or getattr(self, "user_id", None)
+                    if not u_id:
+                        return None
+                    if isinstance(u_id, str):
+                        try:
+                            u_id = uuid.UUID(u_id)
+                        except Exception:
+                            return None
+                    return await var_svc.get_variable(user_id=u_id, name=raw, field="", session=session)
+
+            resolved = run_until_complete(_fetch())
+            if resolved is not None:
+                if hasattr(resolved, "get_secret_value"):
+                    return resolved.get_secret_value()
+                return str(resolved).strip()
+        except Exception:
+            pass
+
+        return raw
 
     def _get_input_value(self, input_name: str) -> str:
         """
@@ -199,6 +286,7 @@ class CallcraftAPIComponent(Component):
         1. Langflow property shadowing: 'self.user_id' di-shadow oleh property internal Component bawaan.
            Oleh karena itu, wajib mengambil nilai dari 'self._attributes[input_name]' terlebih dahulu.
         2. Objek SecretStr: memanggil '.get_secret_value()' agar kunci rahasia tidak ter-masking menjadi '**********'.
+        3. Global Variables Langflow: otomatis di-resolve nilainya dari database/env.
         """
         val = None
 
@@ -215,11 +303,89 @@ class CallcraftAPIComponent(Component):
         if val is None:
             return ""
 
-        if hasattr(val, "get_secret_value"):
-            return val.get_secret_value()
-        if hasattr(val, "value"):
-            return val.value
-        return str(val)
+        return self._resolve_variable_value(val)
+
+    def _resolve_ai_model_and_provider(self) -> Tuple[str, str]:
+        """
+        Mengekstrak (model_name, provider) dari ModelInput atau manual override.
+        """
+        # 1. Manual model name override memiliki prioritas jika diisi
+        manual_override = self._get_input_value("ai_model_name").strip()
+        if manual_override:
+            return manual_override, ""
+
+        # 2. Ambil dari ModelInput (self.model)
+        model_val = getattr(self, "model", None)
+        if model_val is None and hasattr(self, "_attributes") and isinstance(self._attributes, dict):
+            model_val = self._attributes.get("model")
+
+        if isinstance(model_val, list) and model_val:
+            first = model_val[0]
+            if isinstance(first, dict):
+                name = str(first.get("name") or "").strip()
+                provider = str(first.get("provider") or "").strip()
+                return name, provider
+            elif isinstance(first, str):
+                return first.strip(), ""
+        elif isinstance(model_val, dict):
+            name = str(model_val.get("name") or "").strip()
+            provider = str(model_val.get("provider") or "").strip()
+            return name, provider
+        elif isinstance(model_val, str) and model_val.strip():
+            return model_val.strip(), ""
+
+        # Fallback jika model adalah objek BaseLanguageModel (edge yang terhubung)
+        try:
+            from langchain_core.language_models import BaseLanguageModel
+            if isinstance(model_val, BaseLanguageModel):
+                for attr in ("model_name", "model", "model_id"):
+                    val = getattr(model_val, attr, None)
+                    if isinstance(val, str) and val.strip():
+                        return val.strip(), type(model_val).__name__
+                return type(model_val).__name__, ""
+        except Exception:
+            pass
+
+        return "", ""
+
+    def _resolve_ai_api_key(self, provider: str = "") -> str:
+        """
+        Mengambil API Key provider dari input api_key/ai_api_key atau global variables Langflow.
+        """
+        key = self._get_input_value("api_key").strip() or self._get_input_value("ai_api_key").strip()
+        if key:
+            return key
+
+        if provider:
+            try:
+                langflow_user_id = getattr(self, "user_id", None)
+                resolved = get_api_key_for_provider(langflow_user_id, provider, None)
+                if resolved and isinstance(resolved, str) and resolved.strip():
+                    return resolved.strip()
+            except Exception:
+                pass
+
+        return ""
+
+    def _resolve_ai_base_url(self, provider: str = "") -> str:
+        """
+        Menentukan Base URL AI provider dari ai_base_url, ollama_base_url, atau base_url_ibm_watsonx.
+        """
+        custom_base = self._get_input_value("ai_base_url").strip()
+        if custom_base:
+            return custom_base
+
+        if provider == "Ollama":
+            ollama_url = self._get_input_value("ollama_base_url").strip()
+            if ollama_url:
+                return ollama_url
+
+        if provider == "IBM WatsonX":
+            watsonx_url = self._get_input_value("base_url_ibm_watsonx").strip()
+            if watsonx_url:
+                return watsonx_url
+
+        return ""
 
     def _read_file_from_storage(self, storage_service, folder_name: str, file_name: str) -> bytes:
         """
@@ -344,17 +510,66 @@ class CallcraftAPIComponent(Component):
 
     def update_build_config(self, build_config: dict, field_value: Any, field_name: Optional[str] = None) -> dict:
         """
-        Mengisi opsi dropdown Project dan Call Spec secara dinamis
-        saat user memasukkan kredensial atau menekan tombol refresh.
+        1. Menghandle update ModelInput secara interaktif (refresh options, show/hide API key & base URL sesuai provider).
+        2. Mengisi opsi dropdown Project dan Call Spec secara dinamis saat user memasukkan kredensial Callcraft.
+        3. Memastikan konfigurasi secret_key (load_from_db, value) tidak pernah terhapus atau dirusak saat field lain diubah.
         """
+        # 1. Lindungi konfigurasi dan nilai secret_key, user_id, public_key, dan project_id secara utuh
+        orig_secret_key = dict(build_config["secret_key"]) if "secret_key" in build_config and isinstance(build_config["secret_key"], dict) else None
+        orig_user_id = dict(build_config["user_id"]) if "user_id" in build_config and isinstance(build_config["user_id"], dict) else None
+        orig_public_key = dict(build_config["public_key"]) if "public_key" in build_config and isinstance(build_config["public_key"], dict) else None
+        orig_project_id = dict(build_config["project_id"]) if "project_id" in build_config and isinstance(build_config["project_id"], dict) else None
+
+        # Panggil handle_model_input_update HANYA jika field yang diubah berkaitan dengan model/provider
+        if field_name in ("model", None) or (isinstance(field_name, str) and field_name.startswith("base_url_")):
+            try:
+                build_config = handle_model_input_update(
+                    component=self,
+                    build_config=dict(build_config),
+                    field_value=field_value,
+                    field_name=field_name,
+                    model_field_name="model",
+                )
+            except Exception:
+                pass
+
+        # Pulihkan konfigurasi kredensial secara utuh tanpa pernah mengubah load_from_db
+        if orig_secret_key is not None and "secret_key" in build_config:
+            build_config["secret_key"] = orig_secret_key
+
+        if orig_user_id is not None and "user_id" in build_config:
+            build_config["user_id"] = orig_user_id
+
+        if orig_public_key is not None and "public_key" in build_config:
+            build_config["public_key"] = orig_public_key
+
+        if orig_project_id is not None and "project_id" in build_config:
+            # Pertahankan show dan options asli Callcraft jika ada provider yang mencoba menyembunyikannya
+            build_config["project_id"]["show"] = orig_project_id.get("show", True)
+            if orig_project_id.get("options") and not build_config["project_id"].get("options"):
+                build_config["project_id"]["options"] = orig_project_id.get("options", [])
+
+        # 2. Ambil daftar project & spec dari API Callcraft jika kredensial sudah ada
         try:
-            base_url = _clean_base_url(self._get_input_value("base_url"))
-            user_id = self._get_input_value("user_id").strip()
-            public_key = self._get_input_value("public_key").strip()
-            secret_key = self._get_input_value("secret_key").strip()
+            base_url = _clean_base_url(
+                self._resolve_variable_value(build_config.get("base_url", {}).get("value") or self._get_input_value("base_url"))
+            )
+            user_id = self._resolve_variable_value(
+                build_config.get("user_id", {}).get("value") or self._get_input_value("user_id")
+            ).strip()
+            public_key = self._resolve_variable_value(
+                build_config.get("public_key", {}).get("value") or self._get_input_value("public_key")
+            ).strip()
+            secret_key = self._resolve_variable_value(
+                build_config.get("secret_key", {}).get("value") or self._get_input_value("secret_key")
+            ).strip()
 
             if not (user_id and public_key and secret_key):
-                return build_config
+                # Bersihkan dynamic spec_field leftover jika ada
+                for old_k in list(build_config.keys()):
+                    if old_k.startswith("spec_field_") or old_k == "payload_variables":
+                        del build_config[old_k]
+                return dotdict({k: v.to_dict() if hasattr(v, "to_dict") else v for k, v in build_config.items()})
 
             headers = {
                 "X-USER-ID": user_id,
@@ -362,7 +577,7 @@ class CallcraftAPIComponent(Component):
                 "Authorization": f"Bearer {secret_key}",
             }
 
-            # 1. Ambil daftar project
+            # Ambil daftar project
             resp_p = requests.get(
                 f"{base_url}{CALLCRAFT_PROJECTS_ENDPOINT}",
                 headers=headers,
@@ -382,7 +597,7 @@ class CallcraftAPIComponent(Component):
             if "project_id" in build_config:
                 build_config["project_id"]["options"] = project_options
 
-            # 2. Ambil daftar spec sesuai project yang dipilih
+            # Ambil daftar spec sesuai project yang dipilih
             selected_proj_name = build_config.get("project_id", {}).get("value")
             target_proj_id = project_map.get(selected_proj_name, selected_proj_name)
 
@@ -398,24 +613,114 @@ class CallcraftAPIComponent(Component):
             )
 
             spec_options = []
+            s_data = []
             if resp_s.status_code == 200:
-                s_data = resp_s.json().get("data", [])
+                raw_data = resp_s.json().get("data", [])
+                s_data = raw_data if isinstance(raw_data, list) else ([raw_data] if isinstance(raw_data, dict) else [])
                 for s in s_data:
-                    spec_id = s.get("slug") or s.get("name") or s.get("id")
-                    spec_options.append(spec_id)
+                    if isinstance(s, dict):
+                        spec_id = s.get("slug") or s.get("name") or s.get("id")
+                        if spec_id:
+                            spec_options.append(spec_id)
 
             if "spec_id" in build_config:
                 build_config["spec_id"]["options"] = spec_options
 
+            # 3. Ambil detail spec terpilih untuk mengisi key form Payload secara otomatis
+            selected_spec = (
+                field_value if field_name == "spec_id" and field_value
+                else build_config.get("spec_id", {}).get("value")
+            )
+            if isinstance(selected_spec, list) and selected_spec:
+                selected_spec = selected_spec[0]
+            selected_spec = str(selected_spec or "").strip()
+
+            selected_spec_obj = None
+            if selected_spec:
+                try:
+                    resp_detail = requests.get(
+                        f"{base_url}{CALLCRAFT_SPECS_ENDPOINT}",
+                        headers=headers,
+                        params={"specId": selected_spec},
+                        timeout=CALLCRAFT_DISCOVERY_TIMEOUT,
+                    )
+                    if resp_detail.status_code == 200:
+                        detail_json = resp_detail.json()
+                        if isinstance(detail_json, dict):
+                            selected_spec_obj = detail_json.get("data")
+                            if not selected_spec_obj:
+                                selected_spec_obj = detail_json
+                except Exception:
+                    pass
+
+                # Fallback ke list s_data jika resp_detail gagal
+                if not selected_spec_obj and s_data:
+                    for s in s_data:
+                        if isinstance(s, dict) and selected_spec in (s.get("slug"), s.get("id"), s.get("name")):
+                            selected_spec_obj = s
+                            break
+
+            if selected_spec_obj and isinstance(selected_spec_obj, dict):
+                p_vars = selected_spec_obj.get("promptVariables") or []
+                if not p_vars:
+                    prompts = [
+                        selected_spec_obj.get("positivePrompt"),
+                        selected_spec_obj.get("negativePrompt"),
+                        selected_spec_obj.get("additionalPrompt"),
+                    ]
+                    for p in prompts:
+                        if p and isinstance(p, str):
+                            p_vars.extend(re.findall(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", p))
+
+                req_schema = selected_spec_obj.get("requestSchema")
+                if isinstance(req_schema, str):
+                    try:
+                        req_schema = json.loads(req_schema)
+                    except Exception:
+                        req_schema = {}
+
+                req_props = []
+                if isinstance(req_schema, dict) and "properties" in req_schema and isinstance(req_schema["properties"], dict):
+                    req_props = list(req_schema["properties"].keys())
+
+                seen = set()
+                ignored = {"image", "file", "pdf", "prompt", "custom_prompt", "document_input"}
+                spec_fields = []
+                for f in list(p_vars) + list(req_props):
+                    if f and f not in seen and f not in ignored:
+                        seen.add(f)
+                        spec_fields.append(f)
+
+                # Isi otomatis key ke dalam DictInput 'payload'
+                if "payload" in build_config and isinstance(build_config["payload"], dict):
+                    curr_payload = build_config["payload"].get("value")
+                    if not isinstance(curr_payload, dict):
+                        curr_payload = {}
+
+                    # Buat dictionary baru yang berisi fields dari spec ini
+                    new_payload = {}
+                    for var_name in spec_fields:
+                        # Pertahankan value jika user sudah pernah mengisinya, atau beri template default {var_name}
+                        new_payload[var_name] = curr_payload.get(var_name, f"{{{var_name}}}")
+
+                    # Jika spec mendefinisikan fields, set ke payload
+                    if new_payload:
+                        build_config["payload"]["value"] = new_payload
+
+            # Bersihkan dynamic spec_field leftover atau payload_variables dari build_config jika ada
+            for old_k in list(build_config.keys()):
+                if old_k.startswith("spec_field_") or old_k == "payload_variables":
+                    del build_config[old_k]
+
         except Exception:
             pass
 
-        return build_config
+        return dotdict({k: v.to_dict() if hasattr(v, "to_dict") else v for k, v in build_config.items()})
 
     def call_api(self) -> Data:
         """
         Mengeksekusi Callcraft Spec melalui POST /v1/call.
-        Menggabungkan payload dari node sebelumnya, file dari storage/chat, dan parameter manual.
+        Menggabungkan payload dari node sebelumnya, file dari storage/chat, form dinamis, dan parameter manual.
         """
         base_url = _clean_base_url(self._get_input_value("base_url"))
         url = f"{base_url}{CALLCRAFT_CALL_ENDPOINT}"
@@ -441,14 +746,17 @@ class CallcraftAPIComponent(Component):
             "Authorization": f"Bearer {secret_key}",
         }
 
-        # 2. Optional AI Model Headers
-        ai_model_name = self._get_input_value("ai_model_name").strip()
-        ai_api_key = self._get_input_value("ai_api_key").strip()
-        ai_base_url = self._get_input_value("ai_base_url").strip()
+        # 2. Optional AI Model Headers (X-AI-MODEL-NAME, X-AI-API-KEY, X-AI-BASE-URL)
+        ai_model_name, ai_provider = self._resolve_ai_model_and_provider()
+        ai_api_key = self._resolve_ai_api_key(ai_provider)
+        ai_base_url = self._resolve_ai_base_url(ai_provider)
 
         optional_headers_sent = False
-        if ai_model_name and ai_api_key:
+        if ai_model_name:
             headers["X-AI-MODEL-NAME"] = ai_model_name
+            optional_headers_sent = True
+
+        if ai_api_key:
             headers["X-AI-API-KEY"] = ai_api_key
             optional_headers_sent = True
 
@@ -464,8 +772,10 @@ class CallcraftAPIComponent(Component):
                 "public_key": public_key,
                 "secret_key_status": f"OK (Length: {len(secret_key)})" if secret_key else "EMPTY",
                 "optional_ai_headers_sent": optional_headers_sent,
-                "ai_model_name": ai_model_name if (ai_model_name and ai_api_key) else None,
-                "ai_base_url": ai_base_url if ai_base_url else None,
+                "ai_model_name": ai_model_name or None,
+                "ai_provider": ai_provider or None,
+                "ai_api_key_sent": bool(ai_api_key),
+                "ai_base_url": ai_base_url or None,
             },
             "step_2_incoming_payload": {},
             "step_3_file_processing": [],
@@ -473,15 +783,79 @@ class CallcraftAPIComponent(Component):
             "step_5_api_response": {},
         }
 
-        # 3. Ekstraksi Payload dari Node Sebelumnya (input_data)
-        target_input = getattr(self, "input_data", None)
-        payload, chat_text, chat_files = self._extract_payload_and_files(target_input)
+        # 3. Ekstraksi Payload Input (DictInput 'payload' yang mendukung input connection dan key-value form)
+        target_payload = getattr(self, "payload", None)
+        if target_payload is None and hasattr(self, "_attributes") and isinstance(self._attributes, dict):
+            target_payload = self._attributes.get("payload")
+
+        # Ekstrak data jika terhubung ke node Data/Message/dict sebelumnya
+        extracted_dict, chat_text, chat_files = self._extract_payload_and_files(target_payload)
+
+        # Siapkan source dictionary untuk template formatting (seperti di ParserComponent Langflow)
+        source_dict = dict(extracted_dict)
+        if chat_text:
+            source_dict["text"] = chat_text
+            source_dict["prompt"] = chat_text
+            source_dict["message"] = chat_text
+            source_dict["input"] = chat_text
+
+        class _DefaultDotDict(dict):
+            """
+            Dictionary pembungkus yang mendukung dot-notation ({meta.order_code})
+            dan graceful fallback nilai kosong jika placeholder tidak ditemukan (seperti ParserComponent).
+            """
+            def __init__(self, data_map: dict):
+                super().__init__()
+                for k, v in data_map.items():
+                    if isinstance(v, dict):
+                        self[k] = _DefaultDotDict(v)
+                    else:
+                        self[k] = v
+
+            def __getattr__(self, key: str) -> Any:
+                val = self.get(key)
+                return "" if val is None else val
+
+            def __missing__(self, key: str) -> str:
+                return ""
+
+        formatted_source = _DefaultDotDict(source_dict)
+
+        # Ambil form key-value dari self.payload jika berupa dict atau JSON string
+        form_key_values = {}
+        if isinstance(target_payload, dict):
+            for k, v in target_payload.items():
+                if k not in IGNORED_METADATA_KEYS and k != "files":
+                    form_key_values[str(k).strip()] = v
+        elif isinstance(target_payload, str) and target_payload.strip():
+            try:
+                parsed_json = json.loads(target_payload)
+                if isinstance(parsed_json, dict):
+                    for k, v in parsed_json.items():
+                        if k not in IGNORED_METADATA_KEYS and k != "files":
+                            form_key_values[str(k).strip()] = v
+            except Exception:
+                pass
+
+        # Parse nilai form: jika mengandung format template {variable}, ganti dengan data dari node sebelumnya
+        parsed_payload = dict(extracted_dict)
+        for k, v in form_key_values.items():
+            if isinstance(v, str) and "{" in v and "}" in v:
+                try:
+                    formatted_val = v.format_map(formatted_source)
+                except Exception:
+                    formatted_val = v
+            else:
+                formatted_val = v
+            parsed_payload[k] = formatted_val
+
+        payload = parsed_payload
 
         debug_trace["step_2_incoming_payload"] = {
             "extracted_text": chat_text,
             "extracted_files": chat_files,
-            "extracted_json_keys": list(payload.keys()),
-            "raw_input_type": str(type(target_input)),
+            "resolved_payload_keys": list(payload.keys()),
+            "raw_payload_type": str(type(target_payload)),
         }
 
         # 4. Tambahkan prompt manual atau dokumen manual jika diisi
@@ -493,6 +867,13 @@ class CallcraftAPIComponent(Component):
                 payload["prompt"] = custom_prompt
 
         document_input = self._get_input_value("document_input").strip()
+
+        # Sinkronkan variabel ke payload["variables"] jika spec memerlukannya
+        if "variables" not in payload or not isinstance(payload["variables"], dict):
+            payload["variables"] = {}
+        for k, v in payload.items():
+            if k not in ("variables", "image", "images", "file", "prompt", "custom_prompt"):
+                payload["variables"][k] = v
 
         base64_images = []
 

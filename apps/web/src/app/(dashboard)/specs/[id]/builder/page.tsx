@@ -34,7 +34,7 @@ import { FieldListRenderer } from "@/components/schema-builder/field-list-render
 import { SchemaPreview } from "@/components/schema-builder/schema-preview";
 import { ExecutionSettings } from "@/components/schema-builder/execution-settings";
 import { ToolCallingSettings } from "@/components/schema-builder/tool-calling-settings";
-import { buildJsonSchema, jsonSchemaToSchemaFields } from "@/components/schema-builder/schema-helpers";
+import { buildJsonSchema, jsonSchemaToSchemaFields, validateSchemaFieldTree } from "@/components/schema-builder/schema-helpers";
 import {
   updateCallSpec,
   createCallSpec,
@@ -358,6 +358,37 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
     setSaveError(null);
 
     try {
+      if (!specName || !specName.trim()) {
+        throw new Error("Nama Call Spec wajib diisi.");
+      }
+
+      // Validasi struktur nama field di Response Schema
+      const responseValidationError = validateSchemaFieldTree(responseFields, "Response Schema");
+      if (responseValidationError) {
+        throw new Error(responseValidationError);
+      }
+
+      // Validasi struktur nama field di Request Schema
+      const requestValidationError = validateSchemaFieldTree(requestFields, "Request Schema");
+      if (requestValidationError) {
+        throw new Error(requestValidationError);
+      }
+
+      // Validasi tools configuration (function calling)
+      if (toolsConfig?.tools && Array.isArray(toolsConfig.tools)) {
+        const idRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+        for (let i = 0; i < toolsConfig.tools.length; i++) {
+          const t = toolsConfig.tools[i];
+          const tName = (t.name || "").trim();
+          if (!tName) {
+            throw new Error(`Tool #${i + 1}: Nama function calling tool wajib diisi.`);
+          }
+          if (!idRegex.test(tName)) {
+            throw new Error(`Tool "${tName}": Nama tool tidak valid. Hanya boleh menggunakan huruf, angka, dan underscore tanpa spasi atau simbol.`);
+          }
+        }
+      }
+
       const responseSchemaObj = buildJsonSchema(responseFields);
       const requestSchemaObj = buildJsonSchema(requestFields);
 

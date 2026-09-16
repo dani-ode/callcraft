@@ -1,8 +1,9 @@
+import re
 import json
 import ulid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import Depends, HTTPException, Response, UploadFile, File
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,65 @@ from callcraft_api.db.repository import Repository
 from callcraft_api.db.session import get_db_session
 from callcraft_api.services.redis_cache import redis_service
 from callcraft_api.routers.internal._deps import router, get_current_user_id
+
+
+IDENTIFIER_REGEX = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def validate_schema_keys(schema: Optional[Dict[str, Any]], schema_type: str = "schema") -> None:
+    """Recursively validates that all property keys in a JSON Schema comply with identifier syntax."""
+    if not schema or not isinstance(schema, dict):
+        return
+
+    properties = schema.get("properties")
+    if properties and isinstance(properties, dict):
+        for key, prop_def in properties.items():
+            if not isinstance(key, str) or not key.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Field name di dalam {schema_type} tidak boleh kosong."
+                )
+            clean_key = key.strip()
+            if not IDENTIFIER_REGEX.match(clean_key):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Field name '{clean_key}' di dalam {schema_type} tidak valid. Nama key harus berupa huruf, angka, atau underscore (tidak boleh mengandung spasi atau karakter khusus seperti tanda hubung atau simbol)."
+                )
+            if isinstance(prop_def, dict):
+                validate_schema_keys(prop_def, schema_type=f"{schema_type} -> '{clean_key}'")
+                items = prop_def.get("items")
+                if isinstance(items, dict):
+                    validate_schema_keys(items, schema_type=f"{schema_type} -> '{clean_key}[]'")
+
+
+def validate_tools_config(tools_config: Optional[Dict[str, Any]]) -> None:
+    """Validates that all declared function calling tool names and parameter keys comply with identifier syntax."""
+    if not tools_config or not isinstance(tools_config, dict):
+        return
+
+    tools = tools_config.get("tools")
+    if not tools or not isinstance(tools, list):
+        return
+
+    for idx, tool in enumerate(tools):
+        if not isinstance(tool, dict):
+            continue
+        tool_name = (tool.get("name") or "").strip()
+        if not tool_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tool #{idx + 1}: Nama function calling tool wajib diisi."
+            )
+        if not IDENTIFIER_REGEX.match(tool_name):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tool '{tool_name}': Nama function calling tool tidak valid. Nama fungsi harus diawali huruf/underscore dan hanya boleh terdiri dari huruf, angka, atau underscore tanpa spasi/simbol."
+            )
+
+        # Validate parameters if defined
+        params = tool.get("parameters") or tool.get("parametersSchema")
+        if params and isinstance(params, dict):
+            validate_schema_keys(params, schema_type=f"Tool '{tool_name}' parameters")
 
 
 class CreateSpecRequest(BaseModel):
@@ -79,6 +139,11 @@ async def create_new_spec(
 
     if not payload.project_id or not payload.project_id.strip():
         raise HTTPException(status_code=400, detail="Parameter 'project_id' wajib diisi.")
+
+    # Validasi nama field di request_schema, response_schema, dan function calling tools
+    validate_schema_keys(payload.request_schema, schema_type="Request Schema")
+    validate_schema_keys(payload.response_schema, schema_type="Response Schema")
+    validate_tools_config(payload.tools_config)
 
     raw_slug = payload.slug or payload.name
     base_slug = raw_slug.lower().replace(" ", "-")
@@ -177,6 +242,14 @@ async def update_spec_by_id(
 ):
     if not db:
         raise HTTPException(status_code=500, detail="Database session unavailable")
+
+    # Validasi nama field di request_schema, response_schema, dan function calling tools jika dikirimkan
+    if payload.request_schema is not None:
+        validate_schema_keys(payload.request_schema, schema_type="Request Schema")
+    if payload.response_schema is not None:
+        validate_schema_keys(payload.response_schema, schema_type="Response Schema")
+    if payload.tools_config is not None:
+        validate_tools_config(payload.tools_config)
 
     spec = await Repository.update_call_spec(
         db=db,
