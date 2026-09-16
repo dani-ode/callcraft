@@ -152,7 +152,7 @@ class RedisCacheService:
                 user_id = await self._client.get(key)
                 if user_id:
                     await self._client.delete(key)
-                    return user_id.decode("utf-8") if isinstance(user_id, bytes) else str(user_id)
+                    return user_id.decode("utf-8") if isinstance(user_id, bytes) else user_id
                 return None
             except Exception as e:
                 logger.warning(f"Redis verify_and_consume_oauth_exchange error: {e}")
