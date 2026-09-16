@@ -8,3 +8,4 @@ export * from "./users";
 export * from "./execution";
 export * from "./projects";
 export * from "./models";
+export * from "./auth";

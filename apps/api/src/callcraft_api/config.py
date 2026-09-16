@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
 
+    frontend_url: Optional[str] = None
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    google_redirect_uri: Optional[str] = None
+
+    @property
+    def resolved_frontend_url(self) -> str:
+        if self.frontend_url:
+            return self.frontend_url.rstrip("/")
+        raise ValueError("FRONTEND_URL environment variable must be configured")
+
     @property
     def resolved_database_url(self) -> str:
         if self.database_url:

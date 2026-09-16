@@ -21,6 +21,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdminAuthenticated: boolean;
   login: (email: string, password?: string) => Promise<boolean>;
+  loginWithSessionData: (data: UserSession) => void;
   register: (name: string, email: string, password?: string) => Promise<boolean>;
   logout: () => void;
   adminLogin: (email: string, password?: string) => Promise<boolean>;
@@ -191,6 +192,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  const loginWithSessionData = (data: UserSession): void => {
+    localStorage.setItem("callcraft_session_key", data.id);
+    localStorage.removeItem("callcraft_user_session");
+
+    setUser({
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      role: data.role || "developer",
+      avatar: data.avatar || (data.name ? data.name.substring(0, 2).toUpperCase() : "CC"),
+      status: data.status || "active",
+    });
+  };
+
   const register = async (name: string, email: string, password?: string): Promise<boolean> => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is not configured");
@@ -296,6 +311,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user,
         isAdminAuthenticated: !!adminSession,
         login,
+        loginWithSessionData,
         register,
         logout,
         adminLogin,

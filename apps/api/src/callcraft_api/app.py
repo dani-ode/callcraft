@@ -10,7 +10,7 @@ from callcraft_api.config import settings
 from callcraft_api.db.session import AsyncSessionLocal, engine
 from callcraft_api.db.init_db import init_db
 from callcraft_api.db.models import Base
-from callcraft_api.routers import admin, auth, health, internal, public, mcp
+from callcraft_api.routers import admin, auth, auth_google, health, internal, public, mcp
 from callcraft_api.utils.envelope import build_error_envelope
 
 logger = logging.getLogger("callcraft.api.exception")
@@ -127,6 +127,7 @@ async def unhandled_exception_handler(request, exc):
 # Include Routers
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(auth_google.router)
 app.include_router(public.router)
 app.include_router(internal.router)
 app.include_router(admin.router)

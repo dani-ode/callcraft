@@ -32,9 +32,17 @@ yarn-error.log*
 .pnpm-debug.log*
 bun.lockb
 
+# Credentials & Secrets
+client_secret*.json
+client_secrets*.json
+*.credentials.json
+google-credentials*.json
+service-account*.json
+*.pem
+*.key
+
 # OS & IDE
 .DS_Store
-*.pem
 .idea/
 .vscode/
 *.swp

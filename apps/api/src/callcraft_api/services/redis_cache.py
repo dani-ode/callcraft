@@ -109,5 +109,56 @@ class RedisCacheService:
             items.append(_MEM_OUTBOX.pop(0))
         return items
 
+    async def set_oauth_state(self, state: str, ttl: int = 600):
+        key = f"callcraft:oauth_state:{state}"
+        if self._is_connected and self._client:
+            try:
+                await self._client.setex(key, ttl, "valid")
+                return
+            except Exception as e:
+                logger.warning(f"Redis set_oauth_state error: {e}")
+        _MEM_CACHE[key] = "valid"
+
+    async def verify_and_consume_oauth_state(self, state: str) -> bool:
+        key = f"callcraft:oauth_state:{state}"
+        if self._is_connected and self._client:
+            try:
+                val = await self._client.get(key)
+                if val:
+                    await self._client.delete(key)
+                    return True
+                return False
+            except Exception as e:
+                logger.warning(f"Redis verify_and_consume_oauth_state error: {e}")
+        if key in _MEM_CACHE:
+            del _MEM_CACHE[key]
+            return True
+        return False
+
+    async def set_oauth_exchange(self, code: str, user_id: str, ttl: int = 60):
+        key = f"callcraft:oauth_exchange:{code}"
+        if self._is_connected and self._client:
+            try:
+                await self._client.setex(key, ttl, user_id)
+                return
+            except Exception as e:
+                logger.warning(f"Redis set_oauth_exchange error: {e}")
+        _MEM_CACHE[key] = user_id
+
+    async def verify_and_consume_oauth_exchange(self, code: str) -> Optional[str]:
+        key = f"callcraft:oauth_exchange:{code}"
+        if self._is_connected and self._client:
+            try:
+                user_id = await self._client.get(key)
+                if user_id:
+                    await self._client.delete(key)
+                    return user_id.decode("utf-8") if isinstance(user_id, bytes) else str(user_id)
+                return None
+            except Exception as e:
+                logger.warning(f"Redis verify_and_consume_oauth_exchange error: {e}")
+        if key in _MEM_CACHE:
+            return _MEM_CACHE.pop(key)
+        return None
+
 
 redis_service = RedisCacheService()
