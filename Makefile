@@ -44,10 +44,28 @@ build-web: ## Bersihkan cache .next & build Next.js production bundle
 	bun run build:web
 
 test: ## Jalankan seluruh test suite backend API
-	.venv/bin/pytest apps/api/tests
+	@if command -v uv >/dev/null 2>&1; then \
+		uv run pytest apps/api/tests; \
+	elif [ -f .venv/bin/pytest ]; then \
+		.venv/bin/pytest apps/api/tests; \
+	elif docker compose ps --services --filter "status=running" 2>/dev/null | grep -q "callcraft-api"; then \
+		docker compose exec -T callcraft-api pytest apps/api/tests; \
+	else \
+		pytest apps/api/tests; \
+	fi
 
 db-reset: ## Hapus database, buat ulang seluruh tabel & seed data awal
-	uv run python -m callcraft_api.db.reset_and_seed
+	@if docker compose ps --services --filter "status=running" 2>/dev/null | grep -q "callcraft-api"; then \
+		docker compose exec -T callcraft-api python -m callcraft_api.db.reset_and_seed; \
+	elif command -v uv >/dev/null 2>&1; then \
+		uv run python -m callcraft_api.db.reset_and_seed; \
+	elif [ -f .venv/bin/python ]; then \
+		.venv/bin/python -m callcraft_api.db.reset_and_seed; \
+	elif command -v docker >/dev/null 2>&1 && docker compose ps >/dev/null 2>&1; then \
+		docker compose run --rm callcraft-api python -m callcraft_api.db.reset_and_seed; \
+	else \
+		python3 -m callcraft_api.db.reset_and_seed; \
+	fi
 
 clean: ## Bersihkan cache Next.js dan temporary files Python (__pycache__)
 	rm -rf apps/web/.next
