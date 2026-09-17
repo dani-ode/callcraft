@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/auth-context";
 import { useAppInit } from "@/context/app-init-context";
 import { ProjectSwitcher } from "@/components/project-switcher";
+import { UserAvatar } from "@/components/user-avatar";
 import { PYTHON_API_URL } from "@/lib/api/core";
 
 const navigation = [
@@ -162,8 +163,8 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
           className="flex items-center gap-2 overflow-hidden hover:opacity-80 transition-opacity cursor-pointer flex-1 group"
           title="Buka Pengaturan Akun"
         >
-          <div className="w-7 h-7 rounded-lg bg-[#e1b329]/20 text-[#e1b329] font-bold text-xs flex items-center justify-center shrink-0 border border-[#e1b329]/30 group-hover:border-[#e1b329]">
-            {user?.avatar || "U"}
+          <div className="w-7 h-7 rounded-lg bg-[#e1b329]/20 text-[#e1b329] font-bold text-xs flex items-center justify-center shrink-0 border border-[#e1b329]/30 group-hover:border-[#e1b329] overflow-hidden">
+            <UserAvatar src={user?.avatar} name={user?.name} fallback="U" />
           </div>
           {(!isManuallyCollapsed || isMobileDrawer) && (
             <div className={cn("truncate", !isMobileDrawer && "hidden lg:block")}>

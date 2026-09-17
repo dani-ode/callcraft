@@ -11,6 +11,7 @@ export interface UserSession {
   email: string;
   role: "super_admin" | "admin" | "developer" | "viewer";
   avatar: string;
+  avatarUrl?: string | null;
   status?: string;
 }
 
@@ -24,6 +25,7 @@ interface AuthContextType {
   loginWithSessionData: (data: UserSession) => void;
   register: (name: string, email: string, password?: string) => Promise<boolean>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   adminLogin: (email: string, password?: string) => Promise<boolean>;
   adminLogout: () => void;
 }
@@ -83,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: res.email,
               role: "developer",
               avatar: res.avatarUrl || (res.fullName ? res.fullName.substring(0, 2).toUpperCase() : "CC"),
+              avatarUrl: res.avatarUrl || null,
               status: res.status,
             });
           }
@@ -133,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: res.email,
               role: "super_admin",
               avatar: res.avatarUrl || (res.fullName ? res.fullName.substring(0, 2).toUpperCase() : "SA"),
+              avatarUrl: res.avatarUrl || null,
             });
           }
         })
@@ -186,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       role: data.role || "developer",
       avatar: data.avatar || (data.name ? data.name.substring(0, 2).toUpperCase() : "CC"),
+      avatarUrl: data.avatarUrl || (data.avatar?.startsWith("http") ? data.avatar : null),
       status: data.status || "active",
     });
 
@@ -202,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       role: data.role || "developer",
       avatar: data.avatar || (data.name ? data.name.substring(0, 2).toUpperCase() : "CC"),
+      avatarUrl: data.avatarUrl || (data.avatar?.startsWith("http") ? data.avatar : null),
       status: data.status || "active",
     });
   };
@@ -247,6 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       role: data.role || "developer",
       avatar: data.avatar || (data.name ? data.name.substring(0, 2).toUpperCase() : "CC"),
+      avatarUrl: data.avatarUrl || (data.avatar?.startsWith("http") ? data.avatar : null),
       status: data.status,
     });
 
@@ -257,6 +264,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     clearUserSessionOnly();
     router.push("/login");
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await fetchCurrentUserProfile();
+      if (res && res.id) {
+        setUser({
+          id: res.id,
+          name: res.fullName,
+          email: res.email,
+          role: "developer",
+          avatar: res.avatarUrl || (res.fullName ? res.fullName.substring(0, 2).toUpperCase() : "CC"),
+          avatarUrl: res.avatarUrl || null,
+          status: res.status,
+        });
+      }
+    } catch (err) {
+      console.warn("[AuthContext] Failed to refresh user profile:", err);
+    }
   };
 
   const adminLogin = async (email: string, password?: string): Promise<boolean> => {
@@ -291,6 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       role: "super_admin",
       avatar: data.avatar || (data.name ? data.name.substring(0, 2).toUpperCase() : "SA"),
+      avatarUrl: data.avatarUrl || (data.avatar?.startsWith("http") ? data.avatar : null),
     });
 
     return true;
@@ -314,6 +341,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginWithSessionData,
         register,
         logout,
+        refreshUser,
         adminLogin,
         adminLogout,
       }}

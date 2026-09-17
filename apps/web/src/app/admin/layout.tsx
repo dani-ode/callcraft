@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserAvatar } from "@/components/user-avatar";
 import { useAuth } from "@/context/auth-context";
 
 const adminNavigation = [
@@ -175,8 +176,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#e1b329] via-[#ffb443] to-[#8a715e] p-0.5">
-                <div className="w-full h-full bg-[#120e0b] rounded-full flex items-center justify-center text-xs font-bold text-[#e1b329]">
-                  {adminSession?.avatar || "SA"}
+                <div className="w-full h-full bg-[#120e0b] rounded-full flex items-center justify-center text-xs font-bold text-[#e1b329] overflow-hidden">
+                  <UserAvatar src={adminSession?.avatar} name={adminSession?.name} fallback="SA" />
                 </div>
               </div>
               <div>

@@ -13,6 +13,7 @@ export interface GoogleExchangeResponse {
   status: string;
   bio?: string | null;
   avatar: string;
+  avatarUrl?: string | null;
   githubUrl?: string | null;
   websiteUrl?: string | null;
   company?: string | null;

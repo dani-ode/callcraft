@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bell, ShieldCheck, BookOpen, ExternalLink, Copy, Check, Fingerprint, LogOut, Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserAvatar } from "@/components/user-avatar";
 import { useAuth } from "@/context/auth-context";
 import { getActiveUserId, PYTHON_API_URL } from "@/lib/api/core";
 
@@ -70,8 +71,8 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
         {/* User Account Info & Logout Button */}
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#e1b329] via-[#ffb443] to-[#8a715e] p-0.5 shadow-md shrink-0">
-            <div className="w-full h-full bg-[#120e0b] dark:bg-[#120e0b] bg-[#f5ebe0] rounded-full flex items-center justify-center text-xs font-bold text-[#e1b329]">
-              {user?.avatar || "CC"}
+            <div className="w-full h-full bg-[#120e0b] dark:bg-[#120e0b] bg-[#f5ebe0] rounded-full flex items-center justify-center text-xs font-bold text-[#e1b329] overflow-hidden">
+              <UserAvatar src={user?.avatar} name={user?.name} fallback="CC" />
             </div>
           </div>
           <div className="hidden sm:block">

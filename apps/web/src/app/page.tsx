@@ -18,6 +18,7 @@ import {
   FileText,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserAvatar } from "@/components/user-avatar";
 import { useAuth } from "@/context/auth-context";
 import { useAppInit } from "@/context/app-init-context";
 import { PYTHON_API_URL } from "@/lib/api/core";
@@ -87,8 +88,8 @@ export default function LandingPage() {
           {user ? (
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-[#edd6bb]/20">
-                <div className="w-6 h-6 rounded-full bg-[#e1b329]/20 text-[#e1b329] text-[10px] font-bold flex items-center justify-center">
-                  {user.avatar || "U"}
+                <div className="w-6 h-6 rounded-full bg-[#e1b329]/20 text-[#e1b329] text-[10px] font-bold flex items-center justify-center overflow-hidden">
+                  <UserAvatar src={user.avatar} name={user.name} fallback="U" />
                 </div>
                 <span className="text-xs font-bold text-[#8a715e] dark:text-[#edd6bb]">{user.name}</span>
               </div>

@@ -53,6 +53,7 @@ function CallbackContent() {
           email: session.email,
           role: session.role,
           avatar: session.avatar,
+          avatarUrl: session.avatarUrl || (session.avatar?.startsWith("http") ? session.avatar : undefined),
           status: session.status,
         });
 

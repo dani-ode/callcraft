@@ -29,9 +29,10 @@ import {
   closeUserAccount,
 } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
+import { UserAvatar } from "@/components/user-avatar";
 
 export default function AccountSettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
@@ -107,6 +108,7 @@ export default function AccountSettingsPage() {
       });
 
       setNotification({ message: res.message || "Profil berhasil diperbarui!", type: "success" });
+      await refreshUser();
     } catch (err: any) {
       setNotification({ message: err.message || "Gagal menyimpan perubahan profil", type: "error" });
     } finally {
@@ -287,11 +289,7 @@ export default function AccountSettingsPage() {
             {/* Avatar Preview */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 rounded-2xl bg-[#fcfaf7] dark:bg-[#0d0907] border border-[#edd6bb]/30 dark:border-[#edd6bb]/20">
               <div className="relative w-16 h-16 rounded-2xl bg-[#e1b329]/20 text-[#e1b329] font-extrabold text-xl flex items-center justify-center border border-[#e1b329]/40 overflow-hidden shrink-0">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" />
-                ) : (
-                  <span>{fullName ? fullName.slice(0, 2).toUpperCase() : "U"}</span>
-                )}
+                <UserAvatar src={avatarUrl} name={fullName} fallback="U" />
               </div>
 
               <div className="flex-1 space-y-1">

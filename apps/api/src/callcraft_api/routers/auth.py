@@ -221,6 +221,7 @@ async def verify_email(
             "role": "developer",
             "status": "active",
             "avatar": user_obj.avatar_url or user_obj.full_name[:2].upper(),
+            "avatarUrl": user_obj.avatar_url,
         },
     }
 
@@ -319,6 +320,7 @@ async def login_user(
         "status": user_obj.status,
         "bio": user_obj.bio,
         "avatar": user_obj.avatar_url or user_obj.full_name[:2].upper(),
+        "avatarUrl": user_obj.avatar_url,
         "githubUrl": user_obj.github_url,
         "websiteUrl": user_obj.website_url,
         "company": user_obj.company,
