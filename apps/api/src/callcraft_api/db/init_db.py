@@ -648,7 +648,7 @@ async def init_db(session: AsyncSession) -> None:
 
         stmt = select(Template).where((Template.id == tmpl["id"]) | (Template.code == tmpl["code"]))
         res = await session.execute(stmt)
-        if not res.scalar_one_or_none():
+        if not res.scalars().first():
             session.add(
                 Template(
                     id=tmpl["id"],
@@ -736,7 +736,7 @@ async def init_db(session: AsyncSession) -> None:
         resolved_suid = resolve_user_id(suid)
         stmt = select(CallSpec).where((CallSpec.id == sid) | ((CallSpec.user_id == resolved_suid) & (CallSpec.slug == sslug)))
         res = await session.execute(stmt)
-        spec_obj = res.scalar_one_or_none()
+        spec_obj = res.scalars().first()
         matched_tmpl = tmpl_map.get(stpid, {})
         tools_cfg = matched_tmpl.get("tools_config", {})
         if not spec_obj:
@@ -760,7 +760,7 @@ async def init_db(session: AsyncSession) -> None:
         ver_id = f"spv_01HZX01VERSION{sid[-10:]}"
         stmt_ver = select(CallSpecVersion).where((CallSpecVersion.id == ver_id) | ((CallSpecVersion.call_spec_id == spec_obj.id) & (CallSpecVersion.version_number == 1)))
         res_ver = await session.execute(stmt_ver)
-        if not res_ver.scalar_one_or_none():
+        if not res_ver.scalars().first():
             session.add(
                 CallSpecVersion(
                     id=ver_id,
@@ -792,7 +792,7 @@ async def init_db(session: AsyncSession) -> None:
     for log_id, req_id, log_uid, spec_id, ver_id, cred_id, pcode, mident, st, hst, itype, isize, ptime, ptok, ctok, ttok, cost, ip, ua, log_created in logs_data:
         stmt = select(ApiRequest).where((ApiRequest.id == log_id) | (ApiRequest.request_id == req_id))
         res = await session.execute(stmt)
-        if not res.scalar_one_or_none():
+        if not res.scalars().first():
             stmt_vcheck = select(CallSpecVersion.id).where(CallSpecVersion.id == ver_id)
             res_vcheck = await session.execute(stmt_vcheck)
             if res_vcheck.scalar_one_or_none():
@@ -847,7 +847,7 @@ async def init_db(session: AsyncSession) -> None:
         usg_id = f"usg_01HZX01USG{idx+1:017d}"
         stmt = select(UserUsageDaily).where((UserUsageDaily.id == usg_id) | ((UserUsageDaily.user_id == resolved_uuid) & (UserUsageDaily.usage_date == u_date)))
         res = await session.execute(stmt)
-        if not res.scalar_one_or_none():
+        if not res.scalars().first():
             session.add(
                 UserUsageDaily(
                     id=usg_id,

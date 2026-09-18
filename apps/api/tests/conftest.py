@@ -2,11 +2,29 @@
 Callcraft API Test Suite - Global Fixtures & Setup
 Ensures PostgreSQL tables and seed data are initialized before all tests run.
 """
+import os
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
+# Ensure test environment variables are set before application components load
+os.environ.setdefault("FRONTEND_URL", "http://localhost:3000")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "mock-google-client-id.apps.googleusercontent.com")
+os.environ.setdefault("GOOGLE_CLIENT_SECRET", "mock-google-client-secret")
+os.environ.setdefault("GOOGLE_REDIRECT_URI", "http://localhost:8081/internal/v1/auth/google/callback")
+
 from callcraft_api.config import settings
 from callcraft_api.db.models import Base
 from callcraft_api.db.init_db import init_db
+
+# Patch settings object directly if loaded before os.environ
+if not settings.frontend_url:
+    settings.frontend_url = "http://localhost:3000"
+if not settings.google_client_id:
+    settings.google_client_id = "mock-google-client-id.apps.googleusercontent.com"
+if not settings.google_client_secret:
+    settings.google_client_secret = "mock-google-client-secret"
+if not settings.google_redirect_uri:
+    settings.google_redirect_uri = "http://localhost:8081/internal/v1/auth/google/callback"
 
 
 def _build_asyncpg_url(url: str) -> str:
