@@ -46,6 +46,10 @@ services:
       - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY:?MASTER_ENCRYPTION_KEY is required in .env}
       - SERVICE_CLIENT_ID=${SERVICE_CLIENT_ID:?SERVICE_CLIENT_ID is required in .env}
       - SERVICE_CLIENT_SECRET=${SERVICE_CLIENT_SECRET:?SERVICE_CLIENT_SECRET is required in .env}
+      - FRONTEND_URL=${FRONTEND_URL:?FRONTEND_URL is required in .env}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
     depends_on:
       - callcraft-postgres
       - callcraft-redis
