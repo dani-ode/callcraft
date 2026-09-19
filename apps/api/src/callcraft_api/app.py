@@ -73,6 +73,8 @@ async def http_exception_handler(request, exc):
         details=details,
         actionable_step=actionable_step,
     )
+    req_id = envelope.get("meta", {}).get("requestId", "")
+    logger.warning(f"HTTP {status_code} [{req_id}] {request.method} {request.url}: {message}")
     return JSONResponse(status_code=status_code, content=envelope)
 
 
