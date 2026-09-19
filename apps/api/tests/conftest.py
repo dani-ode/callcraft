@@ -36,24 +36,27 @@ def _build_asyncpg_url(url: str) -> str:
     return url
 
 
-import pytest_asyncio
+import asyncio
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def ensure_db_initialized():
+@pytest.fixture(scope="session", autouse=True)
+def ensure_db_initialized():
     """
     Session-scoped fixture that initializes all PostgreSQL tables and seeds
     baseline data once before the entire test suite runs.
     """
-    db_url = _build_asyncpg_url(settings.resolved_database_url)
-    engine = create_async_engine(db_url, echo=False)
+    async def _init():
+        db_url = _build_asyncpg_url(settings.resolved_database_url)
+        engine = create_async_engine(db_url, echo=False)
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-    session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_maker() as session:
-        await init_db(session)
+        session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+        async with session_maker() as session:
+            await init_db(session)
 
-    await engine.dispose()
-    yield
+        await engine.dispose()
+
+    asyncio.run(_init())
+

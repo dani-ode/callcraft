@@ -49,15 +49,16 @@ async def test_session():
         await conn.run_sync(Base.metadata.create_all)
 
     session_maker = async_sessionmaker(bind=schema_engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_maker() as session:
-        await init_db(session)
+    session = session_maker()
+    await init_db(session)
+    try:
         yield session
-
-    # Teardown: drop the ephemeral schema and all its tables
-    async with schema_engine.begin() as conn:
-        await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
-
-    await schema_engine.dispose()
+    finally:
+        await session.close()
+        # Teardown: drop the ephemeral schema and all its tables
+        async with schema_engine.begin() as conn:
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+        await schema_engine.dispose()
 
 
 @pytest.mark.asyncio
