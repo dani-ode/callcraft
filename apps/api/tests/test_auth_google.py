@@ -159,6 +159,11 @@ async def test_google_alias_routes():
         resp_proxy = await ac.get("/api/internal/v1/auth/google/callback", follow_redirects=False)
         assert resp_proxy.status_code == 302
 
+        # Test common /api/auth/google/callback alias
+        resp_api_cb = await ac.get("/api/auth/google/callback", follow_redirects=False)
+        assert resp_api_cb.status_code == 302
+        assert "error=missing_oauth_parameters" in resp_api_cb.headers["location"]
+
         # Test frontend callback fallback when code and state are missing
         resp_fallback = await ac.get("/auth/callback?code=xyz123", follow_redirects=False)
         assert resp_fallback.status_code == 302

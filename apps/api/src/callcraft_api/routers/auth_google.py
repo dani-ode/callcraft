@@ -242,6 +242,7 @@ alias_router = APIRouter(tags=["Google Authentication Aliases"])
 
 
 @alias_router.get("/auth/google/url", include_in_schema=False)
+@alias_router.get("/api/auth/google/url", include_in_schema=False)
 @alias_router.get("/api/internal/v1/auth/google/url", include_in_schema=False)
 @alias_router.get("/api/v1/auth/google/url", include_in_schema=False)
 async def get_google_auth_url_alias():
@@ -249,6 +250,7 @@ async def get_google_auth_url_alias():
 
 
 @alias_router.get("/auth/google/callback", include_in_schema=False)
+@alias_router.get("/api/auth/google/callback", include_in_schema=False)
 @alias_router.get("/api/internal/v1/auth/google/callback", include_in_schema=False)
 @alias_router.get("/api/v1/auth/google/callback", include_in_schema=False)
 async def google_auth_callback_alias(
@@ -268,6 +270,7 @@ async def google_auth_callback_alias(
 
 
 @alias_router.post("/auth/google/exchange", include_in_schema=False)
+@alias_router.post("/api/auth/google/exchange", include_in_schema=False)
 @alias_router.post("/api/internal/v1/auth/google/exchange", include_in_schema=False)
 @alias_router.post("/api/v1/auth/google/exchange", include_in_schema=False)
 async def exchange_google_code_alias(
@@ -278,6 +281,7 @@ async def exchange_google_code_alias(
 
 
 @alias_router.get("/auth/callback", include_in_schema=False)
+@alias_router.get("/api/auth/callback", include_in_schema=False)
 async def auth_callback_fallback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
