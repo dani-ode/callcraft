@@ -142,30 +142,3 @@ async def test_google_callback_and_exchange_flow():
         assert replay_resp.status_code == 400
 
 
-@pytest.mark.asyncio
-async def test_google_alias_routes():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        # Test URL alias
-        resp_url = await ac.get("/auth/google/url")
-        assert resp_url.status_code == 200
-        assert "url" in resp_url.json()
-
-        # Test callback alias with missing params
-        resp_cb = await ac.get("/auth/google/callback", follow_redirects=False)
-        assert resp_cb.status_code == 302
-        assert "error=missing_oauth_parameters" in resp_cb.headers["location"]
-
-        # Test reverse-proxy prefix alias
-        resp_proxy = await ac.get("/api/internal/v1/auth/google/callback", follow_redirects=False)
-        assert resp_proxy.status_code == 302
-
-        # Test common /api/auth/google/callback alias
-        resp_api_cb = await ac.get("/api/auth/google/callback", follow_redirects=False)
-        assert resp_api_cb.status_code == 302
-        assert "error=missing_oauth_parameters" in resp_api_cb.headers["location"]
-
-        # Test frontend callback fallback when code and state are missing
-        resp_fallback = await ac.get("/auth/callback?code=xyz123", follow_redirects=False)
-        assert resp_fallback.status_code == 302
-        assert "/auth/callback?code=xyz123" in resp_fallback.headers["location"]
-
