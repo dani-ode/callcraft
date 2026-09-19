@@ -1,4 +1,4 @@
-export const PYTHON_API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+export const PYTHON_API_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_URL) {
   console.error("NEXT_PUBLIC_API_URL is missing. Please set NEXT_PUBLIC_API_URL in environment configuration.");
 }

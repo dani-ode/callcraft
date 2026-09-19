@@ -7,6 +7,8 @@ Panduan integrasi **Callcraft** dengan **Langflow** menggunakan Custom Component
 ## Fitur Komponen
 - **Dropdown Dinamis**: Mengambil daftar **Projects** (`GET /v1/projects`) dan **Call Specs** (`GET /v1/specs?projectId=...`) langsung dari server Callcraft menggunakan kredensial Anda.
 - **Eksekusi AI Terstruktur**: Memanggil `POST /v1/call` dan mengembalikan output terstruktur ke tipe `Data` dan `Message` untuk diolah oleh LLM, Agent, atau output node berikutnya.
+- **Form Payload Body Params Manual**: Pengguna dapat menambahkan parameter body request (`Key` & `Value`) secara manual menggunakan form tabel langsung dari UI Langflow, lengkap dengan dukungan template parser dinamis (seperti `{text}`, `{invoice_id}`) dan nilai statis.
+- **Pemisahan Input Upstream**: Menerima koneksi data dari node sebelumnya (`Chat Input`, `File`, `Data`, `Message`) melalui port `input_data`, tanpa menimpa atau menonaktifkan konfigurasi parameter manual.
 - **Dukungan File & URL**: Menerima URL dokumen (gambar/PDF) atau Base64 data string.
 
 ---

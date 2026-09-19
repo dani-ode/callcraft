@@ -45,9 +45,13 @@
                 "type": "str",
                 "value": "Ekstrak seluruh field dengan presisi tinggi"
               },
-              "variables": {
-                "type": "dict",
-                "value": {}
+              "input_data": {
+                "type": "Data",
+                "value": null
+              },
+              "payload": {
+                "type": "table",
+                "value": []
               }
             },
             "description": "Connects to Callcraft to list projects, fetch specs, and execute AI document & schema extraction",

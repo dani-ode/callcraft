@@ -128,6 +128,7 @@ async def unhandled_exception_handler(request, exc):
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(auth_google.router)
+app.include_router(auth_google.alias_router)
 app.include_router(public.router)
 app.include_router(internal.router)
 app.include_router(admin.router)

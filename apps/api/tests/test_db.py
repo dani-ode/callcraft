@@ -8,6 +8,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import text, select
+from sqlalchemy.pool import NullPool
 from callcraft_api.config import settings
 from callcraft_api.db.models import Base
 from callcraft_api.db.init_db import init_db
@@ -23,7 +24,10 @@ def _build_asyncpg_url(url: str) -> str:
     return url
 
 
-@pytest.fixture
+import pytest_asyncio
+
+
+@pytest_asyncio.fixture
 async def test_session():
     """
     Creates a fully isolated PostgreSQL session using a per-test schema.
@@ -36,6 +40,7 @@ async def test_session():
     schema_engine = create_async_engine(
         db_url,
         echo=False,
+        poolclass=NullPool,
         connect_args={"server_settings": {"search_path": schema_name}},
     )
 

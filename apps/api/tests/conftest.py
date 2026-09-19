@@ -36,7 +36,10 @@ def _build_asyncpg_url(url: str) -> str:
     return url
 
 
-@pytest.fixture(scope="session", autouse=True)
+import pytest_asyncio
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
 async def ensure_db_initialized():
     """
     Session-scoped fixture that initializes all PostgreSQL tables and seeds

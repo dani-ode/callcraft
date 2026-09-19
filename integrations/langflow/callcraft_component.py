@@ -54,7 +54,7 @@ from lfx.base.models.unified_models import (
 )
 from lfx.base.models.watsonx_constants import IBM_WATSONX_URLS
 from lfx.custom.custom_component.component import Component
-from lfx.inputs.inputs import DictInput, DropdownInput, ModelInput, SecretStrInput, StrInput
+from lfx.inputs.inputs import DictInput, DropdownInput, ModelInput, SecretStrInput, StrInput, TableInput
 from lfx.io import DataInput, Output
 from lfx.schema.data import Data
 from lfx.schema.dotdict import dotdict
@@ -137,17 +137,40 @@ class CallcraftAPIComponent(Component):
             required=True,
         ),
 
-        # 3. Form Input Payload Key-Value (Dukungan Nilai Statis & Template Parser Dinamis)
-        DictInput(
-            name="payload",
-            display_name="Payload",
-            info="Form input key-value untuk data payload Callcraft. Nilai dapat berupa teks statis atau format template parser (contoh: {text}, {message}, {variable_name}).",
-            value={},
+        # 3. Input Data dari Node Sebelumnya (Chat Input, File, Data, Message, JSON)
+        DataInput(
+            name="input_data",
+            display_name="Input Data (Upstream)",
+            info="Hubungkan node sebelumnya di sini (Chat Input, File, Data, Message, atau JSON). File dokumen/gambar/PDF akan otomatis diekstrak ke Base64.",
+            input_types=["Message", "Data", "dict", "Text", "str", "list"],
             required=False,
-            input_types=["Data", "dict", "Message", "Text", "str"],
         ),
 
-        # 4. Base URL (Default dari konstanta global di atas)
+        # 4. Form Input Payload Key-Value (Dukungan Nilai Statis & Template Parser Dinamis)
+        TableInput(
+            name="payload",
+            display_name="Payload (Body Params)",
+            info="Tambahkan field/parameter body REST API secara manual (Key-Value). Nilai dapat berupa teks statis atau template parser dinamis (contoh: {text}, {message}, {variable_name}).",
+            table_schema=[
+                {
+                    "name": "key",
+                    "display_name": "Key",
+                    "type": "str",
+                    "description": "Nama parameter / field body",
+                },
+                {
+                    "name": "value",
+                    "display_name": "Value",
+                    "type": "str",
+                    "description": "Nilai parameter atau template parser (misal: {text}, {message})",
+                },
+            ],
+            value=[],
+            is_list=True,
+            required=False,
+        ),
+
+        # 5. Base URL (Default dari konstanta global di atas)
         StrInput(
             name="base_url",
             display_name="Callcraft Base URL",
@@ -647,8 +670,12 @@ class CallcraftAPIComponent(Component):
                     if resp_detail.status_code == 200:
                         detail_json = resp_detail.json()
                         if isinstance(detail_json, dict):
-                            selected_spec_obj = detail_json.get("data")
-                            if not selected_spec_obj:
+                            raw_spec_obj = detail_json.get("data")
+                            if isinstance(raw_spec_obj, list) and raw_spec_obj:
+                                selected_spec_obj = raw_spec_obj[0]
+                            elif isinstance(raw_spec_obj, dict):
+                                selected_spec_obj = raw_spec_obj
+                            else:
                                 selected_spec_obj = detail_json
                 except Exception:
                     pass
@@ -691,21 +718,34 @@ class CallcraftAPIComponent(Component):
                         seen.add(f)
                         spec_fields.append(f)
 
-                # Isi otomatis key ke dalam DictInput 'payload'
+                # Sisipkan field bawaan Call Spec ke dalam 'payload' tanpa menghapus field manual pengguna
                 if "payload" in build_config and isinstance(build_config["payload"], dict):
                     curr_payload = build_config["payload"].get("value")
-                    if not isinstance(curr_payload, dict):
-                        curr_payload = {}
+                    existing_rows = []
+                    existing_keys = set()
 
-                    # Buat dictionary baru yang berisi fields dari spec ini
-                    new_payload = {}
+                    if isinstance(curr_payload, list):
+                        for item in curr_payload:
+                            if isinstance(item, dict):
+                                k = str(item.get("key") or "").strip()
+                                v = item.get("value", "")
+                                if k:
+                                    existing_rows.append({"key": k, "value": v})
+                                    existing_keys.add(k)
+                    elif isinstance(curr_payload, dict):
+                        for k, v in curr_payload.items():
+                            k_str = str(k).strip()
+                            if k_str and k_str not in IGNORED_METADATA_KEYS and k_str != "files":
+                                existing_rows.append({"key": k_str, "value": v})
+                                existing_keys.add(k_str)
+
+                    # Tambahkan field bawaan spec yang belum ada di input manual pengguna
                     for var_name in spec_fields:
-                        # Pertahankan value jika user sudah pernah mengisinya, atau beri template default {var_name}
-                        new_payload[var_name] = curr_payload.get(var_name, f"{{{var_name}}}")
+                        if var_name not in existing_keys:
+                            existing_rows.append({"key": var_name, "value": f"{{{var_name}}}"})
+                            existing_keys.add(var_name)
 
-                    # Jika spec mendefinisikan fields, set ke payload
-                    if new_payload:
-                        build_config["payload"]["value"] = new_payload
+                    build_config["payload"]["value"] = existing_rows
 
             # Bersihkan dynamic spec_field leftover atau payload_variables dari build_config jika ada
             for old_k in list(build_config.keys()):
@@ -783,13 +823,13 @@ class CallcraftAPIComponent(Component):
             "step_5_api_response": {},
         }
 
-        # 3. Ekstraksi Payload Input (DictInput 'payload' yang mendukung input connection dan key-value form)
-        target_payload = getattr(self, "payload", None)
-        if target_payload is None and hasattr(self, "_attributes") and isinstance(self._attributes, dict):
-            target_payload = self._attributes.get("payload")
+        # 3. Ekstraksi Payload Input (Upstream Input Data & Manual Payload Body Params)
+        target_input = getattr(self, "input_data", None)
+        if target_input is None and hasattr(self, "_attributes") and isinstance(self._attributes, dict):
+            target_input = self._attributes.get("input_data")
 
-        # Ekstrak data jika terhubung ke node Data/Message/dict sebelumnya
-        extracted_dict, chat_text, chat_files = self._extract_payload_and_files(target_payload)
+        # Ekstrak data dari node sebelumnya (Chat Input, File, Data, Message, dict)
+        extracted_dict, chat_text, chat_files = self._extract_payload_and_files(target_input)
 
         # Siapkan source dictionary untuk template formatting (seperti di ParserComponent Langflow)
         source_dict = dict(extracted_dict)
@@ -802,7 +842,7 @@ class CallcraftAPIComponent(Component):
         class _DefaultDotDict(dict):
             """
             Dictionary pembungkus yang mendukung dot-notation ({meta.order_code})
-            dan graceful fallback nilai kosong jika placeholder tidak ditemukan (seperti ParserComponent).
+            dan graceful fallback nilai kosong jika placeholder tidak ditemukan.
             """
             def __init__(self, data_map: dict):
                 super().__init__()
@@ -821,25 +861,60 @@ class CallcraftAPIComponent(Component):
 
         formatted_source = _DefaultDotDict(source_dict)
 
-        # Ambil form key-value dari self.payload jika berupa dict atau JSON string
-        form_key_values = {}
-        if isinstance(target_payload, dict):
+        # Ambil field manual dari self.payload (TableInput list of dicts, DictInput, atau JSON string)
+        target_payload = getattr(self, "payload", None)
+        if target_payload is None and hasattr(self, "_attributes") and isinstance(self._attributes, dict):
+            target_payload = self._attributes.get("payload")
+
+        manual_params: Dict[str, Any] = {}
+        if isinstance(target_payload, list):
+            for row in target_payload:
+                if isinstance(row, dict):
+                    k = str(row.get("key") or "").strip()
+                    v = row.get("value", "")
+                    if k and k not in IGNORED_METADATA_KEYS and k != "files":
+                        manual_params[k] = v
+                elif hasattr(row, "data") and isinstance(row.data, dict):
+                    k = str(row.data.get("key") or "").strip()
+                    v = row.data.get("value", "")
+                    if k and k not in IGNORED_METADATA_KEYS and k != "files":
+                        manual_params[k] = v
+        elif isinstance(target_payload, dict):
             for k, v in target_payload.items():
-                if k not in IGNORED_METADATA_KEYS and k != "files":
-                    form_key_values[str(k).strip()] = v
+                k_str = str(k).strip()
+                if k_str and k_str not in IGNORED_METADATA_KEYS and k_str != "files":
+                    manual_params[k_str] = v
         elif isinstance(target_payload, str) and target_payload.strip():
             try:
                 parsed_json = json.loads(target_payload)
                 if isinstance(parsed_json, dict):
                     for k, v in parsed_json.items():
-                        if k not in IGNORED_METADATA_KEYS and k != "files":
-                            form_key_values[str(k).strip()] = v
+                        k_str = str(k).strip()
+                        if k_str and k_str not in IGNORED_METADATA_KEYS and k_str != "files":
+                            manual_params[k_str] = v
+                elif isinstance(parsed_json, list):
+                    for row in parsed_json:
+                        if isinstance(row, dict):
+                            k = str(row.get("key") or "").strip()
+                            v = row.get("value", "")
+                            if k and k not in IGNORED_METADATA_KEYS and k != "files":
+                                manual_params[k] = v
             except Exception:
                 pass
+        elif target_payload is not None:
+            p_dict, p_text, p_files = self._extract_payload_and_files(target_payload)
+            manual_params.update(p_dict)
+            if not chat_text and p_text:
+                chat_text = p_text
+                source_dict["text"] = chat_text
+                source_dict["prompt"] = chat_text
+                formatted_source = _DefaultDotDict(source_dict)
+            if p_files:
+                chat_files.extend(p_files)
 
-        # Parse nilai form: jika mengandung format template {variable}, ganti dengan data dari node sebelumnya
-        parsed_payload = dict(extracted_dict)
-        for k, v in form_key_values.items():
+        # Parse nilai form manual: jika mengandung format template {variable}, ganti dengan data dari context
+        parsed_manual = {}
+        for k, v in manual_params.items():
             if isinstance(v, str) and "{" in v and "}" in v:
                 try:
                     formatted_val = v.format_map(formatted_source)
@@ -847,11 +922,18 @@ class CallcraftAPIComponent(Component):
                     formatted_val = v
             else:
                 formatted_val = v
-            parsed_payload[k] = formatted_val
+            parsed_manual[k] = formatted_val
 
-        payload = parsed_payload
+        # Gabungkan payload: extracted_dict dari upstream + field manual yang menjadi body params utama
+        final_payload = dict(extracted_dict)
+        final_payload.update(parsed_manual)
+
+        payload = final_payload
 
         debug_trace["step_2_incoming_payload"] = {
+            "upstream_input_present": bool(target_input is not None),
+            "manual_params_count": len(manual_params),
+            "manual_param_keys": list(manual_params.keys()),
             "extracted_text": chat_text,
             "extracted_files": chat_files,
             "resolved_payload_keys": list(payload.keys()),
