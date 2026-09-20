@@ -1215,64 +1215,6 @@ class Repository:
             status="active",
         )
         db.add(project)
-        await db.flush()
-
-        # Auto-provision default production API Key for new project
-        key_id = f"crd_{str(ulid.new())}"
-        pkey = f"pk_live_{slug}_{str(ulid.new())[:8].lower()}"
-        skey = f"call_sk_live_{slug}_{str(ulid.new())[:12].lower()}"
-        cred = ApiCredential(
-            id=key_id,
-            user_id=user_id,
-            project_id=project_id,
-            name="Default Production API Key",
-            public_key=pkey,
-            secret_key_hash=hash_secret_argon2(skey),
-            environment="production",
-        )
-        db.add(cred)
-
-        # Auto-provision starter Call Specs from official templates
-        t_stmt = select(Template).where(Template.is_official.is_(True)).order_by(Template.id.asc()).limit(3)
-        t_res = await db.execute(t_stmt)
-        official_templates = t_res.scalars().all()
-
-        for tmpl in official_templates:
-            spec_id = f"spc_{str(ulid.new())}"
-            spec_slug = f"{tmpl.code}-{slug}"
-            spec_obj = CallSpec(
-                id=spec_id,
-                user_id=user_id,
-                project_id=project_id,
-                published_template_id=tmpl.id,
-                name=tmpl.name,
-                slug=spec_slug,
-                description=tmpl.description or "",
-                active_version_number=1,
-                status="active",
-                use_external_api_key=True,
-                external_model_name="gemini-3.6-flash",
-                tools_config=tmpl.tools_config or {},
-            )
-            db.add(spec_obj)
-            await db.flush()
-
-            ver_obj = CallSpecVersion(
-                id=f"spv_{str(ulid.new())}",
-                call_spec_id=spec_obj.id,
-                version_number=1,
-                request_schema=tmpl.request_schema,
-                response_schema=tmpl.response_schema,
-                positive_prompt=tmpl.positive_prompt,
-                negative_prompt=tmpl.negative_prompt,
-                additional_prompt=tmpl.additional_prompt,
-                allow_additional_prompt=tmpl.allow_additional_prompt,
-                tools_config=tmpl.tools_config or {},
-                external_model_name="gemini-3.6-flash",
-                use_external_api_key=True,
-            )
-            db.add(ver_obj)
-
         await db.commit()
         await db.refresh(project)
         return Repository._serialize_project(project)
