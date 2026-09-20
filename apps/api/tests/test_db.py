@@ -148,3 +148,52 @@ async def test_create_and_fetch_call_spec(test_session: AsyncSession):
     assert fetched["responseSchema"] == schema
     assert fetched["positivePrompt"] == "Custom positive prompt instructions"
     assert fetched["negativePrompt"] == "Custom negative prompt constraints"
+    assert fetched["activeVersionId"] is not None
+
+
+@pytest.mark.asyncio
+async def test_record_and_list_api_requests(test_session: AsyncSession):
+    u_stmt = select(User).where(User.status == "active")
+    user_obj = (await test_session.execute(u_stmt)).scalars().first()
+    assert user_obj is not None
+
+    specs = await Repository.list_call_specs(test_session, user_obj.id)
+    assert len(specs) > 0
+    spec = specs[0]
+
+    # Test record_api_request
+    payload = {
+        "request_id": "req_test_telemetry_001",
+        "user_id": user_obj.id,
+        "call_spec_id": spec["id"],
+        "call_spec_version_id": spec.get("activeVersionId"),
+        "provider_code": "gemini",
+        "model_identifier": "gemini-3.6-flash",
+        "status": "SUCCESS",
+        "http_status": 200,
+        "processing_time_ms": 320,
+        "prompt_tokens": 500,
+        "completion_tokens": 250,
+        "total_tokens": 750,
+        "estimated_cost_usd": 0.000125,
+    }
+
+    log_id = await Repository.record_api_request(test_session, payload)
+    assert log_id is not None
+    assert log_id.startswith("req_")
+
+    # Test idempotency (duplicate request_id)
+    dup_id = await Repository.record_api_request(test_session, payload)
+    assert dup_id == log_id
+
+    # Test list_api_requests returns enriched provider and model
+    logs = await Repository.list_api_requests(test_session, user_obj.id, project_id=spec["projectId"])
+    assert len(logs) > 0
+    matching = next((l for l in logs if l["requestId"] == "req_test_telemetry_001"), None)
+    assert matching is not None
+    assert matching["provider"] == "gemini"
+    assert matching["model"] == "gemini-3.6-flash"
+    assert matching["costUsd"] == 0.000125
+    assert matching["totalTokens"] == 750
+    assert matching["status"] == "SUCCESS"
+

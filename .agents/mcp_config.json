@@ -2,6 +2,20 @@
   "mcpServers": {
     "callcraft": {
       "serverUrl": "http://localhost:8081/mcp/v1/sse?user_id=usr_01M1NWASEQ1HQVJXT1G21FT9WC"
+    },
+    "lf-callcraft_examples": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "mcp<2.0.0",
+        "mcp-proxy",
+        "--transport",
+        "streamablehttp",
+        "--headers",
+        "x-api-key",
+        "sk-VgrDBuAr-0htOOjKUH78t5liPdxsoo0DZumkLPkh1E4",
+        "https://langflow.daniode.com/api/v1/mcp/project/d6e55f3b-4f58-4b89-8cfa-5eb25180064f/streamable"
+      ]
     }
   }
 }

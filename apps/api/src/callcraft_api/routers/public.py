@@ -839,6 +839,41 @@ async def execute_callcraft(
     try:
         coerced_data = validate_and_coerce(response_schema_obj, raw_ai_out, allow_missing_required=False)
     except CoercionError as err:
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        err_payload = {
+            "event": "api_request.failed",
+            "request_id": request_id,
+            "user_id": user_id,
+            "call_spec_id": cached_spec.get("id") if cached_spec else None,
+            "call_spec_version_id": cached_spec.get("activeVersionId") if cached_spec else None,
+            "credential_id": cred.get("id") if cred else None,
+            "provider_id": model_info.get("providerId") if model_info else None,
+            "model_id": model_info.get("id") if model_info else None,
+            "spec_slug": spec_slug,
+            "provider_code": provider_code,
+            "model_identifier": active_model,
+            "status": "VALIDATION_ERROR",
+            "http_status": 422,
+            "input_type": "image" if image_bytes else "text",
+            "input_size_bytes": len(image_bytes) if image_bytes else 0,
+            "processing_time_ms": processing_time_ms,
+            "prompt_tokens": tokens.get("prompt_tokens", 0) if tokens else 0,
+            "completion_tokens": tokens.get("completion_tokens", 0) if tokens else 0,
+            "total_tokens": (tokens.get("prompt_tokens", 0) + tokens.get("completion_tokens", 0)) if tokens else 0,
+            "estimated_cost_usd": 0.0,
+            "error_code": "SCHEMA_COERCION_FAILED",
+            "error_message": str(err),
+            "client_ip": get_client_ip(request),
+            "user_agent": request.headers.get("User-Agent"),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await redis_service.push_outbox(err_payload)
+        if db is not None and not redis_service._is_connected:
+            try:
+                await Repository.record_api_request(db, err_payload)
+            except Exception as e:
+                logger.warning(f"Fallback DB record_api_request error: {e}")
+
         return create_error_response(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             error_code="SCHEMA_COERCION_FAILED",
@@ -864,10 +899,15 @@ async def execute_callcraft(
         "event": "api_request.completed",
         "request_id": request_id,
         "user_id": user_id,
+        "call_spec_id": cached_spec.get("id"),
+        "call_spec_version_id": cached_spec.get("activeVersionId"),
+        "credential_id": cred.get("id") if cred else None,
+        "provider_id": model_info.get("providerId") if model_info else None,
+        "model_id": model_info.get("id") if model_info else None,
         "spec_slug": spec_slug,
         "provider_code": provider_code,
         "model_identifier": active_model,
-        "status": "success",
+        "status": "SUCCESS",
         "http_status": 200,
         "input_type": "image" if image_bytes else "text",
         "input_size_bytes": len(image_bytes) if image_bytes else 0,
@@ -881,6 +921,11 @@ async def execute_callcraft(
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     await redis_service.push_outbox(outbox_payload)
+    if db is not None and not redis_service._is_connected:
+        try:
+            await Repository.record_api_request(db, outbox_payload)
+        except Exception as e:
+            logger.warning(f"Fallback DB record_api_request error: {e}")
 
     # 9. Build executionTrace steps purely from AI model function call decision (execution_service.py)
     execution_steps = build_execution_trace_steps(

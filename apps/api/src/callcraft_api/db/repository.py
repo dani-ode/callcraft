@@ -19,6 +19,7 @@ from callcraft_api.db.models import (
     Template,
     User,
     UserAiProvider,
+    UserUsageDaily,
 )
 from callcraft_engine.crypto import (
     decrypt_aes_256_gcm,
@@ -337,6 +338,7 @@ class Repository:
             "slug": spec.slug,
             "description": spec.description or "",
             "activeVersionNumber": spec.active_version_number,
+            "activeVersionId": ver.id if ver else None,
             "status": spec.status,
             "allowPdfInput": spec.allow_pdf_input,
             "useExternalApiKey": use_ext_key,
@@ -764,13 +766,22 @@ class Repository:
         limit: int = 50,
         project_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Lists recent audit execution logs, optionally filtered by project_id."""
+        """Lists recent audit execution logs with provider & model metadata, optionally filtered by project_id."""
         if db is None:
             return []
 
-        stmt = select(ApiRequest, CallSpec.name.label("spec_display_name")).join(
-            CallSpec, ApiRequest.call_spec_id == CallSpec.id, isouter=True
-        ).where(ApiRequest.user_id == user_id)
+        stmt = (
+            select(
+                ApiRequest,
+                CallSpec.name.label("spec_display_name"),
+                AiProvider.code.label("provider_code"),
+                AiModel.model_identifier.label("model_name"),
+            )
+            .join(CallSpec, ApiRequest.call_spec_id == CallSpec.id, isouter=True)
+            .join(AiProvider, ApiRequest.provider_id == AiProvider.id, isouter=True)
+            .join(AiModel, ApiRequest.model_id == AiModel.id, isouter=True)
+            .where(ApiRequest.user_id == user_id)
+        )
 
         if project_id:
             stmt = stmt.where(CallSpec.project_id == project_id)
@@ -784,15 +795,185 @@ class Repository:
                 "id": r.id,
                 "requestId": r.request_id,
                 "specName": spec_name or r.call_spec_id,
+                "provider": prov_code or "gemini",
+                "model": mdl_name or "gemini-3.6-flash",
                 "status": r.status,
                 "httpStatus": r.http_status,
                 "processingTimeMs": r.processing_time_ms,
                 "totalTokens": r.total_tokens,
-                "costUsd": r.estimated_cost_usd or 0.0,
+                "costUsd": float(r.estimated_cost_usd or 0.0),
                 "createdAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
             }
-            for r, spec_name in rows
+            for r, spec_name, prov_code, mdl_name in rows
         ]
+
+    @staticmethod
+    async def record_api_request(
+        db: Optional[AsyncSession],
+        payload: Dict[str, Any],
+    ) -> Optional[str]:
+        """
+        Idempotently persists an API execution audit log and updates daily user usage metrics.
+        Adheres to fail-fast & structured error handling policy.
+        """
+        if db is None:
+            raise ValueError("Database session is required to record API request audit log")
+
+        request_id = payload.get("request_id")
+        if not request_id:
+            raise ValueError("Field 'request_id' is required in audit log payload")
+
+        user_id = payload.get("user_id")
+        if not user_id:
+            raise ValueError("Field 'user_id' is required in audit log payload")
+
+        # 1. Idempotency check: Skip if request_id already exists
+        stmt = select(ApiRequest.id).where(ApiRequest.request_id == request_id)
+        existing = (await db.execute(stmt)).scalar_one_or_none()
+        if existing:
+            return existing
+
+        # 2. Resolve or fallback call_spec_id and call_spec_version_id
+        call_spec_id = payload.get("call_spec_id")
+        spec_slug = payload.get("spec_slug")
+
+        if call_spec_id:
+            spec_exists_stmt = select(CallSpec.id).where(CallSpec.id == call_spec_id)
+            if not (await db.execute(spec_exists_stmt)).scalar_one_or_none():
+                call_spec_id = None
+
+        if not call_spec_id and spec_slug:
+            spec_stmt = select(CallSpec.id).where(
+                CallSpec.user_id == user_id,
+                (CallSpec.id == spec_slug) | (CallSpec.slug == spec_slug),
+            )
+            call_spec_id = (await db.execute(spec_stmt)).scalar_one_or_none()
+
+        if not call_spec_id:
+            logger.warning(f"Could not resolve call_spec_id for audit log request {request_id}")
+            return None
+
+        call_spec_version_id = payload.get("call_spec_version_id")
+        if call_spec_version_id:
+            ver_exists_stmt = select(CallSpecVersion.id).where(
+                CallSpecVersion.id == call_spec_version_id,
+                CallSpecVersion.call_spec_id == call_spec_id,
+            )
+            if not (await db.execute(ver_exists_stmt)).scalar_one_or_none():
+                call_spec_version_id = None
+
+        if not call_spec_version_id:
+            ver_stmt = select(CallSpecVersion.id).where(
+                CallSpecVersion.call_spec_id == call_spec_id
+            ).order_by(CallSpecVersion.version_number.desc())
+            call_spec_version_id = (await db.execute(ver_stmt)).scalar_one_or_none()
+
+        if not call_spec_version_id:
+            logger.warning(f"Could not resolve call_spec_version_id for spec {call_spec_id}")
+            return None
+
+        # 3. Resolve credential_id, provider_id, and model_id with relational integrity validation
+        credential_id = payload.get("credential_id")
+        if credential_id:
+            cred_stmt = select(ApiCredential.id).where(ApiCredential.id == credential_id)
+            if not (await db.execute(cred_stmt)).scalar_one_or_none():
+                credential_id = None
+
+        provider_id = payload.get("provider_id")
+        model_id = payload.get("model_id")
+        model_ident = payload.get("model_identifier")
+        prov_code = payload.get("provider_code")
+
+        if (not model_id or not provider_id) and model_ident:
+            m_stmt = select(AiModel.id, AiModel.provider_id).where(AiModel.model_identifier == model_ident)
+            m_row = (await db.execute(m_stmt)).first()
+            if m_row:
+                model_id = model_id or m_row[0]
+                provider_id = provider_id or m_row[1]
+
+        if not provider_id and prov_code:
+            p_stmt = select(AiProvider.id).where(AiProvider.code == prov_code)
+            provider_id = (await db.execute(p_stmt)).scalar_one_or_none()
+
+        if model_id:
+            m_check = select(AiModel.id).where(AiModel.id == model_id)
+            if not (await db.execute(m_check)).scalar_one_or_none():
+                model_id = None
+
+        if provider_id:
+            p_check = select(AiProvider.id).where(AiProvider.id == provider_id)
+            if not (await db.execute(p_check)).scalar_one_or_none():
+                provider_id = None
+
+        log_id = f"req_{str(ulid.new())}"
+        
+        status_val = str(payload.get("status") or "SUCCESS").upper()
+        http_status_val = int(payload.get("http_status") or 200)
+        processing_time_ms = int(payload.get("processing_time_ms") or 0)
+        prompt_tokens = int(payload.get("prompt_tokens") or 0)
+        completion_tokens = int(payload.get("completion_tokens") or 0)
+        total_tokens = int(payload.get("total_tokens") or (prompt_tokens + completion_tokens))
+        estimated_cost_usd = float(payload.get("estimated_cost_usd") or 0.0)
+
+        # 4. Insert into ApiRequest
+        api_req = ApiRequest(
+            id=log_id,
+            request_id=request_id,
+            user_id=user_id,
+            call_spec_id=call_spec_id,
+            call_spec_version_id=call_spec_version_id,
+            credential_id=credential_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            status=status_val,
+            http_status=http_status_val,
+            input_type=str(payload.get("input_type") or "text"),
+            input_size_bytes=int(payload.get("input_size_bytes") or 0),
+            processing_time_ms=processing_time_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            error_code=payload.get("error_code"),
+            error_message=payload.get("error_message"),
+            client_ip=payload.get("client_ip"),
+            user_agent=payload.get("user_agent"),
+        )
+        db.add(api_req)
+
+        # 5. Upsert UserUsageDaily for current date
+        usage_date = datetime.now(timezone.utc).date()
+        is_success = (status_val == "SUCCESS" and http_status_val == 200)
+
+        u_stmt = select(UserUsageDaily).where(
+            UserUsageDaily.user_id == user_id,
+            UserUsageDaily.usage_date == usage_date,
+        )
+        daily_usage = (await db.execute(u_stmt)).scalar_one_or_none()
+
+        if daily_usage:
+            daily_usage.total_requests += 1
+            if is_success:
+                daily_usage.successful_requests += 1
+            else:
+                daily_usage.failed_requests += 1
+            daily_usage.total_tokens += total_tokens
+            daily_usage.total_cost_usd = float(daily_usage.total_cost_usd) + estimated_cost_usd
+        else:
+            daily_usage = UserUsageDaily(
+                id=f"usd_{str(ulid.new())}",
+                user_id=user_id,
+                usage_date=usage_date,
+                total_requests=1,
+                successful_requests=1 if is_success else 0,
+                failed_requests=0 if is_success else 1,
+                total_tokens=total_tokens,
+                total_cost_usd=estimated_cost_usd,
+            )
+            db.add(daily_usage)
+
+        await db.commit()
+        return log_id
 
     @staticmethod
     async def delete_api_credential(db: Optional[AsyncSession], key_id: str, user_id: str) -> bool:
@@ -1034,6 +1215,64 @@ class Repository:
             status="active",
         )
         db.add(project)
+        await db.flush()
+
+        # Auto-provision default production API Key for new project
+        key_id = f"crd_{str(ulid.new())}"
+        pkey = f"pk_live_{slug}_{str(ulid.new())[:8].lower()}"
+        skey = f"call_sk_live_{slug}_{str(ulid.new())[:12].lower()}"
+        cred = ApiCredential(
+            id=key_id,
+            user_id=user_id,
+            project_id=project_id,
+            name="Default Production API Key",
+            public_key=pkey,
+            secret_key_hash=hash_secret_argon2(skey),
+            environment="production",
+        )
+        db.add(cred)
+
+        # Auto-provision starter Call Specs from official templates
+        t_stmt = select(Template).where(Template.is_official.is_(True)).order_by(Template.id.asc()).limit(3)
+        t_res = await db.execute(t_stmt)
+        official_templates = t_res.scalars().all()
+
+        for tmpl in official_templates:
+            spec_id = f"spc_{str(ulid.new())}"
+            spec_slug = f"{tmpl.code}-{slug}"
+            spec_obj = CallSpec(
+                id=spec_id,
+                user_id=user_id,
+                project_id=project_id,
+                published_template_id=tmpl.id,
+                name=tmpl.name,
+                slug=spec_slug,
+                description=tmpl.description or "",
+                active_version_number=1,
+                status="active",
+                use_external_api_key=True,
+                external_model_name="gemini-3.6-flash",
+                tools_config=tmpl.tools_config or {},
+            )
+            db.add(spec_obj)
+            await db.flush()
+
+            ver_obj = CallSpecVersion(
+                id=f"spv_{str(ulid.new())}",
+                call_spec_id=spec_obj.id,
+                version_number=1,
+                request_schema=tmpl.request_schema,
+                response_schema=tmpl.response_schema,
+                positive_prompt=tmpl.positive_prompt,
+                negative_prompt=tmpl.negative_prompt,
+                additional_prompt=tmpl.additional_prompt,
+                allow_additional_prompt=tmpl.allow_additional_prompt,
+                tools_config=tmpl.tools_config or {},
+                external_model_name="gemini-3.6-flash",
+                use_external_api_key=True,
+            )
+            db.add(ver_obj)
+
         await db.commit()
         await db.refresh(project)
         return Repository._serialize_project(project)

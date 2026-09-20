@@ -2,7 +2,7 @@ import logging
 from typing import Any
 from datetime import datetime, date, timedelta, timezone
 import ulid
-from sqlalchemy import select, text
+from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from callcraft_api.config import settings
@@ -860,6 +860,150 @@ async def init_db(session: AsyncSession) -> None:
                     total_cost_usd=cost_tot,
                 )
             )
+
+    # 13. Auto-provision starter Call Specs, API Credentials, and initial Telemetries for active projects
+    stmt_all_projects = select(Project).where(Project.status == "active")
+    res_projects = await session.execute(stmt_all_projects)
+    active_projects = res_projects.scalars().all()
+
+    starter_templates_info = [
+        ("Government Identity Document Verification", "ktp-parser", "tpl_01HZX01TMPL000000000001", "gemini-3.6-flash"),
+        ("Financial Receipt & Invoice Suite", "receipt-extractor", "tpl_01HZX01TMPL000000000002", "gemini-3.6-flash"),
+        ("Medical Prescription Scanner", "prescription-parser", "tpl_01HZX01TMPL000000000003", "gemini-3.6-flash"),
+    ]
+
+    for prj in active_projects:
+        stmt_specs_count = select(func.count(CallSpec.id)).where(CallSpec.project_id == prj.id)
+        spec_count = (await session.execute(stmt_specs_count)).scalar() or 0
+
+        created_specs = []
+        if spec_count == 0:
+            logger.info(f"Provisioning starter Call Specs for project '{prj.name}' ({prj.id})...")
+            for sname, sslug, stpid, mident in starter_templates_info:
+                sid = f"spc_{str(ulid.new())}"
+                matched_tmpl = tmpl_map.get(stpid, {})
+                s_obj = CallSpec(
+                    id=sid,
+                    user_id=prj.user_id,
+                    project_id=prj.id,
+                    published_template_id=stpid,
+                    name=sname,
+                    slug=f"{sslug}-{prj.slug}",
+                    description=matched_tmpl.get("description", sname),
+                    active_version_number=1,
+                    status="active",
+                    use_external_api_key=True,
+                    external_model_name=mident,
+                    tools_config=matched_tmpl.get("tools_config", {}),
+                )
+                session.add(s_obj)
+                await session.flush()
+
+                v_obj = CallSpecVersion(
+                    id=f"spv_{str(ulid.new())}",
+                    call_spec_id=s_obj.id,
+                    version_number=1,
+                    request_schema=matched_tmpl.get("request_schema"),
+                    response_schema=matched_tmpl.get("response_schema"),
+                    positive_prompt=matched_tmpl.get("positive_prompt"),
+                    negative_prompt=matched_tmpl.get("negative_prompt"),
+                    additional_prompt=matched_tmpl.get("additional_prompt"),
+                    allow_additional_prompt=matched_tmpl.get("allow_additional_prompt", True),
+                    tools_config=matched_tmpl.get("tools_config", {}),
+                    external_model_name=mident,
+                    use_external_api_key=True,
+                )
+                session.add(v_obj)
+                await session.flush()
+                created_specs.append((s_obj, v_obj))
+
+        # Check API credentials
+        stmt_creds_count = select(func.count(ApiCredential.id)).where(ApiCredential.project_id == prj.id)
+        cred_count = (await session.execute(stmt_creds_count)).scalar() or 0
+        default_cred_id = None
+
+        if cred_count == 0:
+            logger.info(f"Provisioning starter API Credential for project '{prj.name}' ({prj.id})...")
+            new_cred_id = f"crd_{str(ulid.new())}"
+            default_cred_id = new_cred_id
+            pkey = f"pk_live_{prj.slug}_{str(ulid.new())[:8].lower()}"
+            skey = f"call_sk_live_{prj.slug}_{str(ulid.new())[:12].lower()}"
+            session.add(
+                ApiCredential(
+                    id=new_cred_id,
+                    user_id=prj.user_id,
+                    project_id=prj.id,
+                    name="Default Production API Key",
+                    public_key=pkey,
+                    secret_key_hash=hash_secret_argon2(skey),
+                    environment="production",
+                )
+            )
+            await session.flush()
+        else:
+            first_cred_stmt = select(ApiCredential.id).where(ApiCredential.project_id == prj.id)
+            default_cred_id = (await session.execute(first_cred_stmt)).scalar()
+
+        # Check API execution logs
+        stmt_logs_count = (
+            select(func.count(ApiRequest.id))
+            .join(CallSpec, ApiRequest.call_spec_id == CallSpec.id)
+            .where(CallSpec.project_id == prj.id)
+        )
+        log_count = (await session.execute(stmt_logs_count)).scalar() or 0
+
+        if log_count == 0:
+            if not created_specs:
+                existing_specs_stmt = select(CallSpec, CallSpecVersion).join(
+                    CallSpecVersion,
+                    (CallSpec.id == CallSpecVersion.call_spec_id) & (CallSpecVersion.version_number == 1)
+                ).where(CallSpec.project_id == prj.id)
+                created_specs = (await session.execute(existing_specs_stmt)).all()
+
+            if created_specs:
+                logger.info(f"Provisioning starter execution telemetries for project '{prj.name}' ({prj.id})...")
+                spec_entries = list(created_specs)
+                sample_specs = [
+                    spec_entries[0 % len(spec_entries)],
+                    spec_entries[1 % len(spec_entries)],
+                    spec_entries[2 % len(spec_entries)],
+                    spec_entries[0 % len(spec_entries)],
+                    spec_entries[1 % len(spec_entries)],
+                ]
+                sample_logs = [
+                    (sample_specs[0][0], sample_specs[0][1], "gemini", "gemini-3.6-flash", 820, 0.000093, 245, "SUCCESS", 200, 2),
+                    (sample_specs[1][0], sample_specs[1][1], "gemini", "gemini-3.6-flash", 1560, 0.000186, 310, "SUCCESS", 200, 4),
+                    (sample_specs[2][0], sample_specs[2][1], "openai", "gpt-5.6-luna", 1070, 0.004025, 480, "SUCCESS", 200, 7),
+                    (sample_specs[3][0], sample_specs[3][1], "gemini", "gemini-3.6-flash", 1250, 0.000150, 260, "SUCCESS", 200, 1),
+                    (sample_specs[4][0], sample_specs[4][1], "anthropic", "claude-fable-5.1", 1680, 0.008160, 520, "SUCCESS", 200, 0),
+                ]
+
+                for s_item, v_item, pcode, mident, ttok, cost, ptime, st, hst, hrs_ago in sample_logs:
+                    req_uid = f"req_{str(ulid.new())}"
+                    session.add(
+                        ApiRequest(
+                            id=f"req_{str(ulid.new())}",
+                            request_id=req_uid,
+                            user_id=prj.user_id,
+                            call_spec_id=s_item.id,
+                            call_spec_version_id=v_item.id,
+                            credential_id=default_cred_id,
+                            provider_id=provider_map.get(pcode),
+                            model_id=model_map.get(mident),
+                            status=st,
+                            http_status=hst,
+                            input_type="text",
+                            input_size_bytes=1024,
+                            processing_time_ms=ptime,
+                            prompt_tokens=int(ttok * 0.6),
+                            completion_tokens=int(ttok * 0.4),
+                            total_tokens=ttok,
+                            estimated_cost_usd=cost,
+                            client_ip="127.0.0.1",
+                            user_agent="Callcraft Engine / Telemetry Agent",
+                            created_at=datetime.now(timezone.utc) - timedelta(hours=hrs_ago),
+                        )
+                    )
 
     try:
         await session.commit()

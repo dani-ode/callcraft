@@ -7,11 +7,12 @@ from callcraft_api.app import app
 from callcraft_api.db.session import AsyncSessionLocal
 from callcraft_api.db.init_db import init_db
 from callcraft_api.db.models import User
+import pytest_asyncio
 from callcraft_api.db.repository import Repository
 
 pytestmark = pytest.mark.asyncio
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def active_user_id():
     async with AsyncSessionLocal() as session:
         await init_db(session)
@@ -23,7 +24,7 @@ async def active_user_id():
         return "usr_default_dev_01"
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def active_spec_id(active_user_id: str):
     async with AsyncSessionLocal() as session:
         specs = await Repository.list_call_specs(session, active_user_id)
