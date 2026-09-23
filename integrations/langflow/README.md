@@ -27,7 +27,7 @@ Panduan integrasi **Callcraft** dengan **Langflow** menggunakan Custom Component
    - **User ID**: `usr_...` (dari dashboard Callcraft)
    - **Public Key**: `pk_live_...` (dari menu API Keys)
    - **Secret Key**: `call_sk_live_...`
-   - **Callcraft Base URL**: default langsung mengarah ke `https://callcraft-api.daniode.com` (tidak perlu diubah kecuali memakai instance lokal).
+   - **Callcraft Base URL**: default langsung mengarah ke `https://callcraft-api.flyup.id` (tidak perlu diubah kecuali memakai instance lokal).
 9. Klik tombol refresh pada dropdown **Project** dan **Call Spec** untuk memuat daftar spec secara otomatis (atau ketik langsung jika diinginkan).
 10. Hubungkan output `output_json` ke node downstream berikutnya.
 

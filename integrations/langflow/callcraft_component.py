@@ -15,9 +15,9 @@ from typing import Any, Dict, List, Optional, Tuple
 # =============================================================================
 
 # 1. Base URL API Callcraft Production
-# Secara default mengarah langsung ke server produksi Callcraft (callcraft.daniode.com).
-# Endpoint backend API berada di: https://callcraft-api.daniode.com
-CALLCRAFT_BASE_URL: str = os.environ.get("CALLCRAFT_API_URL", "https://callcraft-api.daniode.com")
+# Secara default mengarah langsung ke server produksi Callcraft (callcraft.flyup.id).
+# Endpoint backend API berada di: https://callcraft-api.flyup.id
+CALLCRAFT_BASE_URL: str = os.environ.get("CALLCRAFT_API_URL", "https://callcraft-api.flyup.id")
 
 # 2. Endpoint Path API Callcraft
 CALLCRAFT_PROJECTS_ENDPOINT: str = "/v1/projects"
@@ -31,7 +31,7 @@ CALLCRAFT_DISCOVERY_TIMEOUT: int = 10    # Timeout penarikan list project/specs 
 # 4. Metadata Tampilan Komponen Langflow
 COMPONENT_DISPLAY_NAME: str = "Callcraft Spec"
 COMPONENT_DESCRIPTION: str = "Menerima objek Data/Message/JSON dari node sebelumnya, otomatis ekstrak file ke Base64, dan mengeksekusi AI Callcraft Spec."
-COMPONENT_DOCUMENTATION: str = "https://callcraft.daniode.com"
+COMPONENT_DOCUMENTATION: str = "https://callcraft.flyup.id"
 COMPONENT_ICON: str = "Workflow"
 
 # 5. Metadata Internal Langflow yang Diabaikan dari Body Request
@@ -40,6 +40,22 @@ IGNORED_METADATA_KEYS: set = {
     "error", "edit", "properties", "category", "content_blocks",
     "session_metadata", "id", "flow_id", "run_id", "duration",
     "text_key", "default_value"
+}
+
+# 6. Base URL Server Langflow untuk Resolusi File Upload Chat
+# Digunakan untuk mengubah path file relatif dari chat menjadi URL lengkap.
+LANGFLOW_DEFAULT_BASE_URL: str = os.environ.get("LANGFLOW_BASE_URL") or os.environ.get("LANGFLOW_URL") or "https://langflow.flyup.id"
+
+# 7. Ekstensi & Key Khusus File untuk Validasi File
+KNOWN_FILE_EXTENSIONS: set = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg",
+    ".pdf", ".csv", ".xlsx", ".xls", ".doc", ".docx", ".txt", ".json",
+    ".xml", ".zip", ".tar", ".gz", ".mp3", ".wav", ".mp4", ".mov", ".avi"
+}
+
+KNOWN_FILE_KEYS: set = {
+    "image", "images", "file", "files", "pdf", "document", "documents",
+    "doc", "docs", "foto", "gambar", "attachment", "attachments"
 }
 
 
@@ -66,7 +82,7 @@ def _clean_base_url(url: Optional[str]) -> str:
     Membersihkan dan menormalisasi Base URL:
     1. Menggunakan default CALLCRAFT_BASE_URL jika kosong.
     2. Menambahkan skema https:// jika protokol belum disertakan.
-    3. Mengarahkan domain frontend callcraft.daniode.com ke backend API callcraft-api.daniode.com.
+    3. Mengarahkan domain frontend callcraft.flyup.id ke backend API callcraft-api.flyup.id.
     4. Menghilangkan trailing slash '/' dan path '/v1' jika pengguna menyertakannya.
     """
     raw = (url or CALLCRAFT_BASE_URL).strip()
@@ -76,14 +92,118 @@ def _clean_base_url(url: Optional[str]) -> str:
     if not raw.startswith("http://") and not raw.startswith("https://"):
         raw = f"https://{raw}"
 
-    # Jika pengguna memasukkan domain frontend (callcraft.daniode.com), alihkan ke API server
-    if "callcraft.daniode.com" in raw and "callcraft-api.daniode.com" not in raw:
-        raw = raw.replace("callcraft.daniode.com", "callcraft-api.daniode.com")
+    # Jika pengguna memasukkan domain frontend (callcraft.flyup.id), alihkan ke API server
+    if "callcraft.flyup.id" in raw and "callcraft-api.flyup.id" not in raw:
+        raw = raw.replace("callcraft.flyup.id", "callcraft-api.flyup.id")
 
     raw = raw.rstrip("/")
     if raw.endswith("/v1"):
         raw = raw[:-3]
     return raw
+
+
+def _clean_base_url_scheme(url: Optional[str], default_url: str = CALLCRAFT_BASE_URL) -> str:
+    """
+    Menormalisasi URL agar memiliki skema http/https dan tanpa trailing slash.
+    """
+    raw = (url or default_url).strip()
+    if not raw:
+        raw = default_url
+
+    if not raw.startswith("http://") and not raw.startswith("https://"):
+        raw = f"https://{raw}"
+
+    return raw.rstrip("/")
+
+
+def _is_complete_url(val: Any) -> bool:
+    """
+    Memeriksa apakah nilai sudah merupakan URL lengkap (http://, https://, atau data: URI).
+    Jika sudah lengkap, nilai tidak perlu dimodifikasi ("kalau sudah lengkap maka tidak perlu").
+    """
+    if not isinstance(val, str):
+        return False
+    trimmed = val.strip().lower()
+    return trimmed.startswith(("http://", "https://", "data:"))
+
+
+def _is_file_path_or_reference(key: str, val: Any, known_files: Optional[List[str]] = None) -> bool:
+    """
+    Mendeteksi apakah suatu nilai merupakan path / referensi file.
+    Kriteria:
+    1. Nilai string sama dengan salah satu file yang diunggah di chat (known_files).
+    2. Nilai string diawali dengan prefix path storage/file Langflow (/api/v1/files, api/v1/files, /files/).
+    3. Nama key merupakan salah satu KNOWN_FILE_KEYS dan nilai adalah string tanpa spasi/newline.
+    4. Nilai string berakhiran salah satu ekstensi file yang valid (KNOWN_FILE_EXTENSIONS) dan tidak mengandung spasi/newline.
+    """
+    if not isinstance(val, str):
+        return False
+
+    trimmed = val.strip()
+    if not trimmed or "\n" in trimmed or "\r" in trimmed:
+        return False
+
+    # 1. Cek kecocokan langsung dengan file dari chat
+    if known_files:
+        for kf in known_files:
+            if isinstance(kf, str) and trimmed == kf.strip():
+                return True
+
+    # 2. Cek prefix path file Langflow
+    lowered = trimmed.lower()
+    if lowered.startswith(("/api/v1/files/", "api/v1/files/", "/files/download/", "files/download/")):
+        return True
+
+    # Nilai yang mengandung spasi bukanlah path/URL file tunggal
+    if " " in trimmed:
+        return False
+
+    # 3. Cek key name yang spesifik file
+    if key and key.strip().lower() in KNOWN_FILE_KEYS:
+        return True
+
+    # 4. Cek ekstensi file yang valid
+    clean_path = trimmed.split("?")[0].split("#")[0].lower()
+    _, ext = os.path.splitext(clean_path)
+    if ext and ext in KNOWN_FILE_EXTENSIONS:
+        return True
+
+    return False
+
+
+def _convert_to_complete_file_url(file_ref: str, base_url: str) -> str:
+    """
+    Mengubah path file relatif (misal dari chat / storage Langflow) menjadi URL lengkap.
+    Aturan:
+    - Jika sudah lengkap (http://, https://, data:), KEMBALIKAN UTUH tanpa modifikasi.
+    - Jika relatif, gabungkan dengan base_url server Langflow.
+    """
+    if not isinstance(file_ref, str):
+        return file_ref
+
+    trimmed = file_ref.strip()
+    if not trimmed:
+        return trimmed
+
+    # Kalau sudah lengkap maka tidak perlu diubah
+    if _is_complete_url(trimmed):
+        return trimmed
+
+    normalized_base = _clean_base_url_scheme(base_url, default_url=LANGFLOW_DEFAULT_BASE_URL)
+
+    # Tangani path yang sudah mengandung /api/v1/files/download/
+    if trimmed.startswith("/api/v1/files/download/"):
+        return f"{normalized_base}{trimmed}"
+    elif trimmed.startswith("api/v1/files/download/"):
+        return f"{normalized_base}/{trimmed}"
+    elif trimmed.startswith("/files/download/"):
+        return f"{normalized_base}/api/v1{trimmed}"
+    elif trimmed.startswith("files/download/"):
+        return f"{normalized_base}/api/v1/{trimmed}"
+
+    # Tangani path format chat Langflow: {flow_id}/{file_name} atau folder/file
+    clean_path = trimmed.lstrip("/")
+    return f"{normalized_base}/api/v1/files/download/{clean_path}"
 
 
 class CallcraftAPIComponent(Component):
@@ -150,33 +270,50 @@ class CallcraftAPIComponent(Component):
         TableInput(
             name="payload",
             display_name="Payload (Body Params)",
-            info="Tambahkan field/parameter body REST API secara manual (Key-Value). Nilai dapat berupa teks statis atau template parser dinamis (contoh: {text}, {message}, {variable_name}).",
+            info="Tambahkan parameter body REST API secara eksplisit (Key-Value). Nilai dapat berupa teks statis, URL file lengkap, Base64 Data URI, atau template parser (contoh: {text}, {prompt}, {image}, {file}, {files[0]}, {image_base64}, {files_base64[0]}). Body request POST /v1/call HANYA dibentuk dari parameter tabel ini.",
             table_schema=[
                 {
                     "name": "key",
                     "display_name": "Key",
                     "type": "str",
-                    "description": "Nama parameter / field body",
+                    "description": "Nama parameter / field body request",
                 },
                 {
                     "name": "value",
                     "display_name": "Value",
                     "type": "str",
-                    "description": "Nilai parameter atau template parser (misal: {text}, {message})",
+                    "description": "Nilai parameter atau template parser (misal: {text}, {prompt}, {image}, {file}, {files[0]}, {image_base64})",
                 },
             ],
             value=[],
             is_list=True,
-            required=False,
+            required=True,
         ),
 
-        # 5. Base URL (Default dari konstanta global di atas)
+        # 5. Base URL Callcraft & Langflow
         StrInput(
             name="base_url",
             display_name="Callcraft Base URL",
             info="Base URL API Callcraft. Secara default mengarah langsung ke server produksi.",
             value=CALLCRAFT_BASE_URL,
             required=True,
+            advanced=True,
+        ),
+        StrInput(
+            name="langflow_base_url",
+            display_name="Langflow Base URL",
+            info="Base URL server Langflow untuk resolusi URL lengkap file upload dari chat (misal: https://langflow.flyup.id). Default mengacu pada environment variable LANGFLOW_BASE_URL.",
+            value=LANGFLOW_DEFAULT_BASE_URL,
+            required=False,
+            advanced=True,
+        ),
+        DropdownInput(
+            name="file_encoding",
+            display_name="Chat File Format",
+            info="Format pengiriman file chat ke API Callcraft: 'Base64 Data URI' (Sangat direkomendasikan jika server Langflow bersifat privat / memerlukan autentikasi login) atau 'Complete File URL' (hanya jika server Langflow dapat diakses publik tanpa login).",
+            options=["Base64 Data URI (Recommended)", "Complete File URL"],
+            value="Base64 Data URI (Recommended)",
+            required=False,
             advanced=True,
         ),
 
@@ -250,6 +387,93 @@ class CallcraftAPIComponent(Component):
     outputs = [
         Output(display_name="Output JSON", name="output_json", method="call_api"),
     ]
+
+    def _resolve_langflow_base_url(self) -> str:
+        """
+        Menentukan Base URL server Langflow untuk resolusi URL file lengkap.
+        Hirarki prioritas:
+        1. Input 'langflow_base_url' pada komponen jika dikonfigurasi.
+        2. Environment variable LANGFLOW_BASE_URL atau LANGFLOW_URL.
+        3. Service settings Langflow (jika berjalan di dalam engine Langflow).
+        4. Default terpusat: LANGFLOW_DEFAULT_BASE_URL.
+        """
+        custom_url = self._get_input_value("langflow_base_url").strip()
+        if custom_url:
+            return _clean_base_url_scheme(custom_url, default_url=LANGFLOW_DEFAULT_BASE_URL)
+
+        env_url = (os.environ.get("LANGFLOW_BASE_URL") or os.environ.get("LANGFLOW_URL") or "").strip()
+        if env_url:
+            return _clean_base_url_scheme(env_url, default_url=LANGFLOW_DEFAULT_BASE_URL)
+
+        try:
+            from lfx.services.deps import get_settings_service
+            svc = get_settings_service()
+            if svc and hasattr(svc, "settings"):
+                backend_url = getattr(svc.settings, "backend_url", None) or getattr(svc.settings, "base_url", None)
+                if backend_url and isinstance(backend_url, str) and backend_url.strip():
+                    return _clean_base_url_scheme(backend_url.strip(), default_url=LANGFLOW_DEFAULT_BASE_URL)
+                host = getattr(svc.settings, "host", None)
+                port = getattr(svc.settings, "port", None)
+                if host and port and host not in ("0.0.0.0", "127.0.0.1", "localhost"):
+                    return f"http://{host}:{port}"
+        except Exception:
+            pass
+
+        return _clean_base_url_scheme(LANGFLOW_DEFAULT_BASE_URL, default_url=LANGFLOW_DEFAULT_BASE_URL)
+
+    def _normalize_payload_files(
+        self,
+        data: Any,
+        key: str = "",
+        known_files: Optional[List[str]] = None,
+        known_file_base64_map: Optional[Dict[str, str]] = None,
+        langflow_base_url: str = "",
+        prefer_base64: bool = True,
+    ) -> Any:
+        """
+        Secara rekursif memeriksa apakah nilai dalam payload adalah file.
+        Jika file:
+          - Jika sudah lengkap (http://, https://, data:) -> biarkan utuh ("kalau sudah lengkap maka tidak perlu").
+          - Jika belum lengkap (misal path relatif dari chat):
+            * Jika prefer_base64=True dan file ada di known_file_base64_map -> ubah ke Base64 Data URI.
+            * Lainnya -> ubah ke URL lengkap.
+        Jika bukan file -> biarkan nilai asli tanpa perubahan.
+        """
+        if isinstance(data, dict):
+            return {
+                k: self._normalize_payload_files(
+                    v,
+                    key=k,
+                    known_files=known_files,
+                    known_file_base64_map=known_file_base64_map,
+                    langflow_base_url=langflow_base_url,
+                    prefer_base64=prefer_base64,
+                )
+                for k, v in data.items()
+            }
+        elif isinstance(data, list):
+            return [
+                self._normalize_payload_files(
+                    item,
+                    key=key,
+                    known_files=known_files,
+                    known_file_base64_map=known_file_base64_map,
+                    langflow_base_url=langflow_base_url,
+                    prefer_base64=prefer_base64,
+                )
+                for item in data
+            ]
+        elif isinstance(data, str):
+            trimmed = data.strip()
+            if _is_complete_url(trimmed):
+                return trimmed
+            if _is_file_path_or_reference(key, trimmed, known_files=known_files):
+                if prefer_base64 and known_file_base64_map and trimmed in known_file_base64_map:
+                    return known_file_base64_map[trimmed]
+                return _convert_to_complete_file_url(trimmed, langflow_base_url)
+            return data
+        else:
+            return data
 
     def _resolve_variable_value(self, val: Any) -> str:
         """
@@ -490,26 +714,49 @@ class CallcraftAPIComponent(Component):
             return combined_payload, "\n".join(all_texts), unique_files
 
         raw_dict = {}
-        if hasattr(input_data, "model_dump"):
-            raw_dict = input_data.model_dump()
-        elif hasattr(input_data, "dict"):
-            raw_dict = input_data.dict()
+        if hasattr(input_data, "model_dump") and callable(input_data.model_dump):
+            try:
+                raw_dict = input_data.model_dump()
+            except Exception:
+                pass
+        elif hasattr(input_data, "dict") and callable(input_data.dict):
+            try:
+                raw_dict = input_data.dict()
+            except Exception:
+                pass
         elif isinstance(input_data, dict):
             raw_dict = input_data
         elif isinstance(input_data, str):
             chat_text = input_data
             payload["prompt"] = chat_text
             return payload, chat_text, chat_files
+        elif hasattr(input_data, "data") and isinstance(input_data.data, dict):
+            raw_dict = dict(input_data.data)
+        elif hasattr(input_data, "__dict__"):
+            raw_dict = dict(input_data.__dict__)
 
         if "text" in raw_dict and isinstance(raw_dict["text"], str) and raw_dict["text"]:
             chat_text = raw_dict["text"]
+        elif "content" in raw_dict and isinstance(raw_dict["content"], str) and raw_dict["content"]:
+            chat_text = raw_dict["content"]
+
+        if not chat_text:
+            if hasattr(input_data, "text") and isinstance(input_data.text, str) and input_data.text:
+                chat_text = input_data.text
+            elif hasattr(input_data, "content") and isinstance(input_data.content, str) and input_data.content:
+                chat_text = input_data.content
+
         if "files" in raw_dict and isinstance(raw_dict["files"], list):
             chat_files = raw_dict["files"]
+        elif hasattr(input_data, "files") and isinstance(input_data.files, list):
+            chat_files = input_data.files
 
         data_inner = raw_dict.get("data")
         if isinstance(data_inner, dict):
             if not chat_text and "text" in data_inner and isinstance(data_inner["text"], str):
                 chat_text = data_inner["text"]
+            if not chat_text and "content" in data_inner and isinstance(data_inner["content"], str):
+                chat_text = data_inner["content"]
             if not chat_files and "files" in data_inner and isinstance(data_inner["files"], list):
                 chat_files = data_inner["files"]
 
@@ -711,7 +958,7 @@ class CallcraftAPIComponent(Component):
                     req_props = list(req_schema["properties"].keys())
 
                 seen = set()
-                ignored = {"image", "file", "pdf", "prompt", "custom_prompt", "document_input"}
+                ignored = {"custom_prompt", "document_input"}
                 spec_fields = []
                 for f in list(p_vars) + list(req_props):
                     if f and f not in seen and f not in ignored:
@@ -732,6 +979,12 @@ class CallcraftAPIComponent(Component):
                                 if k:
                                     existing_rows.append({"key": k, "value": v})
                                     existing_keys.add(k)
+                            elif hasattr(item, "data") and isinstance(item.data, dict):
+                                k = str(item.data.get("key") or "").strip()
+                                v = item.data.get("value", "")
+                                if k:
+                                    existing_rows.append({"key": k, "value": v})
+                                    existing_keys.add(k)
                     elif isinstance(curr_payload, dict):
                         for k, v in curr_payload.items():
                             k_str = str(k).strip()
@@ -742,7 +995,13 @@ class CallcraftAPIComponent(Component):
                     # Tambahkan field bawaan spec yang belum ada di input manual pengguna
                     for var_name in spec_fields:
                         if var_name not in existing_keys:
-                            existing_rows.append({"key": var_name, "value": f"{{{var_name}}}"})
+                            if var_name in ("image", "file", "pdf"):
+                                suggested_val = "{file}"
+                            elif var_name in ("prompt", "text"):
+                                suggested_val = "{text}"
+                            else:
+                                suggested_val = f"{{{var_name}}}"
+                            existing_rows.append({"key": var_name, "value": suggested_val})
                             existing_keys.add(var_name)
 
                     build_config["payload"]["value"] = existing_rows
@@ -772,11 +1031,34 @@ class CallcraftAPIComponent(Component):
         secret_key = self._get_input_value("secret_key").strip()
 
         if not user_id:
-            return Data(data={"error": "Field 'user_id' wajib diisi."})
+            error_data = {
+                "error": {
+                    "code": "MISSING_USER_ID",
+                    "message": "Field 'user_id' wajib diisi.",
+                }
+            }
+            self.status = error_data
+            return Data(data=error_data)
+
         if not public_key or not secret_key:
-            return Data(data={"error": "Field 'public_key' dan 'secret_key' wajib diisi."})
+            error_data = {
+                "error": {
+                    "code": "MISSING_CREDENTIALS",
+                    "message": "Field 'public_key' dan 'secret_key' wajib diisi.",
+                }
+            }
+            self.status = error_data
+            return Data(data=error_data)
+
         if not spec_id:
-            return Data(data={"error": "Field 'spec_id' (Call Spec) wajib dipilih atau diisi."})
+            error_data = {
+                "error": {
+                    "code": "MISSING_SPEC_ID",
+                    "message": "Field 'spec_id' (Call Spec) wajib dipilih atau diisi.",
+                }
+            }
+            self.status = error_data
+            return Data(data=error_data)
 
         headers = {
             "Content-Type": "application/json",
@@ -805,39 +1087,165 @@ class CallcraftAPIComponent(Component):
             optional_headers_sent = True
 
         debug_trace = {
-            "step_1_credentials": {
-                "base_url": base_url,
-                "user_id": user_id,
-                "spec_id": spec_id,
-                "public_key": public_key,
-                "secret_key_status": f"OK (Length: {len(secret_key)})" if secret_key else "EMPTY",
-                "optional_ai_headers_sent": optional_headers_sent,
-                "ai_model_name": ai_model_name or None,
-                "ai_provider": ai_provider or None,
-                "ai_api_key_sent": bool(ai_api_key),
-                "ai_base_url": ai_base_url or None,
+            "step1Credentials": {
+                "baseUrl": base_url,
+                "userId": user_id,
+                "specId": spec_id,
+                "publicKey": public_key,
+                "secretKeyStatus": f"OK (Length: {len(secret_key)})" if secret_key else "EMPTY",
+                "optionalAiHeadersSent": optional_headers_sent,
+                "aiModelName": ai_model_name or None,
+                "aiProvider": ai_provider or None,
+                "aiApiKeySent": bool(ai_api_key),
+                "aiBaseUrl": ai_base_url or None,
             },
-            "step_2_incoming_payload": {},
-            "step_3_file_processing": [],
-            "step_4_final_payload_summary": {},
-            "step_5_api_response": {},
+            "step2IncomingPayload": {},
+            "step3FileProcessing": [],
+            "step4FinalPayloadSummary": {},
+            "step5ApiResponse": {},
         }
 
         # 3. Ekstraksi Payload Input (Upstream Input Data & Manual Payload Body Params)
-        target_input = getattr(self, "input_data", None)
-        if target_input is None and hasattr(self, "_attributes") and isinstance(self._attributes, dict):
-            target_input = self._attributes.get("input_data")
+        target_input = None
+        if hasattr(self, "_attributes") and isinstance(self._attributes, dict) and "input_data" in self._attributes:
+            target_input = self._attributes["input_data"]
+        if target_input is None:
+            target_input = getattr(self, "input_data", None)
+        if target_input is None and hasattr(self, "_inputs") and isinstance(self._inputs, dict) and "input_data" in self._inputs:
+            target_input = getattr(self._inputs["input_data"], "value", None)
 
         # Ekstrak data dari node sebelumnya (Chat Input, File, Data, Message, dict)
         extracted_dict, chat_text, chat_files = self._extract_payload_and_files(target_input)
 
+        # Resolusi Base URL Server Langflow untuk URL File Lengkap
+        langflow_base_url = self._resolve_langflow_base_url()
+
+        # Format pengiriman file (Base64 vs Complete URL)
+        file_encoding_setting = self._get_input_value("file_encoding") or "Base64 Data URI (Recommended)"
+        prefer_base64 = "base64" in file_encoding_setting.lower()
+
+        # Konversi file dari chat menjadi URL lengkap jika belum lengkap
+        chat_file_urls: List[str] = []
+        for cf in chat_files:
+            if isinstance(cf, str) and cf.strip():
+                chat_file_urls.append(_convert_to_complete_file_url(cf.strip(), langflow_base_url))
+
+        # Proses File dari Storage Langflow (Chat Attachment) untuk Base64
+        base64_images: List[str] = []
+        file_base64_map: Dict[str, str] = {}
+        if chat_files:
+            try:
+                storage_service = get_storage_service()
+            except Exception:
+                storage_service = None
+
+            for file_path in chat_files:
+                file_step_log = {"filePath": file_path}
+                if isinstance(file_path, str) and "/" in file_path:
+                    folder_name, file_name = file_path.split("/", 1)
+                    file_step_log["folderName"] = folder_name
+                    file_step_log["fileName"] = file_name
+
+                    try:
+                        file_bytes = self._read_file_from_storage(storage_service, folder_name, file_name)
+                        mime_type, _ = mimetypes.guess_type(file_name)
+                        if not mime_type:
+                            mime_type = "application/octet-stream"
+
+                        b64_encoded = base64.b64encode(file_bytes).decode("utf-8")
+                        data_uri = f"data:{mime_type};base64,{b64_encoded}"
+                        base64_images.append(data_uri)
+                        file_base64_map[file_path] = data_uri
+
+                        file_step_log["status"] = "SUCCESS"
+                        file_step_log["bytesSize"] = len(file_bytes)
+                        file_step_log["mimeType"] = mime_type
+                        file_step_log["resolvedUrl"] = _convert_to_complete_file_url(file_path, langflow_base_url)
+                        file_step_log["resolvedBase64Prefix"] = data_uri[:35] + "..."
+                    except Exception as e:
+                        file_step_log["status"] = "FAILED"
+                        file_step_log["error"] = str(e)
+
+                debug_trace["step3FileProcessing"].append(file_step_log)
+
+        document_input = self._get_input_value("document_input").strip()
+        custom_prompt = self._get_input_value("custom_prompt").strip()
+
         # Siapkan source dictionary untuk template formatting (seperti di ParserComponent Langflow)
         source_dict = dict(extracted_dict)
+
+        # Simpan struktur object asli jika tersedia (untuk path seperti message.data.text, message.files[0], dsb)
+        if isinstance(target_input, dict):
+            for tk, tv in target_input.items():
+                if tk not in source_dict:
+                    source_dict[tk] = tv
+        elif hasattr(target_input, "model_dump") and callable(target_input.model_dump):
+            try:
+                for tk, tv in target_input.model_dump().items():
+                    if tk not in source_dict:
+                        source_dict[tk] = tv
+            except Exception:
+                pass
+        elif hasattr(target_input, "data") and isinstance(target_input.data, dict):
+            source_dict["data"] = dict(target_input.data)
+
         if chat_text:
             source_dict["text"] = chat_text
             source_dict["prompt"] = chat_text
-            source_dict["message"] = chat_text
             source_dict["input"] = chat_text
+            if "message" not in source_dict or not isinstance(source_dict["message"], dict):
+                source_dict["message"] = chat_text
+
+        # Field file pada source_dict:
+        # Tentukan representasi default untuk {file}, {image}, {files[i]}, {images[i]} berdasarkan prefer_base64
+        resolved_primary_files = base64_images if (prefer_base64 and base64_images) else chat_file_urls
+
+        if resolved_primary_files:
+            source_dict["file"] = resolved_primary_files[0]
+            source_dict["image"] = resolved_primary_files[0]
+            source_dict["files"] = resolved_primary_files
+            source_dict["images"] = resolved_primary_files
+            for i, f_val in enumerate(resolved_primary_files):
+                source_dict[f"files[{i}]"] = f_val
+                source_dict[f"images[{i}]"] = f_val
+                source_dict[f"files.{i}"] = f_val
+                source_dict[f"images.{i}"] = f_val
+
+        # Selalu sediakan token URL eksplisit
+        if chat_file_urls:
+            source_dict["file_url"] = chat_file_urls[0]
+            source_dict["image_url"] = chat_file_urls[0]
+            source_dict["files_url"] = chat_file_urls
+            source_dict["images_url"] = chat_file_urls
+            for i, f_url in enumerate(chat_file_urls):
+                source_dict[f"files_url[{i}]"] = f_url
+                source_dict[f"images_url[{i}]"] = f_url
+                source_dict[f"files_url.{i}"] = f_url
+                source_dict[f"images_url.{i}"] = f_url
+
+        # Selalu sediakan token Base64 eksplisit
+        if base64_images:
+            source_dict["file_base64"] = base64_images[0]
+            source_dict["image_base64"] = base64_images[0]
+            source_dict["base64"] = base64_images[0]
+            source_dict["files_base64"] = base64_images
+            source_dict["images_base64"] = base64_images
+            for i, b64_val in enumerate(base64_images):
+                source_dict[f"files_base64[{i}]"] = b64_val
+                source_dict[f"images_base64[{i}]"] = b64_val
+                source_dict[f"files_base64.{i}"] = b64_val
+                source_dict[f"images_base64.{i}"] = b64_val
+
+        if custom_prompt:
+            source_dict["custom_prompt"] = custom_prompt
+
+        if document_input:
+            resolved_doc = _convert_to_complete_file_url(document_input, langflow_base_url)
+            source_dict["document_input"] = resolved_doc
+            if "file" not in source_dict:
+                source_dict["file"] = resolved_doc
+            if "image" not in source_dict:
+                source_dict["image"] = resolved_doc
 
         class _DefaultDotDict(dict):
             """
@@ -862,23 +1270,39 @@ class CallcraftAPIComponent(Component):
         formatted_source = _DefaultDotDict(source_dict)
 
         # Ambil field manual dari self.payload (TableInput list of dicts, DictInput, atau JSON string)
-        target_payload = getattr(self, "payload", None)
-        if target_payload is None and hasattr(self, "_attributes") and isinstance(self._attributes, dict):
-            target_payload = self._attributes.get("payload")
+        target_payload = None
+        if hasattr(self, "_attributes") and isinstance(self._attributes, dict) and "payload" in self._attributes:
+            target_payload = self._attributes["payload"]
+        if target_payload is None:
+            target_payload = getattr(self, "payload", None)
+        if target_payload is None and hasattr(self, "_inputs") and isinstance(self._inputs, dict) and "payload" in self._inputs:
+            target_payload = getattr(self._inputs["payload"], "value", None)
 
         manual_params: Dict[str, Any] = {}
         if isinstance(target_payload, list):
             for row in target_payload:
                 if isinstance(row, dict):
-                    k = str(row.get("key") or "").strip()
-                    v = row.get("value", "")
-                    if k and k not in IGNORED_METADATA_KEYS and k != "files":
-                        manual_params[k] = v
+                    if "key" in row and "value" in row:
+                        k = str(row.get("key") or "").strip()
+                        v = row.get("value", "")
+                        if k and k not in IGNORED_METADATA_KEYS and k != "files":
+                            manual_params[k] = v
+                    else:
+                        for rk, rv in row.items():
+                            k_str = str(rk).strip()
+                            if k_str and k_str not in IGNORED_METADATA_KEYS and k_str != "files":
+                                manual_params[k_str] = rv
                 elif hasattr(row, "data") and isinstance(row.data, dict):
-                    k = str(row.data.get("key") or "").strip()
-                    v = row.data.get("value", "")
-                    if k and k not in IGNORED_METADATA_KEYS and k != "files":
-                        manual_params[k] = v
+                    if "key" in row.data and "value" in row.data:
+                        k = str(row.data.get("key") or "").strip()
+                        v = row.data.get("value", "")
+                        if k and k not in IGNORED_METADATA_KEYS and k != "files":
+                            manual_params[k] = v
+                    else:
+                        for rk, rv in row.data.items():
+                            k_str = str(rk).strip()
+                            if k_str and k_str not in IGNORED_METADATA_KEYS and k_str != "files":
+                                manual_params[k_str] = rv
         elif isinstance(target_payload, dict):
             for k, v in target_payload.items():
                 k_str = str(k).strip()
@@ -895,117 +1319,146 @@ class CallcraftAPIComponent(Component):
                 elif isinstance(parsed_json, list):
                     for row in parsed_json:
                         if isinstance(row, dict):
-                            k = str(row.get("key") or "").strip()
-                            v = row.get("value", "")
-                            if k and k not in IGNORED_METADATA_KEYS and k != "files":
-                                manual_params[k] = v
+                            if "key" in row and "value" in row:
+                                k = str(row.get("key") or "").strip()
+                                v = row.get("value", "")
+                                if k and k not in IGNORED_METADATA_KEYS and k != "files":
+                                    manual_params[k] = v
+                            else:
+                                for rk, rv in row.items():
+                                    k_str = str(rk).strip()
+                                    if k_str and k_str not in IGNORED_METADATA_KEYS and k_str != "files":
+                                        manual_params[k_str] = rv
             except Exception:
                 pass
+        elif hasattr(target_payload, "data") and isinstance(target_payload.data, dict):
+            for k, v in target_payload.data.items():
+                k_str = str(k).strip()
+                if k_str and k_str not in IGNORED_METADATA_KEYS and k_str != "files":
+                    manual_params[k_str] = v
         elif target_payload is not None:
             p_dict, p_text, p_files = self._extract_payload_and_files(target_payload)
             manual_params.update(p_dict)
             if not chat_text and p_text:
                 chat_text = p_text
-                source_dict["text"] = chat_text
-                source_dict["prompt"] = chat_text
-                formatted_source = _DefaultDotDict(source_dict)
             if p_files:
                 chat_files.extend(p_files)
+
+        # STRICT FAIL-FAST VALIDATION:
+        # Tidak boleh ada fallback ke upstream input_data atau akal-akalan.
+        # Body request POST /v1/call HARUS bersumber langsung dari parameter Table 'payload'.
+        if not manual_params:
+            error_data = {
+                "error": {
+                    "code": "MISSING_PAYLOAD_CONFIGURATION",
+                    "message": "Konfigurasi parameter body pada Table 'payload' tidak boleh kosong. Body request POST /v1/call harus ditentukan dari tabel.",
+                },
+                "_debugTrace": debug_trace,
+            }
+            self.status = error_data
+            return Data(data=error_data)
 
         # Parse nilai form manual: jika mengandung format template {variable}, ganti dengan data dari context
         parsed_manual = {}
         for k, v in manual_params.items():
-            if isinstance(v, str) and "{" in v and "}" in v:
-                try:
-                    formatted_val = v.format_map(formatted_source)
-                except Exception:
+            if isinstance(v, str):
+                v_trimmed = v.strip()
+                # Jika persis satu placeholder sederhana {nama_variabel} tanpa spasi/teks lain
+                if v_trimmed.startswith("{") and v_trimmed.endswith("}") and "{" not in v_trimmed[1:-1] and "}" not in v_trimmed[1:-1]:
+                    var_token = v_trimmed[1:-1].strip()
+                    # 1. Cek kecocokan langsung di source_dict (misal: {text}, {prompt}, {file}, {image}, {files[0]})
+                    if var_token in source_dict:
+                        formatted_val = source_dict[var_token]
+                    # 2. Cek apakah mengandung dot notation atau array indexing (misal: {files[0]}, {message.files[0]}, {data.text})
+                    elif "." in var_token or "[" in var_token:
+                        try:
+                            res = v.format_map(formatted_source)
+                            if res != "":
+                                formatted_val = res
+                            else:
+                                formatted_val = ""
+                        except Exception:
+                            formatted_val = ""
+
+                        # Fallback traversal hierarkis jika format_map belum menghasilkan nilai
+                        if not formatted_val:
+                            parts = re.split(r"\.|\[(\d+)\]", var_token)
+                            parts = [p for p in parts if p is not None and p != ""]
+                            curr: Any = source_dict
+                            found = True
+                            for p in parts:
+                                if isinstance(curr, dict) and p in curr:
+                                    curr = curr[p]
+                                elif isinstance(curr, (list, tuple)) and p.isdigit():
+                                    idx = int(p)
+                                    if 0 <= idx < len(curr):
+                                        curr = curr[idx]
+                                    else:
+                                        found = False
+                                        break
+                                else:
+                                    found = False
+                                    break
+                            if found and curr is not None:
+                                formatted_val = curr
+                    else:
+                        formatted_val = ""
+                elif "{" in v and "}" in v:
+                    try:
+                        formatted_val = v.format_map(formatted_source)
+                    except Exception:
+                        formatted_val = v
+                else:
+                    # Nilai statis langsung dari tabel
                     formatted_val = v
+                    if v_trimmed in ("true", "false", "null"):
+                        try:
+                            formatted_val = json.loads(v_trimmed)
+                        except Exception:
+                            formatted_val = v
+                    elif v_trimmed.startswith(("{", "[")) and v_trimmed.endswith(("}", "]")):
+                        try:
+                            formatted_val = json.loads(v_trimmed)
+                        except Exception:
+                            formatted_val = v
             else:
                 formatted_val = v
+
             parsed_manual[k] = formatted_val
 
-        # Gabungkan payload: extracted_dict dari upstream + field manual yang menjadi body params utama
-        final_payload = dict(extracted_dict)
-        final_payload.update(parsed_manual)
+        # Body request POST /v1/call HANYA dan STRICT berasal dari tabel payload pengguna
+        final_payload = dict(parsed_manual)
+
+        # Pengecekan file: Jika ada field berisi file (dari chat / path relatif):
+        # - Jika prefer_base64=True (default), ubah ke Base64 Data URI agar tidak tergantung pada akses publik URL Langflow.
+        # - Jika prefer_base64=False, ubah ke URL lengkap.
+        # - Kalau sudah lengkap (http://, https://, data:), maka tidak perlu diubah.
+        final_payload = self._normalize_payload_files(
+            final_payload,
+            known_files=chat_files,
+            known_file_base64_map=file_base64_map,
+            langflow_base_url=langflow_base_url,
+            prefer_base64=prefer_base64,
+        )
 
         payload = final_payload
 
-        debug_trace["step_2_incoming_payload"] = {
-            "upstream_input_present": bool(target_input is not None),
-            "manual_params_count": len(manual_params),
-            "manual_param_keys": list(manual_params.keys()),
-            "extracted_text": chat_text,
-            "extracted_files": chat_files,
-            "resolved_payload_keys": list(payload.keys()),
-            "raw_payload_type": str(type(target_payload)),
+        debug_trace["step2IncomingPayload"] = {
+            "upstreamInputPresent": bool(target_input is not None),
+            "manualParamsCount": len(manual_params),
+            "manualParamKeys": list(manual_params.keys()),
+            "extractedText": chat_text,
+            "extractedFiles": chat_files,
+            "resolvedPayloadKeys": list(payload.keys()),
+            "rawPayloadType": str(type(target_payload)),
         }
 
-        # 4. Tambahkan prompt manual atau dokumen manual jika diisi
-        custom_prompt = self._get_input_value("custom_prompt").strip()
-        if custom_prompt:
-            if "prompt" in payload and payload["prompt"]:
-                payload["prompt"] = f"{payload['prompt']}\n{custom_prompt}"
-            else:
-                payload["prompt"] = custom_prompt
-
-        document_input = self._get_input_value("document_input").strip()
-
-        # Sinkronkan variabel ke payload["variables"] jika spec memerlukannya
-        if "variables" not in payload or not isinstance(payload["variables"], dict):
-            payload["variables"] = {}
-        for k, v in payload.items():
-            if k not in ("variables", "image", "images", "file", "prompt", "custom_prompt"):
-                payload["variables"][k] = v
-
-        base64_images = []
-
-        # 5. Proses File dari Storage Langflow (Chat Attachment)
-        if chat_files:
-            try:
-                storage_service = get_storage_service()
-            except Exception:
-                storage_service = None
-
-            for file_path in chat_files:
-                file_step_log = {"file_path": file_path}
-                if isinstance(file_path, str) and "/" in file_path:
-                    folder_name, file_name = file_path.split("/", 1)
-                    file_step_log["folder_name"] = folder_name
-                    file_step_log["file_name"] = file_name
-
-                    try:
-                        file_bytes = self._read_file_from_storage(storage_service, folder_name, file_name)
-                        mime_type, _ = mimetypes.guess_type(file_name)
-                        if not mime_type:
-                            mime_type = "application/octet-stream"
-
-                        b64_encoded = base64.b64encode(file_bytes).decode("utf-8")
-                        data_uri = f"data:{mime_type};base64,{b64_encoded}"
-                        base64_images.append(data_uri)
-
-                        file_step_log["status"] = "SUCCESS"
-                        file_step_log["bytes_size"] = len(file_bytes)
-                        file_step_log["mime_type"] = mime_type
-                        file_step_log["base64_prefix"] = data_uri[:60] + "..."
-                    except Exception as e:
-                        file_step_log["status"] = "FAILED"
-                        file_step_log["error"] = str(e)
-
-                debug_trace["step_3_file_processing"].append(file_step_log)
-
-        # 6. Sisipkan Dokumen (File Storage atau Manual Document Input)
-        if base64_images:
-            if len(base64_images) > 1:
-                payload["images"] = base64_images
-            else:
-                payload["image"] = base64_images[0]
-        elif document_input:
-            payload["file"] = document_input
-
-        debug_trace["step_4_final_payload_summary"] = {
-            "payload_keys": list(payload.keys()),
-            "image_count": len(base64_images),
-            "manual_document_present": bool(document_input),
+        debug_trace["step4FinalPayloadSummary"] = {
+            "payloadKeys": list(payload.keys()),
+            "fileFormat": file_encoding_setting,
+            "chatFileBase64Count": len(base64_images),
+            "chatFileUrls": chat_file_urls,
+            "langflowBaseUrl": langflow_base_url,
         }
 
         # 7. Eksekusi Request ke API Callcraft
@@ -1021,23 +1474,23 @@ class CallcraftAPIComponent(Component):
                 response_json = response.json()
             except Exception:
                 response_json = {
-                    "status_code": response.status_code,
+                    "statusCode": response.status_code,
                     "text": response.text,
                 }
 
-            debug_trace["step_5_api_response"] = {
-                "http_status": response.status_code,
-                "response_keys": list(response_json.keys()) if isinstance(response_json, dict) else [],
+            debug_trace["step5ApiResponse"] = {
+                "httpStatus": response.status_code,
+                "responseKeys": list(response_json.keys()) if isinstance(response_json, dict) else [],
             }
 
             self.status = debug_trace
 
             if isinstance(response_json, dict):
                 merged_result = dict(response_json)
-                merged_result["_debug_trace"] = debug_trace
+                merged_result["_debugTrace"] = debug_trace
                 return Data(data=merged_result)
 
-            return Data(data={"result": response_json, "_debug_trace": debug_trace})
+            return Data(data={"result": response_json, "_debugTrace": debug_trace})
 
         except requests.exceptions.RequestException as e:
             error_data = {
@@ -1045,7 +1498,7 @@ class CallcraftAPIComponent(Component):
                     "code": "REQUEST_FAILED",
                     "message": str(e),
                 },
-                "_debug_trace": debug_trace,
+                "_debugTrace": debug_trace,
             }
             self.status = error_data
             return Data(data=error_data)
