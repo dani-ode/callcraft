@@ -6,7 +6,10 @@
 
 ## IDE connection
 
-Use Streamable HTTP at the deployed `/mcp/v1` endpoint. Configure these headers
+Use Streamable HTTP at the deployed `/mcp/v1` endpoint. In CallCraft/Antigravity
+configuration, use `serverUrl` for the endpoint property. Some official MCP
+clients use `url`; that is client-schema-specific and must not be mixed with the
+CallCraft/Antigravity schema. Configure these headers
 in the IDE's secret storage: `Authorization: Bearer <secret>`, `X-USER-ID`,
 `X-CALL-PUBLIC-KEY`. The credential must belong to the intended project.
 Identifier-only authentication no longer works. `X-PROJECT-ID` cannot override

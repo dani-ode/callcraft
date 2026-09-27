@@ -16,7 +16,7 @@ export default function McpServerPage() {
   const [message, setMessage] = useState("");
   const endpoint = `${PYTHON_API_URL}/mcp/v1`;
   const configuration = JSON.stringify({ mcpServers: { callcraft: {
-    url: endpoint,
+    serverUrl: endpoint,
     headers: { "X-USER-ID": user?.id || "<USER_ID>",
       "X-CALL-PUBLIC-KEY": "<PROJECT_PUBLIC_KEY>",
       Authorization: "Bearer <PROJECT_SECRET_KEY>",
@@ -52,13 +52,13 @@ export default function McpServerPage() {
     {!PYTHON_API_URL && <p role="alert" className="text-red-500">NEXT_PUBLIC_API_URL belum dikonfigurasi. Rebuild frontend setelah mengisi konfigurasi.</p>}
     <section className="glass-panel rounded-2xl p-6 space-y-3">
       <h2 className="text-xl font-bold">1. Hubungkan IDE</h2>
-      <p>Gunakan Streamable HTTP di <code>{endpoint}</code>. Pilih API key milik project aktif dari <Link className="underline" href="/keys">halaman API Keys</Link>. Secret disimpan melalui secret store/environment IDE, bukan prompt atau repository.</p>
+      <p>Gunakan Streamable HTTP di <code>{endpoint}</code>. Untuk client yang memakai format CallCraft/Antigravity, properti endpoint adalah <code>serverUrl</code>. Beberapa client MCP resmi memakai <code>url</code>; gunakan format yang didokumentasikan client tersebut. Pilih API key milik project aktif dari <Link className="underline" href="/keys">halaman API Keys</Link>. Secret disimpan melalui secret store/environment IDE, bukan prompt atau repository.</p>
       <pre className="overflow-auto text-xs p-4 border rounded-xl">{configuration}</pre>
       <button type="button" className="border rounded px-3 py-2" onClick={async () => {
         try { await navigator.clipboard.writeText(configuration); setMessage("Template disalin; ganti placeholder melalui konfigurasi rahasia IDE."); }
         catch { setMessage("Clipboard tidak tersedia; salin template secara manual."); }
       }}>Salin template konfigurasi</button>
-      <p className="text-sm">Struktur konfigurasi berbeda antar IDE. Pada client yang memakai <code>serverUrl</code>, gunakan endpoint dan header yang sama. Legacy SSE tersedia di <code>/mcp/v1/sse</code>; header autentikasi juga wajib pada POST pesan.</p>
+      <p className="text-sm">Jika validator menampilkan <code>Property url is not allowed</code>, ganti <code>url</code> menjadi <code>serverUrl</code>. Legacy SSE tersedia di <code>/mcp/v1/sse</code>; header autentikasi juga wajib pada POST pesan.</p>
     </section>
     <section className="glass-panel rounded-2xl p-6 space-y-3">
       <h2 className="text-xl font-bold">2. Periksa koneksi</h2>
