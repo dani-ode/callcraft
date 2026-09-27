@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -38,6 +39,7 @@ class Settings(BaseSettings):
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
     google_redirect_uri: Optional[str] = None
+    callcraft_execution_hmac_key: Optional[str] = None
 
     @property
     def resolved_frontend_url(self) -> str:
@@ -63,6 +65,11 @@ class Settings(BaseSettings):
         if self.redis_password:
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}"
         return f"redis://{self.redis_host}:{self.redis_port}"
+
+    def validate_execution_security(self) -> None:
+        key = (self.callcraft_execution_hmac_key or '').strip()
+        if not re.fullmatch(r'[0-9a-fA-F]{64,}', key) or len(key) % 2:
+            raise ValueError('CALLCRAFT_EXECUTION_HMAC_KEY wajib berupa hexadecimal genap minimal 64 karakter.')
 
 
 settings = Settings()

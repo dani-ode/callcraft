@@ -1,4 +1,4 @@
-.PHONY: help up down restart rebuild pull-rebuild logs dev build-web test db-reset clean
+.PHONY: help up down restart rebuild pull-rebuild logs dev build-web test migrate db-reset clean
 
 # Default target
 .DEFAULT_GOAL := help
@@ -23,6 +23,11 @@ rebuild: ## Bersihkan cache docker lama, rebuild Docker containers & restart ser
 	docker image prune -f || true
 	docker compose build
 	docker compose up -d --force-recreate
+
+migrate: ## Jalankan forward migrations tanpa menghapus database
+	docker compose build callcraft-api
+	docker compose run --rm callcraft-api \
+		python -c "import asyncio; from callcraft_api.db.session import engine; from callcraft_api.db.migrations import apply_migrations; asyncio.run(apply_migrations(engine))"
 
 up: ## Jalankan Docker containers di background
 	docker compose up -d
@@ -71,4 +76,3 @@ clean: ## Bersihkan cache Next.js dan temporary files Python (__pycache__)
 	rm -rf apps/web/.next
 	rm -rf apps/web/out
 	find . -type d -name "__pycache__" -exec rm -rf {} +
-

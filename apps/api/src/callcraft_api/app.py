@@ -20,6 +20,7 @@ logger = logging.getLogger("callcraft.api.exception")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize PostgreSQL schema and seed baseline data on application boot."""
+    settings.validate_execution_security()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await apply_migrations(engine)

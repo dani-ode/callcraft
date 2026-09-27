@@ -5,11 +5,13 @@ from sqlalchemy import text
 from callcraft_api.db.session import AsyncSessionLocal
 from callcraft_api.db.repository import Repository
 from callcraft_api.services.execution_journal import claim_reconciliation, reconcile_claim, release_reconciliation_lease
+from callcraft_api.config import settings
 
 logger = logging.getLogger('callcraft-reconciliation')
 
 
 async def run_once() -> int:
+    settings.validate_execution_security()
     limit = int(os.environ.get('CALLCRAFT_RECONCILIATION_BATCH_SIZE', '20'))
     lease = int(os.environ.get('CALLCRAFT_RECONCILIATION_LEASE_SECONDS', '60'))
     async with AsyncSessionLocal() as session:

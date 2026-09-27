@@ -15,7 +15,8 @@ class ExecutionConflict(ValueError):
 
 
 def fingerprint(value: Any) -> str:
-    secret = os.environ.get('CALLCRAFT_EXECUTION_HMAC_KEY', '')
+    from callcraft_api.config import settings
+    secret = os.environ.get('CALLCRAFT_EXECUTION_HMAC_KEY', settings.callcraft_execution_hmac_key or '')
     if not secret.strip():
         raise ExecutionConflict('EXECUTION_JOURNAL_NOT_CONFIGURED')
     encoded = json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()

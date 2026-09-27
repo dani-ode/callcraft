@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from callcraft_api.db.repository import Repository
 from callcraft_api.db.session import AsyncSessionLocal
 from callcraft_api.services.redis_cache import redis_service
+from callcraft_api.config import settings
 from reconciliation import run_once as run_reconciliation_once
 
 logging.basicConfig(
@@ -16,6 +17,7 @@ logger = logging.getLogger("callcraft-worker")
 
 
 async def main():
+    settings.validate_execution_security()
     logger.info("Starting Callcraft Background Outbox & Analytics Worker...")
     await redis_service.connect()
     
