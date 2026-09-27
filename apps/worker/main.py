@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from callcraft_api.db.repository import Repository
 from callcraft_api.db.session import AsyncSessionLocal
 from callcraft_api.services.redis_cache import redis_service
+from reconciliation import run_once as run_reconciliation_once
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +44,7 @@ async def main():
                 logger.info(f"Worker persisted {persisted_count}/{len(items)} audit log items to PostgreSQL.")
             
             await asyncio.sleep(2)
+            await run_reconciliation_once()
         except asyncio.CancelledError:
             logger.info("Worker received shutdown signal. Stopping...")
             break
@@ -56,4 +58,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Worker stopped by user.")
-

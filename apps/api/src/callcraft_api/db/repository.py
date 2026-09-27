@@ -501,6 +501,9 @@ class Repository:
             ver.tools_config = tools_config
             flag_modified(ver, "tools_config")
 
+        from callcraft_api.services.http_tool import validate_binding
+        validate_binding(ver.tools_config or {}, ver.request_schema,
+                         ver.response_schema, spec.project_id)
         await db.commit()
 
         return Repository._serialize_call_spec(spec, ver)
@@ -585,6 +588,9 @@ class Repository:
         """Creates a new Call Spec and version in database."""
         if not project_id or not project_id.strip():
             raise ValueError("Parameter 'project_id' wajib diisi untuk membuat Call Spec.")
+
+        from callcraft_api.services.http_tool import validate_binding
+        validate_binding(tools_config or {}, request_schema, response_schema, project_id)
 
         spec_id = f"spc_{str(ulid.new())}"
 

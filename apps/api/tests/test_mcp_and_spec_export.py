@@ -12,6 +12,47 @@ from callcraft_api.db.repository import Repository
 
 pytestmark = pytest.mark.asyncio
 
+
+@pytest_asyncio.fixture
+async def mcp_headers(active_user_id):
+    async with AsyncSessionLocal() as session:
+        projects = await Repository.list_projects(session, active_user_id)
+        assert projects, 'Test user must have a seeded project'
+        credential, secret = await Repository.create_api_credential(
+            session, active_user_id, 'MCP integration test', project_id=projects[0]['id'])
+    return {'X-USER-ID': active_user_id, 'X-CALL-PUBLIC-KEY': credential['publicKey'],
+            'Authorization': f'Bearer {secret}'}
+
+
+async def test_real_credentials_reject_wrong_project_and_identity(active_user_id, mcp_headers):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        payload = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}
+        response = await client.post('/mcp/v1', json=payload, headers={'X-USER-ID': active_user_id})
+        assert response.status_code == 401
+        response = await client.post('/mcp/v1', json=payload,
+                                    headers={**mcp_headers, 'X-PROJECT-ID': 'other-project'})
+        assert response.status_code == 403
+        response = await client.post('/mcp/v1', json=payload,
+                                    headers={**mcp_headers, 'Authorization': 'Bearer wrong-secret'})
+        assert response.status_code == 401
+
+
+async def test_mcp_sdk_streamable_http(mcp_headers):
+    """Actual SDK against ASGI transport and real PostgreSQL credentials."""
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test',
+                           headers=mcp_headers) as client:
+        async with streamable_http_client('http://test/mcp/v1', http_client=client) as streams:
+            async with ClientSession(streams[0], streams[1]) as session:
+                await session.initialize()
+                tools = await session.list_tools()
+                assert 'callcraft_validate_spec' in {tool.name for tool in tools.tools}
+                guide = await session.read_resource('callcraft://integration')
+                assert guide.contents
+                result = await session.call_tool('callcraft_list_specs', {})
+                assert not result.isError
+
 @pytest_asyncio.fixture
 async def active_user_id():
     async with AsyncSessionLocal() as session:
@@ -33,7 +74,7 @@ async def active_spec_id(active_user_id: str):
         return "spc_01HZX01SPEC000000000001"
 
 
-async def test_mcp_tools_list(active_user_id: str):
+async def test_mcp_tools_list(active_user_id: str, mcp_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post(
             "/mcp/v1/rpc",
@@ -42,7 +83,7 @@ async def test_mcp_tools_list(active_user_id: str):
                 "id": 1,
                 "method": "tools/list",
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert response.status_code == 200
         data = response.json()
@@ -64,7 +105,7 @@ async def test_mcp_tools_list(active_user_id: str):
         assert "callcraft_verify_ai_provider" in tool_names
 
 
-async def test_mcp_tool_call_list_specs(active_user_id: str):
+async def test_mcp_tool_call_list_specs(active_user_id: str, mcp_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post(
             "/mcp/v1/rpc",
@@ -77,7 +118,7 @@ async def test_mcp_tool_call_list_specs(active_user_id: str):
                     "arguments": {},
                 },
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert response.status_code == 200
         data = response.json()
@@ -87,7 +128,7 @@ async def test_mcp_tool_call_list_specs(active_user_id: str):
         assert "specs" in parsed
 
 
-async def test_mcp_tool_call_list_ai_providers_and_models(active_user_id: str):
+async def test_mcp_tool_call_list_ai_providers_and_models(active_user_id: str, mcp_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # 1. Test callcraft_list_user_ai_providers
         prov_res = await ac.post(
@@ -101,7 +142,7 @@ async def test_mcp_tool_call_list_ai_providers_and_models(active_user_id: str):
                     "arguments": {},
                 },
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert prov_res.status_code == 200
         prov_data = prov_res.json()
@@ -122,7 +163,7 @@ async def test_mcp_tool_call_list_ai_providers_and_models(active_user_id: str):
                     "arguments": {},
                 },
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert models_res.status_code == 200
         models_data = models_res.json()
@@ -146,7 +187,7 @@ async def test_mcp_tool_call_list_ai_providers_and_models(active_user_id: str):
                     "arguments": {"provider": "unsupported_xyz"},
                 },
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert verify_res.status_code == 200
         verify_data = verify_res.json()
@@ -203,7 +244,7 @@ async def test_spec_sections_get_and_put(active_user_id: str, active_spec_id: st
         assert put_data["spec"]["positivePrompt"] == "Granular section update test prompt"
 
 
-async def test_mcp_streamable_http_json(active_user_id: str):
+async def test_mcp_streamable_http_json(active_user_id: str, mcp_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Test initialize on root /mcp/v1
         init_res = await ac.post(
@@ -218,7 +259,7 @@ async def test_mcp_streamable_http_json(active_user_id: str):
                     "clientInfo": {"name": "deepseek-harness", "version": "1.0.0"},
                 },
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert init_res.status_code == 200
         init_data = init_res.json()
@@ -233,7 +274,7 @@ async def test_mcp_streamable_http_json(active_user_id: str):
                 "id": 102,
                 "method": "ping",
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert ping_res.status_code == 200
         assert ping_res.json()["result"] == {}
@@ -245,12 +286,12 @@ async def test_mcp_streamable_http_json(active_user_id: str):
                 "jsonrpc": "2.0",
                 "method": "notifications/initialized",
             },
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert notif_res.status_code == 204
 
 
-async def test_mcp_streamable_http_event_stream(active_user_id: str):
+async def test_mcp_streamable_http_event_stream(active_user_id: str, mcp_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # POST with Accept: text/event-stream (DeepSeek Harness / streamable HTTP style)
         stream_res = await ac.post(
@@ -261,7 +302,7 @@ async def test_mcp_streamable_http_event_stream(active_user_id: str):
                 "method": "ping",
             },
             headers={
-                "X-USER-ID": active_user_id,
+                **mcp_headers,
                 "Accept": "text/event-stream",
             },
         )
@@ -273,12 +314,12 @@ async def test_mcp_streamable_http_event_stream(active_user_id: str):
         assert '"id": 201' in text_body
 
 
-async def test_mcp_streamable_http_discovery_get_and_delete(active_user_id: str):
+async def test_mcp_streamable_http_discovery_get_and_delete(active_user_id: str, mcp_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # GET probe on /mcp/v1
         get_res = await ac.get(
             "/mcp/v1",
-            headers={"X-USER-ID": active_user_id},
+            headers=mcp_headers,
         )
         assert get_res.status_code == 200
         get_data = get_res.json()
@@ -390,5 +431,3 @@ async def test_spec_update_persistence_camel_and_snake_case(active_user_id: str,
         assert "snake_req_key" in put_snake_data["requestSchema"]["properties"]
         assert "snake_res_key" in put_snake_data["responseSchema"]["properties"]
         assert put_snake_data["positivePrompt"] == "Snake case prompt update"
-
-

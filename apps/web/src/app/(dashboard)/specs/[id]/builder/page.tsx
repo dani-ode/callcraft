@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense, useRef } from "react";
 import Link from "next/link";
+import { HttpBindingEditor } from "@/components/playground/http-binding-editor";
 import {
   ArrowLeft,
   Save,
@@ -375,7 +376,13 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
       }
 
       // Validasi tools configuration (function calling)
-      if (toolsConfig?.tools && Array.isArray(toolsConfig.tools)) {
+      if (toolsConfig.execution) {
+        const binding = toolsConfig.execution;
+        const url = new URL(binding.url);
+        if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("Binding harus menggunakan URL HTTPS tanpa credential, query, atau fragment.");
+        if (!binding.credentialEnv.trim() || !Number.isFinite(binding.timeoutSeconds) || binding.timeoutSeconds <= 0 || !Number.isInteger(binding.maxResponseBytes) || binding.maxResponseBytes <= 0) throw new Error("Referensi credential, timeout positif, dan batas respons integer positif wajib diisi.");
+      }
+      if (!toolsConfig.execution && toolsConfig?.tools && Array.isArray(toolsConfig.tools)) {
         const idRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
         for (let i = 0; i < toolsConfig.tools.length; i++) {
           const t = toolsConfig.tools[i];
@@ -723,7 +730,8 @@ function VisualSchemaBuilderContent({ params }: { params: { id: string } }) {
                 <p className="text-xs text-[#8a715e] dark:text-[#edd6bb]/70 font-semibold">Loading schema specification...</p>
               </div>
             ) : activeTab === "tools" ? (
-              <ToolCallingSettings toolsConfig={toolsConfig} setToolsConfig={setToolsConfig} />
+              <><HttpBindingEditor value={toolsConfig} onChange={setToolsConfig} />
+              {!toolsConfig.execution && <ToolCallingSettings toolsConfig={toolsConfig} setToolsConfig={setToolsConfig} />}</>
             ) : activeTab === "settings" ? (
               <ExecutionSettings
                 specName={specName}

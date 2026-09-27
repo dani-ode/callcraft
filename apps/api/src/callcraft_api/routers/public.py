@@ -450,6 +450,51 @@ async def execute_callcraft(
     user_id = str(cred.get("user_id") or (x_user_id or "").strip())
     should_show_prompt = bool(x_call_show_prompt and x_call_show_prompt.strip().lower() == "true")
 
+    # Explicit HTTP specs bypass provider/model resolution entirely. Read directly
+    # from SQL so a changed binding cannot remain active through a stale cache.
+    if x_call_spec_id:
+        http_spec = await Repository.get_call_spec(db, user_id, x_call_spec_id)
+        execution = ((http_spec or {}).get('toolsConfig') or {}).get('execution')
+        if execution is not None:
+            from callcraft_api.services.http_tool import ToolExecutionError
+            from callcraft_api.services.durable_http import execute as execute_durable_http
+            from callcraft_api.services.execution_journal import ExecutionConflict
+            if not cred.get('project_id') or cred['project_id'] != http_spec.get('projectId'):
+                return create_error_response(status_code=403, error_code='PROJECT_MISMATCH',
+                    message='Project kredensial tidak sesuai.', request_id=request_id, start_time=start_time)
+            try:
+                arguments = (payload.model_extra or {}).get('arguments')
+                if not isinstance(arguments, dict):
+                    raise ToolExecutionError('TOOL_ARGUMENTS_REQUIRED')
+                if db is None:
+                    raise ToolExecutionError('EXECUTION_DATABASE_REQUIRED')
+                reconciliation_id = (payload.model_extra or {}).get('reconcileExecutionId')
+                if reconciliation_id:
+                    from callcraft_api.services.execution_journal import reconcile
+                    key = request.headers.get('Idempotency-Key')
+                    if not key or not isinstance(reconciliation_id, str):
+                        raise ToolExecutionError('RECONCILIATION_ARGUMENTS_INVALID')
+                    result = await reconcile(db, reconciliation_id, cred['project_id'],
+                        http_spec, key, request.headers.get('X-Execution-Token'))
+                else:
+                    result = await execute_durable_http(db, http_spec, arguments,
+                        request_id, request.headers.get('Idempotency-Key'),
+                        request.headers.get('X-Execution-Token'))
+                return JSONResponse({'schemaVersion': '1', 'requestId': request_id,
+                    'executionMode': 'http', **result})
+            except ExecutionConflict as error:
+                return create_error_response(status_code=409, error_code=str(error),
+                    message='Identitas atau state eksekusi tidak sesuai.',
+                    request_id=request_id, start_time=start_time)
+            except ToolExecutionError as error:
+                return create_error_response(status_code=502 if error.unknown else 422,
+                    error_code=error.code, message='Eksekusi backend tool gagal.',
+                    details=[{'outcomeUnknown': error.unknown}],
+                    request_id=request_id, start_time=start_time)
+            except (ValueError, TypeError):
+                return create_error_response(status_code=422, error_code='TOOL_CONFIGURATION_INVALID',
+                    message='Kontrak HTTP tool tidak valid.', request_id=request_id, start_time=start_time)
+
     # 2. Fetch Call Spec (Redis Cache -> DB Repo)
     spec_slug = x_call_spec_id
     if not spec_slug:

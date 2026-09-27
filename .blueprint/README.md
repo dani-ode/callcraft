@@ -12,6 +12,13 @@ defines required evidence, security gates, change specifications, validation, an
 
 ## Fast paths
 
+- In-progress durable orchestration scope: [execution lifecycle](specifications/changes/2026-09-27-durable-orchestration.md).
+
+- Portable IDE integration instructions: [`skills/callcraft/SKILL.md`](../skills/callcraft/SKILL.md).
+
+- Current implementation change: [Project-scoped MCP and backend execution](specifications/changes/2026-09-27-mcp-tool-execution.md).
+- IDE/server setup: [MCP and HTTP tool integration](specifications/mcp-http-tools.md).
+
 | Goal | Read |
 | :--- | :--- |
 | Make a code or product change safely | [AI-SPEC.md](AI-SPEC.md) → [change-spec template](templates/change-spec.md) |

@@ -10,6 +10,7 @@ from callcraft_api.config import settings
 from callcraft_api.db.session import AsyncSessionLocal, engine
 from callcraft_api.db.init_db import init_db
 from callcraft_api.db.models import Base
+from callcraft_api.db.migrations import apply_migrations
 from callcraft_api.routers import admin, auth, auth_google, health, internal, public, mcp
 from callcraft_api.utils.envelope import build_error_envelope
 
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     """Initialize PostgreSQL schema and seed baseline data on application boot."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await apply_migrations(engine)
     async with AsyncSessionLocal() as session:
         await init_db(session)
     yield
@@ -134,4 +136,3 @@ app.include_router(public.router)
 app.include_router(internal.router)
 app.include_router(admin.router)
 app.include_router(mcp.router)
-

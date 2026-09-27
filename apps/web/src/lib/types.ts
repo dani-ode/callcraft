@@ -70,6 +70,7 @@ export interface ToolDefinition {
 }
 
 export interface ToolCallingConfig {
+  execution?: { schemaVersion: "1"; type: "http"; url: string; timeoutSeconds: number; maxResponseBytes: number; requiresIdempotency: boolean; credentialEnv: string; reconciliationUrl?: string };
   enabled: boolean;
   toolChoice: 'auto' | 'required' | 'none';
   tools: ToolDefinition[];

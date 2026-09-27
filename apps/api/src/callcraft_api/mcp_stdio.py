@@ -29,12 +29,21 @@ async def main():
 
     clean_user_id = user_id.strip()
 
-    # Verify user exists in database on startup
+    # Local stdio has the same credential requirements as HTTP MCP.
+    from callcraft_api.db.repository import Repository
+    secret = os.environ.get('CALLCRAFT_AUTH')
+    public_key = os.environ.get('CALLCRAFT_PUBLIC_KEY')
+    if not secret or not public_key:
+        raise SystemExit('CALLCRAFT_AUTH and CALLCRAFT_PUBLIC_KEY are required.')
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(User).where(User.id == clean_user_id))
-        if not res.scalar_one_or_none():
-            sys.stderr.write(f"ERROR: User ID '{clean_user_id}' tidak ditemukan di database CallCraft.\n")
-            sys.exit(1)
+        credential = await Repository.verify_api_credential(db, secret, public_key=public_key, user_id=clean_user_id)
+        if not credential or not credential.get('project_id'):
+            raise SystemExit('Invalid project credential.')
+        if project_id and project_id != credential['project_id']:
+            raise SystemExit('Project credential mismatch.')
+        if credential.get('ip_whitelist'):
+            raise SystemExit('Use the remote MCP bridge for IP-restricted credentials.')
+        project_id = credential['project_id']
 
     # Read line-by-line JSON-RPC messages from sys.stdin
     while True:
@@ -59,6 +68,9 @@ async def main():
                 continue
 
             async with AsyncSessionLocal() as db:
+                credential = await Repository.verify_api_credential(db, secret, public_key=public_key, user_id=clean_user_id)
+                if not credential or credential.get('project_id') != project_id:
+                    raise SystemExit('Credential revoked or project changed.')
                 response_data = await handle_jsonrpc_request(request_data, clean_user_id, db, default_project_id=project_id)
                 if response_data:
                     sys.stdout.write(json.dumps(response_data, ensure_ascii=False) + "\n")
@@ -72,7 +84,7 @@ async def main():
             err_resp = {
                 "jsonrpc": "2.0",
                 "id": None,
-                "error": {"code": -32603, "message": f"Internal stdio error: {str(e)}"},
+                "error": {"code": -32603, "message": "Internal stdio error; operation outcome may be unknown."},
             }
             sys.stdout.write(json.dumps(err_resp) + "\n")
             sys.stdout.flush()

@@ -15,6 +15,7 @@ from callcraft_api.db.session import AsyncSessionLocal, get_db_session
 from callcraft_api.db.models import User, CallSpec, AiModel
 from callcraft_api.db.repository import Repository
 from callcraft_api.services.redis_cache import redis_service
+from callcraft_api.services.mcp_contract import enforce_project, redact_secrets, INTEGRATION_GUIDE
 
 logger = logging.getLogger("callcraft.mcp")
 
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/mcp/v1", tags=["Model Context Protocol (MCP) Server"
 
 # Active SSE Session Queues
 sse_sessions: Dict[str, asyncio.Queue] = {}
+sse_owners: dict[str, tuple[str, str | None]] = {}
 
 
 class McpContext:
@@ -34,82 +36,51 @@ from fastapi import status
 from callcraft_api.db.models import Project
 
 async def resolve_mcp_context_optional(
+    request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
     x_project_id: Optional[str] = Header(None, alias="X-PROJECT-ID"),
     user_id: Optional[str] = Query(None),
     project_id: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
+    x_call_public_key: Optional[str] = Header(None, alias="X-CALL-PUBLIC-KEY"),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ) -> Optional[McpContext]:
     """Optional user context resolver for MCP server discovery and health probes."""
-    uid = x_user_id or user_id
-    if not uid and authorization:
-        if authorization.startswith("Bearer "):
-            uid = authorization.replace("Bearer ", "").strip()
-        else:
-            uid = authorization.strip()
-
-    if not uid or not uid.strip():
+    if not authorization and not x_call_public_key:
         return None
-
-    clean_uid = uid.strip()
-    if db:
-        stmt_u = select(User).where(User.id == clean_uid)
-        res_u = await db.execute(stmt_u)
-        user_obj = res_u.scalar_one_or_none()
-        if not user_obj:
-            return None
-
-    target_project_id = (x_project_id or project_id or "").strip() or None
-    return McpContext(user_id=clean_uid, project_id=target_project_id)
+    return await resolve_mcp_context(
+        request=request, x_user_id=x_user_id, x_project_id=x_project_id,
+        user_id=user_id, project_id=project_id, authorization=authorization,
+        x_call_public_key=x_call_public_key, db=db,
+    )
 
 
 async def resolve_mcp_context(
+    request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-USER-ID"),
     x_project_id: Optional[str] = Header(None, alias="X-PROJECT-ID"),
     user_id: Optional[str] = Query(None),
     project_id: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
+    x_call_public_key: Optional[str] = Header(None, alias="X-CALL-PUBLIC-KEY"),
     db: Optional[AsyncSession] = Depends(get_db_session),
 ) -> McpContext:
     """Strictly verifies user identity and project scope against database credentials without fallback hacks."""
-    uid = x_user_id or user_id
-    if not uid and authorization:
-        if authorization.startswith("Bearer "):
-            uid = authorization.replace("Bearer ", "").strip()
-        else:
-            uid = authorization.strip()
-
-    if not uid or not uid.strip():
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Header 'X-USER-ID' atau query param 'user_id' wajib diisi untuk autentikasi MCP Server.",
-        )
-
-    clean_uid = uid.strip()
-
-    if db:
-        stmt_u = select(User).where(User.id == clean_uid)
-        res_u = await db.execute(stmt_u)
-        user_obj = res_u.scalar_one_or_none()
-        if not user_obj:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Identitas pengguna '{clean_uid}' tidak ditemukan di database platform.",
-            )
-
-    target_project_id = (x_project_id or project_id or "").strip() or None
-    if target_project_id and db:
-        stmt_p = select(Project).where(Project.id == target_project_id, Project.user_id == clean_uid)
-        res_p = await db.execute(stmt_p)
-        proj_obj = res_p.scalar_one_or_none()
-        if not proj_obj:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project '{target_project_id}' tidak ditemukan untuk user '{clean_uid}'.",
-            )
-
-    return McpContext(user_id=clean_uid, project_id=target_project_id)
+    import time
+    from callcraft_api.routers.public import authenticate_customer_credential
+    credential, error = await authenticate_customer_credential(
+        request, authorization, x_user_id or user_id, x_call_public_key,
+        db, f"req_{ulid.new()}", time.time(),
+    )
+    if error is not None or not credential:
+        raise HTTPException(status_code=401, detail="Kredensial MCP tidak valid atau tidak lengkap.")
+    bound_project = credential.get('project_id')
+    if not bound_project:
+        raise HTTPException(status_code=403, detail="Kredensial MCP wajib terikat ke project.")
+    requested_project = x_project_id or project_id
+    if requested_project and requested_project != bound_project:
+        raise HTTPException(status_code=403, detail="Project tidak sesuai dengan kredensial MCP.")
+    return McpContext(credential['user_id'], bound_project)
 
 
 
@@ -119,6 +90,30 @@ async def resolve_mcp_context(
 # ============================================================================
 
 MCP_TOOLS = [
+    {
+        "name": "callcraft_validate_spec",
+        "description": "Validate an HTTP execution binding and JSON schemas without invoking a backend or AI provider.",
+        "inputSchema": {"type": "object", "properties": {"spec_json": {"type": "object"}}, "required": ["spec_json"], "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "destructiveHint": False},
+    },
+    {
+        "name": "callcraft_get_capabilities",
+        "description": "Discover supported execution modes, transports and authentication requirements.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "destructiveHint": False},
+    },
+    {
+        "name": "callcraft_get_call_contract",
+        "description": "Get a project spec's input/output schemas and execution headers without inference.",
+        "inputSchema": {"type": "object", "properties": {"spec_id": {"type": "string"}}, "required": ["spec_id"], "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "destructiveHint": False},
+    },
+    {
+        "name": "callcraft_get_integration_guide",
+        "description": "Read authentication, execution modes and IDE integration instructions without running inference.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "destructiveHint": False},
+    },
     {
         "name": "callcraft_list_projects",
         "description": "List all projects in CallCraft workspace for the current user.",
@@ -312,9 +307,31 @@ async def execute_mcp_tool(
     default_project_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes CallCraft MCP Tool based on requested method name."""
+    await enforce_project(Repository, db, user_id, default_project_id, name, arguments)
+    if name == 'callcraft_get_integration_guide':
+        return INTEGRATION_GUIDE
+    if name == 'callcraft_get_capabilities':
+        return {'schemaVersion': '1', 'executionModes': ['extraction', 'http'],
+                'projectScoped': True, 'automaticRetries': False,
+                'autonomousPlanning': False, 'guideUri': 'callcraft://integration'}
+    if name == 'callcraft_validate_spec':
+        from callcraft_api.services.http_tool import validate_binding
+        document = arguments['spec_json']
+        config = document.get('toolsConfig') or {}
+        if 'execution' not in config:
+            raise ValueError('Validation tool requires an explicit HTTP binding.')
+        validate_binding(config, document.get('requestSchema'), document.get('responseSchema'), default_project_id)
+        return {'valid': True, 'executionMode': 'http', 'backendInvoked': False}
+    if name == 'callcraft_get_call_contract':
+        spec = await Repository.get_call_spec(db, user_id, arguments['spec_id'])
+        return {'schemaVersion': '1', 'endpoint': '/v1/call', 'method': 'POST',
+                'specId': spec['id'], 'requestSchema': spec.get('requestSchema'),
+                'responseSchema': spec.get('responseSchema'),
+                'executionMode': 'http' if 'execution' in (spec.get('toolsConfig') or {}) else 'extraction',
+                'requiredHeaders': ['Authorization', 'X-USER-ID', 'X-CALL-PUBLIC-KEY', 'X-CALL-SPEC-ID']}
     if name == "callcraft_list_projects":
         projects = await Repository.list_projects(db, user_id)
-        return {"projects": projects}
+        return {"projects": [p for p in projects if p.get('id') == default_project_id]}
 
     elif name == "callcraft_list_specs":
         project_id = arguments.get("project_id") or default_project_id
@@ -734,9 +751,13 @@ async def handle_jsonrpc_request(
     request_data: Dict[str, Any], user_id: str, db: AsyncSession, default_project_id: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """Handles standard JSON-RPC 2.0 MCP requests."""
+    if not isinstance(request_data, dict) or request_data.get('jsonrpc') != '2.0':
+        return {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'Invalid request'}}
     req_id = request_data.get("id")
     method = request_data.get("method")
     params = request_data.get("params") or {}
+    if not isinstance(params, dict) or not isinstance(method, str):
+        return {'jsonrpc': '2.0', 'id': req_id, 'error': {'code': -32602, 'message': 'Invalid params'}}
 
     if not method:
         if req_id is None:
@@ -754,8 +775,9 @@ async def handle_jsonrpc_request(
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {
-                    "tools": {}
+                    "tools": {}, "resources": {}
                 },
+                "instructions": "Read callcraft://integration before editing specs. All operations are credential-project scoped. Extraction does not execute backend mutations.",
                 "serverInfo": {
                     "name": "CallCraft MCP Server",
                     "version": "1.0.0",
@@ -773,6 +795,18 @@ async def handle_jsonrpc_request(
             "result": {},
         }
 
+    elif method == "resources/list":
+        return {"jsonrpc": "2.0", "id": req_id, "result": {"resources": [{
+            "uri": "callcraft://integration", "name": "Callcraft integration guide",
+            "mimeType": "application/json", "description": "Authentication, execution modes and IDE workflow",
+        }]}}
+    elif method == "resources/read":
+        if params.get('uri') != 'callcraft://integration':
+            return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32602, "message": "Unknown resource"}}
+        return {"jsonrpc": "2.0", "id": req_id, "result": {"contents": [{
+            "uri": "callcraft://integration", "mimeType": "application/json",
+            "text": json.dumps(INTEGRATION_GUIDE),
+        }]}}
     elif method == "tools/list":
         return {
             "jsonrpc": "2.0",
@@ -794,6 +828,10 @@ async def handle_jsonrpc_request(
             }
 
         try:
+            from jsonschema import Draft202012Validator
+            declaration = next((tool for tool in MCP_TOOLS if tool['name'] == tool_name), None)
+            if declaration is None or not Draft202012Validator(declaration['inputSchema']).is_valid(arguments):
+                return {'jsonrpc': '2.0', 'id': req_id, 'error': {'code': -32602, 'message': 'Unknown tool or invalid arguments'}}
             res_data = await execute_mcp_tool(
                 name=tool_name,
                 arguments=arguments,
@@ -801,11 +839,15 @@ async def handle_jsonrpc_request(
                 db=db,
                 default_project_id=default_project_id,
             )
+            res_data = redact_secrets(res_data)
             res_json_str = json.dumps(res_data, indent=2, default=str, ensure_ascii=False)
+            res_data = json.loads(res_json_str)
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {
+                    "structuredContent": res_data,
+                    "isError": False,
                     "content": [
                         {
                             "type": "text",
@@ -815,11 +857,15 @@ async def handle_jsonrpc_request(
                 },
             }
         except Exception as e:
-            logger.error(f"Error executing MCP tool '{tool_name}': {e}", exc_info=True)
+            error_id = f"req_{ulid.new()}"
+            logger.error("MCP tool failed request_id=%s type=%s", error_id, type(e).__name__)
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -32603, "message": f"Tool execution failed: {str(e)}"},
+                "result": {"isError": True, "content": [{"type": "text", "text": json.dumps({
+                    "error": {"code": "TOOL_EXECUTION_FAILED", "requestId": error_id,
+                              "message": "Eksekusi gagal. Periksa argumen dan scope project."}
+                })}]},
             }
 
     else:
@@ -978,6 +1024,7 @@ async def mcp_sse_endpoint(
     session_id = f"mcp_sess_{str(ulid.new())}"
     queue: asyncio.Queue = asyncio.Queue()
     sse_sessions[session_id] = queue
+    sse_owners[session_id] = (ctx.user_id, ctx.project_id)
 
     async def event_generator():
         try:
@@ -996,6 +1043,7 @@ async def mcp_sse_endpoint(
                     yield ": heartbeat\n\n"
         finally:
             sse_sessions.pop(session_id, None)
+            sse_owners.pop(session_id, None)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -1008,6 +1056,8 @@ async def mcp_messages_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Message endpoint receiving JSON-RPC requests for active SSE sessions."""
+    if sse_owners.get(session_id) != (ctx.user_id, ctx.project_id):
+        raise HTTPException(status_code=404, detail='Session MCP tidak ditemukan.')
     try:
         body = await request.json()
     except Exception as e:
@@ -1019,4 +1069,3 @@ async def mcp_messages_endpoint(
         await sse_sessions[session_id].put(res)
 
     return Response(status_code=202)
-

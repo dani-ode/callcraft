@@ -16,6 +16,7 @@ WORKDIR /app
 
 COPY --from=builder /install /usr/local
 COPY apps/api /app/apps/api
+COPY migrations /app/migrations
 
 ENV PYTHONPATH=/app/apps/api/src
 

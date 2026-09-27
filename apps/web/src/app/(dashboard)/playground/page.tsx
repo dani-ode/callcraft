@@ -30,6 +30,7 @@ import { SchemaPreview } from "@/components/schema-builder/schema-preview";
 import { jsonSchemaToSchemaFields } from "@/components/schema-builder/schema-helpers";
 
 import { useProject } from "@/context/project-context";
+import { HttpToolPanel } from "@/components/playground/http-tool-panel";
 
 function PlaygroundContent() {
   const { user } = useAuth();
@@ -340,7 +341,7 @@ function PlaygroundContent() {
       {activeSpec && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[580px]">
           {/* Left Column: Dynamic Spec Form Generator */}
-          <DynamicSpecForm
+          {activeSpec.toolsConfig?.execution ? <HttpToolPanel key={activeSpec.id} specId={activeSpec.id} userId={user?.id || getActiveUserId()} /> : <DynamicSpecForm
             specName={activeSpec.name || "Custom Spec"}
             specSlug={activeSpec.slug || specId}
             specId={activeSpec.id || specId}
@@ -371,7 +372,7 @@ function PlaygroundContent() {
             loading={loading}
             onCheckedStateChange={setCheckedHeaders}
             onPublicKeyChange={setPublicKey}
-          />
+          />}
 
           {/* Right Column: Tabbed Panel (Response Body & Response Header via SchemaPreview) */}
           <div className="glass-panel p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col h-full overflow-hidden space-y-4">
